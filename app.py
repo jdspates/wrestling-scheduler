@@ -1,4 +1,4 @@
-# app.py - FINAL FIXED: No unsafe_allow_html, Emoji Colors + Hidden Metadata
+# app.py - FINAL: PDF TEAM COLORS + EARLY YELLOW HIGHLIGHT
 import streamlit as st
 import pandas as pd
 import io
@@ -6,7 +6,7 @@ import random
 from collections import defaultdict
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
-from reportlab.lib import colors
+from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 import json
@@ -21,9 +21,9 @@ DEFAULT_CONFIG = {
     "MAX_LEVEL_DIFF": 1,
     "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
-    "TEAM_EMOJIS": {  # Emoji for colors (no HTML needed)
-        "Stillwater": "🔴", "Woodbury": "🔵", "St. Thomas Academy": "🟢",
-        "Forest Lake": "🟡", "Black Bears": "⚫"
+    "TEAM_COLORS": {
+        "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
+        "Forest Lake": "#FFD700", "Black Bears": "#000000"
     }
 }
 
@@ -276,44 +276,38 @@ if st.session_state.initialized:
     # === MAT PREVIEWS ===
     st.subheader("Mat Previews")
 
-    # Prepare data for all mats
     mat_dfs = {}
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
         if not mat_bouts:
-            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Early?', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early'])
+            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early', 'w1_team', 'w2_team'])
             continue
 
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-            # Emoji for team colors
-            emoji1 = CONFIG["TEAM_EMOJIS"].get(bout['w1_team'], "⚪")
-            emoji2 = CONFIG["TEAM_EMOJIS"].get(bout['w2_team'], "⚪")
-            w1_str = f"{emoji1} {bout['w1_name']} ({bout['w1_team']})"
-            w2_str = f"{emoji2} {bout['w2_name']} ({bout['w2_team']})"
+            w1_str = f"{bout['w1_name']} ({bout['w1_team']})"
+            w2_str = f"{bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-            early_label = "🔥 Early" if bout['is_early'] else ""
 
             rows.append({
                 'Remove': False,
                 'Slot': m['mat_bout_num'],
-                'Early?': early_label,
                 'Wrestler 1': w1_str,
                 'G/L/W': w1_glw,
                 'Wrestler 2': w2_str,
                 'G/L/W 2': w2_glw,
                 'Score': f"{bout['score']:.1f}",
                 'bout_num': bout['bout_num'],
-                'is_early': bout['is_early']
+                'is_early': bout['is_early'],
+                'w1_team': bout['w1_team'],
+                'w2_team': bout['w2_team']
             })
         df = pd.DataFrame(rows)
         mat_dfs[mat_num] = df
 
-    # Tabs
     tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"] + 1)])
-
     for i, tab in enumerate(tabs, 1):
         with tab:
             df = mat_dfs[i]
@@ -326,25 +320,25 @@ if st.session_state.initialized:
                 column_config={
                     "Remove": st.column_config.CheckboxColumn("Remove"),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
-                    "Early?": st.column_config.TextColumn("Early?"),
-                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1", help="Wrestler 1 with team"),
+                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
                     "G/L/W": st.column_config.TextColumn("G/L/W"),
-                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2", help="Wrestler 2 with team"),
+                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
-                    "Score": st.column_config.NumberColumn("Score"),
-                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # Hidden metadata
-                    "is_early": st.column_config.CheckboxColumn("is_early", width=0),  # Hidden metadata
+                    "Score": st.column_config.TextColumn("Score"),
+                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),
+                    "is_early": st.column_config.CheckboxColumn("is_early", width=0),
+                    "w1_team": st.column_config.TextColumn("w1_team", width=0),
+                    "w2_team": st.column_config.TextColumn("w2_team", width=0),
                 },
                 use_container_width=True,
                 hide_index=True,
                 key=f"mat_editor_{i}"
             )
 
-            # Apply removals
             if st.button("Apply Removals on This Mat", key=f"apply_mat_{i}"):
                 to_remove = edited_df[edited_df['Remove'] == True]['bout_num'].dropna().astype(int).tolist()
                 if to_remove:
-                    st.session_state.last_removed = to_remove[-1]  # For undo
+                    st.session_state.last_removed = to_remove[-1]
                     for bout_num in to_remove:
                         for b in st.session_state.bout_list:
                             if b['bout_num'] == bout_num:
@@ -353,16 +347,15 @@ if st.session_state.initialized:
                                 w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
                                 if w2 in w1['matches']: w1['matches'].remove(w2)
                                 if w1 in w2['matches']: w2['matches'].remove(w1)
-                                break
                     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
                     st.success(f"Removed {len(to_remove)} match(es)!")
                     st.rerun()
 
-    # === UNDO ===
-    st.markdown("---")
-    if st.session_state.last_removed is not None:
-        if st.button("Undo Last Removal", type="secondary"):
+    # === UNDO LAST REMOVAL ===
+    if st.session_state.last_removed:
+        st.markdown("---")
+        if st.button("Undo Last Removal", type="primary"):
             for b in st.session_state.bout_list:
                 if b['bout_num'] == st.session_state.last_removed and b['manual'] == 'Removed':
                     b['manual'] = ''
@@ -377,51 +370,81 @@ if st.session_state.initialized:
             st.success("Undo successful!")
             st.rerun()
 
-    # === DOWNLOAD ===
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Generate Excel", type="primary"):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
-                for m in range(1, CONFIG["NUM_MATS"]+1):
-                    data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
-                    df_mat = pd.DataFrame(data)[['mat_bout_num', 'w1', 'w2']] if data else pd.DataFrame(columns=['#', 'Wrestler 1', 'Wrestler 2'])
-                    df_mat.columns = ['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']
-                    df_mat.to_excel(writer, sheet_name=f'Mat {m}', index=False)
-            st.download_button(
-                label="Download Excel",
-                data=output.getvalue(),
-                file_name="meet_schedule.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-    with col2:
-        if st.button("Generate PDF", type="primary"):
-            pdf_buffer = io.BytesIO()
-            doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
-            elements = []
-            styles = getSampleStyleSheet()
+    # === GENERATE EXCEL + PDF ===
+    if st.button("Generate Meet", type="primary"):
+        # === EXCEL ===
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
             for m in range(1, CONFIG["NUM_MATS"]+1):
                 data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
-                if not data: continue
-                table_data = [['#', 'Wrestler 1', 'Wrestler 2']] + [[e['mat_bout_num'], e['w1'], e['w2']] for e in data]
-                table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
-                table.setStyle(TableStyle([
-                    ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                    ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-                ]))
+                if not data:
+                    pd.DataFrame([['', '', '']], columns=['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']).to_excel(writer, sheet_name=f'Mat {m}', index=False)
+                    continue
+                df = pd.DataFrame(data)[['mat_bout_num', 'w1', 'w2']]
+                df.columns = ['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']
+                df.to_excel(writer, sheet_name=f'Mat {m}', index=False)
+                # Apply yellow background to early matches
+                workbook = writer.book
+                worksheet = writer.sheets[f'Mat {m}']
+                yellow_fill = pd.io.formats.excel.ExcelFormatter.get_fill(yellow=True)
+                for idx, row in df.iterrows():
+                    bout = next(b for b in st.session_state.bout_list if b['bout_num'] == data[idx]['bout_num'])
+                    if bout['is_early']:
+                        for col_num in range(1, 4):  # Columns A, B, C (1-based)
+                            worksheet.cell(row=idx+2, column=col_num).fill = yellow_fill
+        excel_bytes = output.getvalue()
+
+        # === PDF WITH TEAM COLORS + YELLOW EARLY ===
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        for m in range(1, CONFIG["NUM_MATS"]+1):
+            data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
+            if not data:
                 elements.append(Paragraph(f"Mat {m}", styles['Title']))
-                elements.append(Spacer(1, 12))
-                elements.append(table)
-                if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
-            doc.build(elements)
-            st.download_button(
-                label="Download PDF",
-                data=pdf_buffer.getvalue(),
-                file_name="meet_schedule.pdf",
-                mime="application/pdf"
-            )
+                elements.append(Paragraph("No matches scheduled.", styles['Normal']))
+                elements.append(PageBreak())
+                continue
+
+            table_data = [['#', 'Wrestler 1', 'Wrestler 2']]
+            row_colors = []
+            for e in data:
+                bout = next(b for b in st.session_state.bout_list if b['bout_num'] == e['bout_num'])
+                color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
+                color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
+                w1_cell = Paragraph(f"<font color='{color1}'><b>{bout['w1_name']}</b></font> ({bout['w1_team']})", styles['Normal'])
+                w2_cell = Paragraph(f"<font color='{color2}'><b>{bout['w2_name']}</b></font> ({bout['w2_team']})", styles['Normal'])
+                table_data.append([e['mat_bout_num'], w1_cell, w2_cell])
+                row_colors.append(rl_colors.HexColor("#FFFF99") if bout['is_early'] else rl_colors.white)
+
+            table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
+            style = TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, rl_colors.black),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,0), (-1,0), rl_colors.lightgrey),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ])
+            for i, color in enumerate(row_colors, 1):
+                style.add('BACKGROUND', (0,i), (-1,i), color)
+            table.setStyle(style)
+
+            elements.append(Paragraph(f"Mat {m}", styles['Title']))
+            elements.append(Spacer(1, 12))
+            elements.append(table)
+            elements.append(PageBreak())
+
+        doc.build(elements)
+        pdf_bytes = pdf_buffer.getvalue()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col2:
+            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
-st.caption("**Privacy**: Processed in-browser. No data stored.")
+st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
