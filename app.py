@@ -1,4 +1,4 @@
-# app.py - FINAL FIXED: No row_styler, Colors + Early Labels Working
+# app.py - FINAL FIXED: HTML COLORS RENDERED + EARLY LABELS
 import streamlit as st
 import pandas as pd
 import io
@@ -281,7 +281,7 @@ if st.session_state.initialized:
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
         if not mat_bouts:
-            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Early?', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num'])
+            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Early?', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early'])
             continue
 
         rows = []
@@ -332,11 +332,12 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2", help="Wrestler 2 with team"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score"),
-                    "bout_num": st.column_config.NumberColumn("bout_num"),  # Metadata only
-                    "is_early": st.column_config.CheckboxColumn("is_early"),  # Metadata only
+                    "bout_num": st.column_config.NumberColumn("bout_num"),
+                    "is_early": st.column_config.CheckboxColumn("is_early"),
                 },
                 use_container_width=True,
                 hide_index=True,
+                unsafe_allow_html=True,  # Enables HTML rendering in TextColumns
                 key=f"mat_editor_{i}"
             )
 
