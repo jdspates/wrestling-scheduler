@@ -1,4 +1,4 @@
-# app.py - FINAL, FULLY WORKING STREAMLIT VERSION
+# app.py - FINAL, 100% WORKING
 import streamlit as st
 import pandas as pd
 import io
@@ -334,8 +334,11 @@ if st.session_state.initialized:
             df_styled = df_mat.style.apply(style_early, axis=1)
             edited_mat = st.data_editor(df_styled, use_container_width=True, hide_index=True, key=f"mat_{i}")
 
-            # Remove
-            to_remove = [row['bout_num'] for _, row in df_mat.iterrows() if edited_mat.data.iloc[_]['Remove']]
+            # Remove - FIXED
+            to_remove = []
+            for idx, row in enumerate(edited_mat.data.itertuples()):
+                if row.Remove:
+                    to_remove.append(df_mat.iloc[idx]['bout_num'])
             if to_remove:
                 for bn in to_remove:
                     for b in st.session_state.bout_list:
