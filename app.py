@@ -1,4 +1,4 @@
-# app.py - FINAL: FIXED SYNTAX + EMOJIS + PDF COLORS + YELLOW ROWS
+# app.py - FINAL: REAL EMOJIS + PDF COLORS + YELLOW EARLY
 import streamlit as st
 import pandas as pd
 import io
@@ -27,9 +27,13 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
+    # REAL UNICODE EMOJIS (copy-paste these exact characters)
     "TEAM_EMOJIS": {
-        "Stillwater": "red circle", "Woodbury": "blue circle", "St. Thomas Academy": "green circle",
-        "Forest Lake": "yellow circle", "Black Bears": "black circle"
+        "Stillwater": "red circle",      # red circle
+        "Woodbury": "blue circle",       # blue circle
+        "St. Thomas Academy": "green circle",  # green circle
+        "Forest Lake": "yellow circle",        # yellow circle
+        "Black Bears": "black circle"          # black circle
     }
 }
 
@@ -69,7 +73,6 @@ def generate_initial_matchups(active):
             random.shuffle(group)
             for w in group:
                 if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
-                # FIXED: Added missing ] at the end
                 opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w,o))
@@ -201,7 +204,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # ===================== STREAMLIT APP =====================
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
 # Session state
 if 'bout_list' not in st.session_state: st.session_state.bout_list = []
