@@ -1,4 +1,4 @@
-# app.py - FINAL: REAL EMOJIS + PDF COLORS + YELLOW EARLY
+# app.py - FINAL: REAL EMOJIS IN WEB + PDF COLORS + YELLOW EARLY
 import streamlit as st
 import pandas as pd
 import io
@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
-    # REAL UNICODE EMOJIS (copy-paste these exact characters)
+    # REAL UNICODE EMOJIS – copy-paste these exact characters
     "TEAM_EMOJIS": {
         "Stillwater": "red circle",      # red circle
         "Woodbury": "blue circle",       # blue circle
