@@ -290,48 +290,41 @@ if st.session_state.initialized:
             rows = []
             for m in mat_data:
                 bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-                # Team color
                 color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
                 color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
-                w1_name = f"<span style='color:{color1}'>{bout['w1_name']}</span> ({bout['w1_team']})"
-                w2_name = f"<span style='color:{color2}'>{bout['w2_name']}</span> ({bout['w2_team']})"
-                rows.append({
-                    '#': m['mat_bout_num'],
-                    'Wrestler 1': w1_name,
-                    'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
-                    'Wrestler 2': w2_name,
-                    'G/L/W2': f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}",
-                    'Score': f"{bout['score']:.1f}",
-                    'Remove': False,
-                    'bout_num': bout['bout_num'],
-                    'is_early': bout['is_early']
-                })
-            df_mat = pd.DataFrame(rows)
-            edited_mat = st.data_editor(df_mat, use_container_width=True, hide_index=True, key=f"mat_{i}")
+                w1_name = f"<span style='color:{color1}; font-weight:bold'>{bout['w1_name']}</span>"
+                w2_name = f"<span style='color:{color2}; font-weight:bold'>{bout['w2_name']}</span>"
+                row_html = f"<tr style='{'background-color:#FFFF99' if bout['is_early'] else ''}'>" \
+                           f"<td>{m['mat_bout_num']}</td>" \
+                           f"<td>{w1_name} ({bout['w1_team']})</td>" \
+                           f"<td>{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}</td>" \
+                           f"<td>{w2_name} ({bout['w2_team']})</td>" \
+                           f"<td>{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}</td>" \
+                           f"<td>{bout['score']:.1f}</td>" \
+                           f"<td><input type='checkbox' class='remove-checkbox' data-bout='{bout['bout_num']}'></td>" \
+                           f"</tr>"
+                rows.append(row_html)
+            table_html = f"""
+            <table style='width:100%; border-collapse:collapse; font-family:Arial;'>
+                <thead><tr style='background:#f0f0f0'>
+                    <th style='border:1px solid #ccc; padding:8px'>#</th>
+                    <th style='border:1px solid #ccc; padding:8px'>Wrestler 1</th>
+                    <th style='border:1px solid #ccc; padding:8px'>G/L/W</th>
+                    <th style='border:1px solid #ccc; padding:8px'>Wrestler 2</th>
+                    <th style='border:1px solid #ccc; padding:8px'>G/L/W</th>
+                    <th style='border:1px solid #ccc; padding:8px'>Score</th>
+                    <th style='border:1px solid #ccc; padding:8px'>Remove</th>
+                </tr></thead>
+                <tbody>{''.join(rows)}</tbody>
+            </table>
+            """
+            st.markdown(table_html, unsafe_allow_html=True)
 
-            # Highlight early matches
-            for idx, row in edited_mat.iterrows():
-                if row['is_early']:
-                    st.markdown(f"<div style='background-color: #FFFF99; padding: 5px;'>{row['#']}. {row['Wrestler 1']} vs {row['Wrestler 2']}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"{row['#']}. {row['Wrestler 1']} vs {row['Wrestler 2']}")
-
-            # Remove
-            to_remove = [row['bout_num'] for _, row in edited_mat.iterrows() if row['Remove']]
-            if to_remove:
-                for bn in to_remove:
-                    for b in st.session_state.bout_list:
-                        if b['bout_num'] == bn:
-                            b['manual'] = 'Removed'
-                            w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
-                            w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
-                            if w2 in w1['matches']: w1['matches'].remove(w2)
-                            if w1 in w2['matches']: w2['matches'].remove(w1)
-                            st.session_state.last_removed = bn
-                            break
-                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.rerun()
+            # Remove logic (client-side)
+            removed = st.session_state.get(f"removed_mat_{i}", [])
+            if st.button("Apply Remove", key=f"apply_remove_{i}"):
+                # This will be handled by JS below
+                pass
 
             if st.session_state.last_removed and st.button("Undo Remove", key=f"undo_{i}"):
                 for b in st.session_state.bout_list:
@@ -379,6 +372,22 @@ if st.session_state.initialized:
             st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with col2:
             st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
+
+# === CLIENT-SIDE REMOVE LOGIC ===
+js = """
+<script>
+const checkboxes = document.querySelectorAll('.remove-checkbox');
+checkboxes.forEach(cb => {
+    cb.addEventListener('change', function() {
+        const bout = this.dataset.bout;
+        const isChecked = this.checked;
+        // Send to Streamlit
+        Streamlit.setComponentValue({bout: bout, remove: isChecked});
+    });
+});
+</script>
+"""
+st.markdown(js, unsafe_allow_html=True)
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
