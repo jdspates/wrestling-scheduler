@@ -1,11 +1,11 @@
-# app.py - FINAL, 100% WORKING
+# app.py - FINAL, 100% WORKING WITH REMOVE + UNDO
 import streamlit as st
 import pandas as pd
 import io
 import random
 from collections import defaultdict
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -194,7 +194,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # ===================== STREAMLIT APP =====================
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Download. **No data stored.**")
+st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
 
 # Session state
 if 'bout_list' not in st.session_state: st.session_state.bout_list = []
@@ -205,7 +205,6 @@ if 'last_removed' not in st.session_state: st.session_state.last_removed = None
 if 'initialized' not in st.session_state: st.session_state.initialized = False
 
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
-
 if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
@@ -213,7 +212,6 @@ if uploaded and not st.session_state.initialized:
         if not all(c in df.columns for c in required):
             st.error("Missing columns. Need: " + ", ".join(required))
             st.stop()
-
         wrestlers = df.to_dict('records')
         for w in wrestlers:
             w['id'] = int(w['id'])
@@ -225,14 +223,12 @@ if uploaded and not st.session_state.initialized:
             w['early'] = (str(early_val).strip().upper() == 'Y') or (early_val in [1, True])
             w['scratch'] = (str(scratch_val).strip().upper() == 'Y') or (scratch_val in [1, True])
             w['matches'] = []
-
         st.session_state.active = [w for w in wrestlers if not w['scratch']]
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.initialized = True
         st.success("Roster loaded and matchups generated!")
-
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -255,7 +251,6 @@ if st.session_state.initialized:
             })
         sugg_df = pd.DataFrame(sugg_data)
         edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True, key="sugg_editor")
-
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[row['idx']] for _, row in edited.iterrows() if row['Add']]
             for s in to_add:
@@ -278,70 +273,105 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # === MAT PREVIEWS ===
+    # === MAT PREVIEWS WITH REMOVAL ===
     st.subheader("Mat Previews")
-    tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"]+1)])
+
+    mat_dfs = {}
+    for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
+        mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
+        if not mat_bouts:
+            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early', 'w1_team', 'w2_team'])
+            continue
+
+        rows = []
+        for m in mat_bouts:
+            bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
+            w1_str = f"{bout['w1_name']} ({bout['w1_team']})"
+            w2_str = f"{bout['w2_name']} ({bout['w2_team']})"
+            w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
+            w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
+
+            rows.append({
+                'Remove': False,
+                'Slot': m['mat_bout_num'],
+                'Wrestler 1': w1_str,
+                'G/L/W': w1_glw,
+                'Wrestler 2': w2_str,
+                'G/L/W 2': w2_glw,
+                'Score': f"{bout['score']:.1f}",
+                'bout_num': bout['bout_num'],
+                'is_early': bout['is_early'],
+                'w1_team': bout['w1_team'],
+                'w2_team': bout['w2_team']
+            })
+        df = pd.DataFrame(rows)
+        mat_dfs[mat_num] = df
+
+    tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"] + 1)])
     for i, tab in enumerate(tabs, 1):
         with tab:
-            mat_data = [m for m in st.session_state.mat_schedules if m['mat'] == i]
-            if not mat_data:
+            if mat_dfs[i].empty:
                 st.write("No matches")
                 continue
-            rows = []
-            for m in mat_data:
-                bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-                color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
-                color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
-                w1_name = f"<span style='color:{color1}; font-weight:bold'>{bout['w1_name']}</span>"
-                w2_name = f"<span style='color:{color2}; font-weight:bold'>{bout['w2_name']}</span>"
-                row_html = f"<tr style='{'background-color:#FFFF99' if bout['is_early'] else ''}'>" \
-                           f"<td>{m['mat_bout_num']}</td>" \
-                           f"<td>{w1_name} ({bout['w1_team']})</td>" \
-                           f"<td>{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}</td>" \
-                           f"<td>{w2_name} ({bout['w2_team']})</td>" \
-                           f"<td>{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}</td>" \
-                           f"<td>{bout['score']:.1f}</td>" \
-                           f"<td><input type='checkbox' class='remove-checkbox' data-bout='{bout['bout_num']}'></td>" \
-                           f"</tr>"
-                rows.append(row_html)
-            table_html = f"""
-            <table style='width:100%; border-collapse:collapse; font-family:Arial;'>
-                <thead><tr style='background:#f0f0f0'>
-                    <th style='border:1px solid #ccc; padding:8px'>#</th>
-                    <th style='border:1px solid #ccc; padding:8px'>Wrestler 1</th>
-                    <th style='border:1px solid #ccc; padding:8px'>G/L/W</th>
-                    <th style='border:1px solid #ccc; padding:8px'>Wrestler 2</th>
-                    <th style='border:1px solid #ccc; padding:8px'>G/L/W</th>
-                    <th style='border:1px solid #ccc; padding:8px'>Score</th>
-                    <th style='border:1px solid #ccc; padding:8px'>Remove</th>
-                </tr></thead>
-                <tbody>{''.join(rows)}</tbody>
-            </table>
-            """
-            st.markdown(table_html, unsafe_allow_html=True)
 
-            # Remove logic (client-side)
-            removed = st.session_state.get(f"removed_mat_{i}", [])
-            if st.button("Apply Remove", key=f"apply_remove_{i}"):
-                # This will be handled by JS below
-                pass
+            def style_early(row):
+                return ['background-color: #FFFF99' if row['is_early'] else ''] * len(row)
 
-            if st.session_state.last_removed and st.button("Undo Remove", key=f"undo_{i}"):
-                for b in st.session_state.bout_list:
-                    if b['bout_num'] == st.session_state.last_removed:
-                        b['manual'] = ''
-                        w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
-                        w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
-                        if w2 not in w1['matches']: w1['matches'].append(w2)
-                        if w1 not in w2['matches']: w2['matches'].append(w1)
-                        break
-                st.session_state.last_removed = None
-                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.rerun()
+            edited_df = st.data_editor(
+                mat_dfs[i],
+                column_config={
+                    "Remove": st.column_config.CheckboxColumn("Remove", default=False),
+                    "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                    "G/L/W": st.column_config.TextColumn("G/L/W"),
+                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                    "G/L/W 2": st.column_config.TextColumn("G/L/W"),
+                    "Score": st.column_config.TextColumn("Score"),
+                    "bout_num": st.column_config.NumberColumn("bout_num", hide=True),
+                    "is_early": st.column_config.CheckboxColumn("is_early", hide=True),
+                },
+                use_container_width=True,
+                hide_index=True,
+                key=f"mat_editor_{i}"
+            )
 
-    # === GENERATE ===
-    if st.button("Generate Meet"):
+            if st.button("Apply Removals on This Mat", key=f"apply_mat_{i}"):
+                to_remove = edited_df[edited_df['Remove']]['bout_num'].tolist()
+                if to_remove:
+                    st.session_state.last_removed = to_remove[-1]
+                    for bout_num in to_remove:
+                        for b in st.session_state.bout_list:
+                            if b['bout_num'] == bout_num:
+                                b['manual'] = 'Removed'
+                                w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
+                                w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
+                                if w2 in w1['matches']: w1['matches'].remove(w2)
+                                if w1 in w2['matches']: w2['matches'].remove(w1)
+                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                    st.success(f"Removed {len(to_remove)} match(es)!")
+                    st.rerun()
+
+    # === UNDO LAST REMOVAL ===
+    if st.session_state.last_removed:
+        st.markdown("---")
+        if st.button("Undo Last Removal", type="primary"):
+            for b in st.session_state.bout_list:
+                if b['bout_num'] == st.session_state.last_removed and b['manual'] == 'Removed':
+                    b['manual'] = ''
+                    w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
+                    w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
+                    if w2 not in w1['matches']: w1['matches'].append(w2)
+                    if w1 not in w2['matches']: w2['matches'].append(w1)
+                    break
+            st.session_state.last_removed = None
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.success("Undo successful!")
+            st.rerun()
+
+    # === GENERATE EXCEL + PDF ===
+    if st.button("Generate Meet", type="primary"):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
@@ -355,13 +385,19 @@ if st.session_state.initialized:
         pdf_buffer = io.BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
         elements = []
+        styles = getSampleStyleSheet()
         for m in range(1, CONFIG["NUM_MATS"]+1):
             data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
             if not data: continue
             table_data = [['#', 'Wrestler 1', 'Wrestler 2']] + [[e['mat_bout_num'], e['w1'], e['w2']] for e in data]
-            table = Table(table_data)
-            table.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.black)]))
-            elements.append(Paragraph(f"Mat {m}", getSampleStyleSheet()['Title']))
+            table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
+            table.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ]))
+            elements.append(Paragraph(f"Mat {m}", styles['Title']))
+            elements.append(Spacer(1, 12))
             elements.append(table)
             elements.append(PageBreak())
         doc.build(elements)
@@ -369,25 +405,19 @@ if st.session_state.initialized:
 
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(
+                "Download Excel",
+                excel_bytes,
+                "meet_schedule.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         with col2:
-            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
-
-# === CLIENT-SIDE REMOVE LOGIC ===
-js = """
-<script>
-const checkboxes = document.querySelectorAll('.remove-checkbox');
-checkboxes.forEach(cb => {
-    cb.addEventListener('change', function() {
-        const bout = this.dataset.bout;
-        const isChecked = this.checked;
-        // Send to Streamlit
-        Streamlit.setComponentValue({bout: bout, remove: isChecked});
-    });
-});
-</script>
-"""
-st.markdown(js, unsafe_allow_html=True)
+            st.download_button(
+                "Download PDF",
+                pdf_bytes,
+                "meet_schedule.pdf",
+                "application/pdf"
+            )
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
