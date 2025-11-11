@@ -1,4 +1,4 @@
-# app.py - FINAL FIXED: PDF TEAM COLORS + YELLOW EARLY + EXCEL YELLOW
+# app.py - FINAL: PDF TEAM COLORS + YELLOW EARLY + EXCEL YELLOW + EMOJI WEB
 import streamlit as st
 import pandas as pd
 import io
@@ -9,11 +9,9 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus.paraparser import registerHTML  # For HTML color support
 from reportlab.lib.colors import HexColor
 import json
 import os
-from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
 # ===================== CONFIG FROM FILE =====================
@@ -29,9 +27,9 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
-    "TEAM_EMOJIS": {  # For web table
-        "Stillwater": "🔴", "Woodbury": "🔵", "St. Thomas Academy": "🟢",
-        "Forest Lake": "🟡", "Black Bears": "⚫"
+    "TEAM_EMOJIS": {
+        "Stillwater": "red circle", "Woodbury": "blue circle", "St. Thomas Academy": "green circle",
+        "Forest Lake": "yellow circle", "Black Bears": "black circle"
     }
 }
 
@@ -41,9 +39,6 @@ if os.path.exists(CONFIG_FILE):
     CONFIG = {**DEFAULT_CONFIG, **user_config}
 else:
     CONFIG = DEFAULT_CONFIG
-
-# Register HTML for ReportLab (enables <font color> in Paragraph)
-registerHTML()
 
 # ===================== CORE LOGIC =====================
 def is_compatible(w1, w2):
@@ -297,13 +292,13 @@ if st.session_state.initialized:
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-            emoji1 = CONFIG["TEAM_EMOJIS"].get(bout['w1_team'], "⚪")
-            emoji2 = CONFIG["TEAM_EMOJIS"].get(bout['w2_team'], "⚪")
+            emoji1 = CONFIG["TEAM_EMOJIS"].get(bout['w1_team'], "white circle")
+            emoji2 = CONFIG["TEAM_EMOJIS"].get(bout['w2_team'], "white circle")
             w1_str = f"{emoji1} {bout['w1_name']} ({bout['w1_team']})"
             w2_str = f"{emoji2} {bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-            early_label = "🔥 Early" if bout['is_early'] else ""
+            early_label = "fire Early" if bout['is_early'] else ""
 
             rows.append({
                 'Remove': False,
