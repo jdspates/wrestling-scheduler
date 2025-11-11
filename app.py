@@ -1,4 +1,4 @@
-# app.py - FULL STREAMLIT VERSION (100% DESKTOP MATCH)
+# app.py - FINAL, STABLE, 100% DESKTOP MATCH
 import streamlit as st
 import pandas as pd
 import io
@@ -223,10 +223,11 @@ if 'mat_schedules' not in st.session_state: st.session_state.mat_schedules = []
 if 'suggestions' not in st.session_state: st.session_state.suggestions = []
 if 'active' not in st.session_state: st.session_state.active = []
 if 'last_removed' not in st.session_state: st.session_state.last_removed = None
+if 'initialized' not in st.session_state: st.session_state.initialized = False
 
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 
-if uploaded:
+if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
         required = ['id', 'name', 'team', 'grade', 'level', 'weight', 'early_matches', 'scratch']
@@ -250,139 +251,143 @@ if uploaded:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-
-        # === SUGGESTIONS ===
-        st.subheader("Suggested Matches")
-        if st.session_state.suggestions:
-            sugg_data = []
-            for i, s in enumerate(st.session_state.suggestions):
-                sugg_data.append({
-                    'Add': False,
-                    'Wrestler': f"{s['wrestler']} ({s['team']})",
-                    'Lvl': f"{s['level']:.1f}",
-                    'Wt': f"{s['weight']:.0f}",
-                    'vs': f"{s['vs']} ({s['vs_team']})",
-                    'vs_Lvl': f"{s['vs_level']:.1f}",
-                    'vs_Wt': f"{s['vs_weight']:.0f}",
-                    'Score': f"{s['score']:.1f}",
-                    'idx': i  # Fixed: was '_index'
-                })
-            sugg_df = pd.DataFrame(sugg_data)
-            edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True)
-
-            if st.button("Add Selected"):
-                to_add = [st.session_state.suggestions[row['idx']] for _, row in edited.iterrows() if row['Add']]
-                for s in to_add:
-                    w, o = s['_w'], s['_o']
-                    if o not in w['matches']: w['matches'].append(o)
-                    if w not in o['matches']: o['matches'].append(w)
-                    st.session_state.bout_list.append({
-                        'bout_num': len(st.session_state.bout_list)+1,
-                        'w1_id': w['id'], 'w1_name': w['name'], 'w1_team': w['team'],
-                        'w1_level': w['level'], 'w1_weight': w['weight'], 'w1_grade': w['grade'], 'w1_early': w['early'],
-                        'w2_id': o['id'], 'w2_name': o['name'], 'w2_team': o['team'],
-                        'w2_level': o['level'], 'w2_weight': o['weight'], 'w2_grade': o['grade'], 'w2_early': o['early'],
-                        'score': s['score'], 'avg_weight': (w['weight']+o['weight'])/2,
-                        'is_early': w['early'] or o['early'], 'manual': 'Yes'
-                    })
-                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-                st.success("Matches added!")
-                st.rerun()
-        else:
-            st.info("All wrestlers have 2+ matches. No suggestions needed.")
-
-        # === MAT PREVIEWS ===
-        st.subheader("Mat Previews")
-        tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"]+1)])
-        for i, tab in enumerate(tabs, 1):
-            with tab:
-                mat_data = [m for m in st.session_state.mat_schedules if m['mat'] == i]
-                if not mat_data:
-                    st.write("No matches")
-                    continue
-                rows = []
-                for m in mat_data:
-                    bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-                    rows.append({
-                        '#': m['mat_bout_num'],
-                        'Wrestler 1': m['w1'],
-                        'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
-                        'Wrestler 2': m['w2'],
-                        'G/L/W2': f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}",
-                        'Score': f"{bout['score']:.1f}",
-                        'Remove': 'Remove',
-                        '_bout_num': bout['bout_num']
-                    })
-                df_mat = pd.DataFrame(rows)
-                edited_mat = st.data_editor(df_mat, use_container_width=True, hide_index=True)
-
-                to_remove = [row['_bout_num'] for _, row in edited_mat.iterrows() if row['Remove'] == 'Remove']
-                if to_remove:
-                    for bn in to_remove:
-                        for b in st.session_state.bout_list:
-                            if b['bout_num'] == bn:
-                                b['manual'] = 'Removed'
-                                w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
-                                w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
-                                if w2 in w1['matches']: w1['matches'].remove(w2)
-                                if w1 in w2['matches']: w2['matches'].remove(w1)
-                                st.session_state.last_removed = bn
-                                break
-                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.rerun()
-
-                if st.session_state.last_removed and st.button("Undo Remove"):
-                    for b in st.session_state.bout_list:
-                        if b['bout_num'] == st.session_state.last_removed:
-                            b['manual'] = ''
-                            w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
-                            w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
-                            if w2 not in w1['matches']: w1['matches'].append(w2)
-                            if w1 not in w2['matches']: w2['matches'].append(w1)
-                            break
-                    st.session_state.last_removed = None
-                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.rerun()
-
-        # === GENERATE ===
-        if st.button("Generate Meet"):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
-                for m in range(1, CONFIG["NUM_MATS"]+1):
-                    data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
-                    df = pd.DataFrame(data)[['mat_bout_num', 'w1', 'w2']] if data else pd.DataFrame([['', '', '']], columns=['mat_bout_num', 'w1', 'w2'])
-                    df.columns = ['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']
-                    df.to_excel(writer, sheet_name=f'Mat {m}', index=False)
-            excel_bytes = output.getvalue()
-
-            pdf_buffer = io.BytesIO()
-            doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
-            elements = []
-            for m in range(1, CONFIG["NUM_MATS"]+1):
-                data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
-                if not data: continue
-                table_data = [['#', 'Wrestler 1', 'Wrestler 2']] + [[e['mat_bout_num'], e['w1'], e['w2']] for e in data]
-                table = Table(table_data)
-                table.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.black)]))
-                elements.append(Paragraph(f"Mat {m}", getSampleStyleSheet()['Title']))
-                elements.append(table)
-                elements.append(PageBreak())
-            doc.build(elements)
-            pdf_bytes = pdf_buffer.getvalue()
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            with col2:
-                st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
+        st.session_state.initialized = True
+        st.success("Roster loaded and matchups generated!")
 
     except Exception as e:
         st.error(f"Error: {e}")
 
+# Only show UI if initialized
+if st.session_state.initialized:
+    # === SUGGESTIONS ===
+    st.subheader("Suggested Matches")
+    if st.session_state.suggestions:
+        sugg_data = []
+        for i, s in enumerate(st.session_state.suggestions):
+            sugg_data.append({
+                'Add': False,
+                'Wrestler': f"{s['wrestler']} ({s['team']})",
+                'Lvl': f"{s['level']:.1f}",
+                'Wt': f"{s['weight']:.0f}",
+                'vs': f"{s['vs']} ({s['vs_team']})",
+                'vs_Lvl': f"{s['vs_level']:.1f}",
+                'vs_Wt': f"{s['vs_weight']:.0f}",
+                'Score': f"{s['score']:.1f}",
+                'idx': i
+            })
+        sugg_df = pd.DataFrame(sugg_data)
+        edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True, key="sugg_editor")
+
+        if st.button("Add Selected"):
+            to_add = [st.session_state.suggestions[row['idx']] for _, row in edited.iterrows() if row['Add']]
+            for s in to_add:
+                w, o = s['_w'], s['_o']
+                if o not in w['matches']: w['matches'].append(o)
+                if w not in o['matches']: o['matches'].append(w)
+                st.session_state.bout_list.append({
+                    'bout_num': len(st.session_state.bout_list)+1,
+                    'w1_id': w['id'], 'w1_name': w['name'], 'w1_team': w['team'],
+                    'w1_level': w['level'], 'w1_weight': w['weight'], 'w1_grade': w['grade'], 'w1_early': w['early'],
+                    'w2_id': o['id'], 'w2_name': o['name'], 'w2_team': o['team'],
+                    'w2_level': o['level'], 'w2_weight': o['weight'], 'w2_grade': o['grade'], 'w2_early': o['early'],
+                    'score': s['score'], 'avg_weight': (w['weight']+o['weight'])/2,
+                    'is_early': w['early'] or o['early'], 'manual': 'Yes'
+                })
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.success("Matches added!")
+            st.rerun()
+    else:
+        st.info("All wrestlers have 2+ matches. No suggestions needed.")
+
+    # === MAT PREVIEWS ===
+    st.subheader("Mat Previews")
+    tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"]+1)])
+    for i, tab in enumerate(tabs, 1):
+        with tab:
+            mat_data = [m for m in st.session_state.mat_schedules if m['mat'] == i]
+            if not mat_data:
+                st.write("No matches")
+                continue
+            rows = []
+            for m in mat_data:
+                bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
+                rows.append({
+                    '#': m['mat_bout_num'],
+                    'Wrestler 1': m['w1'],
+                    'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
+                    'Wrestler 2': m['w2'],
+                    'G/L/W2': f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}",
+                    'Score': f"{bout['score']:.1f}",
+                    'Remove': False,
+                    'bout_num': bout['bout_num']
+                })
+            df_mat = pd.DataFrame(rows)
+            edited_mat = st.data_editor(df_mat, use_container_width=True, hide_index=True, key=f"mat_{i}")
+
+            # Remove
+            to_remove = [row['bout_num'] for _, row in edited_mat.iterrows() if row['Remove']]
+            if to_remove:
+                for bn in to_remove:
+                    for b in st.session_state.bout_list:
+                        if b['bout_num'] == bn:
+                            b['manual'] = 'Removed'
+                            w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
+                            w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
+                            if w2 in w1['matches']: w1['matches'].remove(w2)
+                            if w1 in w2['matches']: w2['matches'].remove(w1)
+                            st.session_state.last_removed = bn
+                            break
+                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                st.rerun()
+
+            if st.session_state.last_removed and st.button("Undo Remove", key=f"undo_{i}"):
+                for b in st.session_state.bout_list:
+                    if b['bout_num'] == st.session_state.last_removed:
+                        b['manual'] = ''
+                        w1 = next(w for w in st.session_state.active if w['id'] == b['w1_id'])
+                        w2 = next(w for w in st.session_state.active if w['id'] == b['w2_id'])
+                        if w2 not in w1['matches']: w1['matches'].append(w2)
+                        if w1 not in w2['matches']: w2['matches'].append(w1)
+                        break
+                st.session_state.last_removed = None
+                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                st.rerun()
+
+    # === GENERATE ===
+    if st.button("Generate Meet"):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
+            for m in range(1, CONFIG["NUM_MATS"]+1):
+                data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
+                df = pd.DataFrame(data)[['mat_bout_num', 'w1', 'w2']] if data else pd.DataFrame([['', '', '']], columns=['mat_bout_num', 'w1', 'w2'])
+                df.columns = ['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']
+                df.to_excel(writer, sheet_name=f'Mat {m}', index=False)
+        excel_bytes = output.getvalue()
+
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+        elements = []
+        for m in range(1, CONFIG["NUM_MATS"]+1):
+            data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
+            if not data: continue
+            table_data = [['#', 'Wrestler 1', 'Wrestler 2']] + [[e['mat_bout_num'], e['w1'], e['w2']] for e in data]
+            table = Table(table_data)
+            table.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.black)]))
+            elements.append(Paragraph(f"Mat {m}", getSampleStyleSheet()['Title']))
+            elements.append(table)
+            elements.append(PageBreak())
+        doc.build(elements)
+        pdf_bytes = pdf_buffer.getvalue()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col2:
+            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
+
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
