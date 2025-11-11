@@ -335,10 +335,8 @@ if st.session_state.initialized:
             edited_mat = st.data_editor(df_styled, use_container_width=True, hide_index=True, key=f"mat_{i}")
 
             # Remove - FIXED
-            to_remove = []
-            for idx, row in enumerate(edited_mat.data.itertuples()):
-                if row.Remove:
-                    to_remove.append(df_mat.iloc[idx]['bout_num'])
+            edited_df = edited_mat.to_pandas()  # Convert Styler to DataFrame
+            to_remove = [row['bout_num'] for _, row in edited_df.iterrows() if row['Remove']]
             if to_remove:
                 for bn in to_remove:
                     for b in st.session_state.bout_list:
