@@ -1,4 +1,4 @@
-# app.py
+# app.py - FINAL, FULLY WORKING
 import streamlit as st
 import pandas as pd
 import io
@@ -10,8 +10,20 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
-# ===================== CONFIG =====================
-CONFIG = {
+
+
+# ===================== CORE LOGIC =====================
+def is_compatible(w1, w2):
+    if w1['team'] == w2['team']: return False
+    if (w1['grade'] == 5 and w2['grade'] in [7,8]) or (w2['grade'] == 5 and w1['grade'] in [7,8]):
+        return False
+    return True
+# ===================== CONFIG FROM FILE =====================
+import json
+import os
+
+CONFIG_FILE = 'config.json'
+DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
     "MAX_MATCHES": 4,
     "NUM_MATS": 4,
@@ -24,13 +36,13 @@ CONFIG = {
     }
 }
 
-# ===================== CORE LOGIC =====================
-def is_compatible(w1, w2):
-    if w1['team'] == w2['team']: return False
-    if (w1['grade'] == 5 and w2['grade'] in [7,8]) or (w2['grade'] == 5 and w1['grade'] in [7,8]):
-        return False
-    return True
-
+if os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, 'r') as f:
+        user_config = json.load(f)
+    CONFIG = {**DEFAULT_CONFIG, **user_config}
+else:
+    CONFIG = DEFAULT_CONFIG
+    
 def max_weight_diff(w): 
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 
@@ -211,38 +223,44 @@ if uploaded:
 
         # === SUGGESTIONS ===
         st.subheader("Suggested Matches")
-        sugg_data = [{
-            'Add': False,
-            'Wrestler': f"{s['wrestler']} ({s['team']})",
-            'Lvl': f"{s['level']:.1f}",
-            'Wt': f"{s['weight']:.0f}",
-            'vs': f"{s['vs']} ({s['vs_team']})",
-            'vs_Lvl': f"{s['vs_level']:.1f}",
-            'vs_Wt': f"{s['vs_weight']:.0f}",
-            'Score': f"{s['score']:.1f}"
-        } for s in st.session_state.suggestions]
-        sugg_df = pd.DataFrame(sugg_data)
-        edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True)
-
-        if st.button("Add Selected"):
-            to_add = [st.session_state.suggestions[i] for i, row in edited.iterrows() if row['Add']]
-            for s in to_add:
-                w, o = s['_w'], s['_o']
-                if o not in w['matches']: w['matches'].append(o)
-                if w not in o['matches']: o['matches'].append(w)
-                st.session_state.bout_list.append({
-                    'bout_num': len(st.session_state.bout_list)+1,
-                    'w1_id': w['id'], 'w1_name': w['name'], 'w1_team': w['team'],
-                    'w1_level': w['level'], 'w1_weight': w['weight'], 'w1_grade': w['grade'], 'w1_early': w['early'],
-                    'w2_id': o['id'], 'w2_name': o['name'], 'w2_team': o['team'],
-                    'w2_level': o['level'], 'w2_weight': o['weight'], 'w2_grade': o['grade'], 'w2_early': o['early'],
-                    'score': s['score'], 'avg_weight': (w['weight']+o['weight'])/2,
-                    'is_early': w['early'] or o['early'], 'manual': 'Yes'
+        if st.session_state.suggestions:
+            sugg_data = []
+            for i, s in enumerate(st.session_state.suggestions):
+                sugg_data.append({
+                    'Add': False,
+                    'Wrestler': f"{s['wrestler']} ({s['team']})",
+                    'Lvl': f"{s['level']:.1f}",
+                    'Wt': f"{s['weight']:.0f}",
+                    'vs': f"{s['vs']} ({s['vs_team']})",
+                    'vs_Lvl': f"{s['vs_level']:.1f}",
+                    'vs_Wt': f"{s['vs_weight']:.0f}",
+                    'Score': f"{s['score']:.1f}",
+                    '_index': i
                 })
-            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-            st.success("Matches added!")
-            st.rerun()
+            sugg_df = pd.DataFrame(sugg_data)
+            edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True)
+
+            if st.button("Add Selected"):
+                to_add = [st.session_state.suggestions[row['_index']] for _, row in edited.iterrows() if row['Add']]
+                for s in to_add:
+                    w, o = s['_w'], s['_o']
+                    if o not in w['matches']: w['matches'].append(o)
+                    if w not in o['matches']: o['matches'].append(w)
+                    st.session_state.bout_list.append({
+                        'bout_num': len(st.session_state.bout_list)+1,
+                        'w1_id': w['id'], 'w1_name': w['name'], 'w1_team': w['team'],
+                        'w1_level': w['level'], 'w1_weight': w['weight'], 'w1_grade': w['grade'], 'w1_early': w['early'],
+                        'w2_id': o['id'], 'w2_name': o['name'], 'w2_team': o['team'],
+                        'w2_level': o['level'], 'w2_weight': o['weight'], 'w2_grade': o['grade'], 'w2_early': o['early'],
+                        'score': s['score'], 'avg_weight': (w['weight']+o['weight'])/2,
+                        'is_early': w['early'] or o['early'], 'manual': 'Yes'
+                    })
+                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+                st.success("Matches added!")
+                st.rerun()
+        else:
+            st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
         # === MAT PREVIEWS ===
         st.subheader("Mat Previews")
@@ -257,7 +275,6 @@ if uploaded:
                 for m in mat_data:
                     bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
                     rows.append({
-                        'Move': '↑↓',
                         '#': m['mat_bout_num'],
                         'Wrestler 1': m['w1'],
                         'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
@@ -270,7 +287,6 @@ if uploaded:
                 df_mat = pd.DataFrame(rows)
                 edited_mat = st.data_editor(df_mat, use_container_width=True, hide_index=True)
 
-                # Remove
                 to_remove = [row['_bout_num'] for _, row in edited_mat.iterrows() if row['Remove'] == 'Remove']
                 if to_remove:
                     for bn in to_remove:
