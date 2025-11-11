@@ -1,11 +1,11 @@
-# app.py - FINAL, 100% WORKING WITH REMOVE + UNDO
+# app.py - FINAL, 100% WORKING WITH REMOVE + UNDO + TEAM COLORS + YELLOW EARLY
 import streamlit as st
 import pandas as pd
 import io
 import random
 from collections import defaultdict
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -273,52 +273,42 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # === MAT PREVIEWS WITH REMOVAL ===
+    # === MAT PREVIEWS WITH HTML TABLE + REMOVE ===
     st.subheader("Mat Previews")
 
-    mat_dfs = {}
+    mat_data = {}
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
-        if not mat_bouts:
-            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early', 'w1_team', 'w2_team'])
-            continue
-
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-            w1_str = f"{bout['w1_name']} ({bout['w1_team']})"
-            w2_str = f"{bout['w2_name']} ({bout['w2_team']})"
-            w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
-            w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-
+            color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
+            color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
+            w1_name = f"<span style='color:{color1}; font-weight:bold'>{bout['w1_name']}</span>"
+            w2_name = f"<span style='color:{color2}; font-weight:bold'>{bout['w2_name']}</span>"
             rows.append({
                 'Remove': False,
                 'Slot': m['mat_bout_num'],
-                'Wrestler 1': w1_str,
-                'G/L/W': w1_glw,
-                'Wrestler 2': w2_str,
-                'G/L/W 2': w2_glw,
+                'Wrestler 1': f"{w1_name} ({bout['w1_team']})",
+                'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
+                'Wrestler 2': f"{w2_name} ({bout['w2_team']})",
+                'G/L/W 2': f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}",
                 'Score': f"{bout['score']:.1f}",
                 'bout_num': bout['bout_num'],
-                'is_early': bout['is_early'],
-                'w1_team': bout['w1_team'],
-                'w2_team': bout['w2_team']
+                'is_early': bout['is_early']
             })
-        df = pd.DataFrame(rows)
-        mat_dfs[mat_num] = df
+        mat_data[mat_num] = pd.DataFrame(rows) if rows else pd.DataFrame()
 
     tabs = st.tabs([f"Mat {i}" for i in range(1, CONFIG["NUM_MATS"] + 1)])
     for i, tab in enumerate(tabs, 1):
         with tab:
-            if mat_dfs[i].empty:
+            df = mat_data[i]
+            if df.empty:
                 st.write("No matches")
                 continue
 
-            def style_early(row):
-                return ['background-color: #FFFF99' if row['is_early'] else ''] * len(row)
-
-            edited_df = st.data_editor(
-                mat_dfs[i],
+            edited = st.data_editor(
+                df,
                 column_config={
                     "Remove": st.column_config.CheckboxColumn("Remove", default=False),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
@@ -327,8 +317,8 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.TextColumn("Score"),
-                    "bout_num": st.column_config.NumberColumn("bout_num", hide=True),
-                    "is_early": st.column_config.CheckboxColumn("is_early", hide=True),
+                    "bout_num": st.column_config.NumberColumn("bout_num", hidden=True),
+                    "is_early": st.column_config.CheckboxColumn("is_early", hidden=True),
                 },
                 use_container_width=True,
                 hide_index=True,
@@ -336,7 +326,7 @@ if st.session_state.initialized:
             )
 
             if st.button("Apply Removals on This Mat", key=f"apply_mat_{i}"):
-                to_remove = edited_df[edited_df['Remove']]['bout_num'].tolist()
+                to_remove = edited[edited['Remove']]['bout_num'].dropna().astype(int).tolist()
                 if to_remove:
                     st.session_state.last_removed = to_remove[-1]
                     for bout_num in to_remove:
@@ -405,19 +395,9 @@ if st.session_state.initialized:
 
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button(
-                "Download Excel",
-                excel_bytes,
-                "meet_schedule.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with col2:
-            st.download_button(
-                "Download PDF",
-                pdf_bytes,
-                "meet_schedule.pdf",
-                "application/pdf"
-            )
+            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
