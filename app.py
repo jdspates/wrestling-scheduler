@@ -27,13 +27,13 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
-    # REAL UNICODE EMOJIS – copy-paste these exact characters
+    # REAL UNICODE EMOJIS – COPY-PASTE THESE EXACT CHARACTERS
     "TEAM_EMOJIS": {
-        "Stillwater": "red circle",      # red circle
-        "Woodbury": "blue circle",       # blue circle
-        "St. Thomas Academy": "green circle",  # green circle
-        "Forest Lake": "yellow circle",        # yellow circle
-        "Black Bears": "black circle"          # black circle
+        "Stillwater": "red circle",           # red circle
+        "Woodbury": "blue circle",            # blue circle
+        "St. Thomas Academy": "green circle", # green circle
+        "Forest Lake": "yellow circle",       # yellow circle
+        "Black Bears": "black circle"         # black circle
     }
 }
 
