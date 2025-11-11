@@ -265,13 +265,13 @@ if uploaded:
                     'vs_Lvl': f"{s['vs_level']:.1f}",
                     'vs_Wt': f"{s['vs_weight']:.0f}",
                     'Score': f"{s['score']:.1f}",
-                    '_index': i
+                    'idx': i  # Fixed: was '_index'
                 })
             sugg_df = pd.DataFrame(sugg_data)
             edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True)
 
             if st.button("Add Selected"):
-                to_add = [st.session_state.suggestions[row['_index']] for _, row in edited.iterrows() if row['Add']]
+                to_add = [st.session_state.suggestions[row['idx']] for _, row in edited.iterrows() if row['Add']]
                 for s in to_add:
                     w, o = s['_w'], s['_o']
                     if o not in w['matches']: w['matches'].append(o)
@@ -385,3 +385,4 @@ if uploaded:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
