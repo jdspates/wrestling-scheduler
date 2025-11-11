@@ -2,10 +2,9 @@
 import streamlit as st
 import pandas as pd
 import io
-import json
-import csv
+import random
 from collections import defaultdict
-from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
@@ -20,8 +19,11 @@ CONFIG = {
     "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
     "TEAM_COLORS": {
-        "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
-        "Forest Lake": "#FFD700", "Black Bears": "#000000"
+        "Stillwater": "#FF0000",
+        "Woodbury": "#0000FF",
+        "St. Thomas Academy": "#008000",
+        "Forest Lake": "#FFD700",
+        "Black Bears": "#000000"
     }
 }
 
@@ -32,7 +34,8 @@ def is_compatible(w1, w2):
         return False
     return True
 
-def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+def max_weight_diff(w): 
+    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 
 def matchup_score(w1, w2):
     return round(abs(w1['weight'] - w2['weight']) + abs(w1['level'] - w2['level']) * 10, 1)
@@ -41,7 +44,8 @@ def generate_initial_matchups(active):
     bouts = set()
     sorted_w = sorted(active, key=lambda x: -x['level'])
     groups = defaultdict(list)
-    for w in sorted_w: groups[w['level']].append(w)
+    for w in sorted_w: 
+        groups[w['level']].append(w)
     for level in sorted(groups.keys(), reverse=True):
         group = groups[level]
         added = True
@@ -49,15 +53,20 @@ def generate_initial_matchups(active):
             added = False
             random.shuffle(group)
             for w in group:
-                if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
-                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
-                opps = [o for o in opps if is_compatible(w,o) and
-                        abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
-                        abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+                if len(w['matches']) >= CONFIG["MAX_MATCHES"]: 
+                    continue
+                opps = [
+                    o for o in active 
+                    if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"]
+                    and is_compatible(w, o)
+                    and abs(w['weight'] - o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight']))
+                    and abs(w['level'] - o['level']) <= CONFIG["MAX_LEVEL_DIFF"]
+                ]
                 if not opps:
                     opps = [o for o in active if o != w and o not in w['matches']]
-                if not opps: continue
-                best = min(opps, key=lambda o: matchup_score(w,o))
+                if not opps: 
+                    continue
+                best = min(opps, key=lambda o: matchup_score(w, o))
                 w['matches'].append(best)
                 best['matches'].append(w)
                 bouts.add(frozenset({w['id'], best['id']}))
@@ -74,8 +83,10 @@ def generate_initial_matchups(active):
             'w1_level': w1['level'], 'w1_weight': w1['weight'], 'w1_grade': w1['grade'], 'w1_early': w1['early'],
             'w2_id': w2['id'], 'w2_name': w2['name'], 'w2_team': w2['team'],
             'w2_level': w2['level'], 'w2_weight': w2['weight'], 'w2_grade': w2['grade'], 'w2_early': w2['early'],
-            'score': matchup_score(w1,w2), 'avg_weight': (w1['weight']+w2['weight'])/2,
-            'is_early': w1['early'] or w2['early'], 'manual': ''
+            'score': matchup_score(w1, w2), 
+            'avg_weight': (w1['weight'] + w2['weight']) / 2,
+            'is_early': w1['early'] or w2['early'], 
+            'manual': ''
         })
     return bout_list
 
@@ -84,20 +95,24 @@ def build_suggestions(active, bout_list):
     sugg = []
     for w in under:
         opps = [o for o in active if o != w and o not in w['matches']]
-        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
-                abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
-        if not opps: opps = [o for o in active if o != w and o not in w['matches']]
-        opps = sorted(opps, key=lambda o: matchup_score(w,o))[:3]
+        opps = [
+            o for o in opps 
+            if abs(w['weight'] - o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight']))
+            and abs(w['level'] - o['level']) <= CONFIG["MAX_LEVEL_DIFF"]
+        ]
+        if not opps: 
+            opps = [o for o in active if o != w and o not in w['matches']]
+        opps = sorted(opps, key=lambda o: matchup_score(w, o))[:3]
         for o in opps:
             sugg.append({
                 'wrestler': w['name'], 'team': w['team'], 'level': w['level'], 'weight': w['weight'],
                 'current': len(w['matches']), 'vs': o['name'], 'vs_team': o['team'],
-                'vs_level': o['level'], 'vs_weight': o['weight'], 'score': matchup_score(w,o),
+                'vs_level': o['level'], 'vs_weight': o['weight'], 'score': matchup_score(w, o),
                 '_w': w, '_o': o
             })
     return sugg
 
-def generate_mat_schedule(bout_list, gap):
+def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b['manual'] != 'Removed']
     sorted_b = sorted(valid, key=lambda x: x['avg_weight'])
     per_mat = len(sorted_b) // CONFIG["NUM_MATS"]
@@ -115,7 +130,6 @@ def generate_mat_schedule(bout_list, gap):
         normal = [b for b in mat_bouts if not b['is_early']]
         slot = 1
         scheduled = []
-        # Early in first half
         half = (len(mat_bouts) + 1) // 2
         used = set()
         first = next((b for b in early if b['w1_id'] not in used and b['w2_id'] not in used), None)
@@ -134,9 +148,9 @@ def generate_mat_schedule(bout_list, gap):
                 g1 = slot - last_slot.get(b['w1_id'], -100) - 1
                 g2 = slot - last_slot.get(b['w2_id'], -100) - 1
                 if g1 < 0 or g2 < 0: continue
-                gap = min(g1, g2)
-                if gap > best_gap:
-                    best_gap = gap
+                gap_val = min(g1, g2)
+                if gap_val > best_gap:
+                    best_gap = gap_val
                     best = b
             if not best: break
             early.remove(best)
@@ -172,7 +186,8 @@ def generate_mat_schedule(bout_list, gap):
     for m in range(1, CONFIG["NUM_MATS"]+1):
         entries = [e for e in schedules if e['mat'] == m]
         entries.sort(key=lambda x: x['slot'])
-        for i, e in enumerate(entries, 1): e['mat_bout_num'] = i
+        for i, e in enumerate(entries, 1): 
+            e['mat_bout_num'] = i
     return schedules
 
 # ===================== STREAMLIT APP =====================
@@ -196,7 +211,11 @@ if uploaded:
             w['grade'] = int(w['grade'])
             w['level'] = float(w['level'])
             w['weight'] = float(w['weight'])
-            w['early'] = w['early_matches'].strip().upper() == 'Y'
+            # Safe conversion for early/scratch
+            early_val = w['early_matches']
+            scratch_val = w['scratch']
+            w['early'] = (str(early_val).strip().upper() == 'Y') or (early_val in [1, True])
+            w['scratch'] = (str(scratch_val).strip().upper() == 'Y') or (scratch_val in [1, True])
             w['matches'] = []
 
         active = [w for w in wrestlers if not w['scratch']]
@@ -274,7 +293,7 @@ if uploaded:
                     df.to_excel(writer, sheet_name=f'Mat {m}', index=False)
             excel_bytes = output.getvalue()
 
-            # PDFs (simplified)
+            # PDF
             pdf_buffer = io.BytesIO()
             doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
             elements = []
@@ -301,4 +320,3 @@ if uploaded:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
