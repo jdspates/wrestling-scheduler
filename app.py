@@ -1,4 +1,4 @@
-# app.py - FINAL FIXED: No hidden=True, Colors + Yellow Rows Working
+# app.py - FINAL FIXED: No row_styler, Colors + Early Labels Working
 import streamlit as st
 import pandas as pd
 import io
@@ -281,7 +281,7 @@ if st.session_state.initialized:
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
         if not mat_bouts:
-            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early'])
+            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Early?', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num'])
             continue
 
         rows = []
@@ -294,10 +294,12 @@ if st.session_state.initialized:
             w2_html = f'<span style="color:{color2}; font-weight:bold">{bout["w2_name"]}</span> ({bout["w2_team"]})'
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
+            early_label = "🔥 Early" if bout['is_early'] else ""
 
             rows.append({
                 'Remove': False,
                 'Slot': m['mat_bout_num'],
+                'Early?': early_label,
                 'Wrestler 1': w1_html,
                 'G/L/W': w1_glw,
                 'Wrestler 2': w2_html,
@@ -319,27 +321,20 @@ if st.session_state.initialized:
                 st.write("No matches")
                 continue
 
-            # Row styler for early matches (yellow)
-            def highlight_early(row):
-                if row['is_early']:
-                    return ['background-color: #FFFF99'] * len(row)
-                else:
-                    return [''] * len(row)
-
             edited_df = st.data_editor(
                 df,
                 column_config={
                     "Remove": st.column_config.CheckboxColumn("Remove"),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                    "Early?": st.column_config.TextColumn("Early?"),
                     "Wrestler 1": st.column_config.TextColumn("Wrestler 1", help="Wrestler 1 with team"),
                     "G/L/W": st.column_config.TextColumn("G/L/W"),
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2", help="Wrestler 2 with team"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score"),
-                    "bout_num": st.column_config.NumberColumn("bout_num"),  # No hidden
-                    "is_early": st.column_config.CheckboxColumn("is_early"),  # No hidden
+                    "bout_num": st.column_config.NumberColumn("bout_num"),  # Metadata only
+                    "is_early": st.column_config.CheckboxColumn("is_early"),  # Metadata only
                 },
-                row_styler=highlight_early,  # Yellow for early
                 use_container_width=True,
                 hide_index=True,
                 key=f"mat_editor_{i}"
