@@ -3,14 +3,20 @@
     "MAX_MATCHES": 4,
     "NUM_MATS": 4,
     "MAX_LEVEL_DIFF": 1,
-    "WEIGHT_DIFF_FACTOR": 0.1,
+    "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
-    "DEBUG_CSV": true,
     "TEAM_COLORS": {
-        "Stillwater": "red",
-        "Woodbury": "blue",
-        "St. Thomas Academy": "navy",
-        "Forest Lake": "maroon",
-        "Black Bears": "black"
+        "Stillwater": "#FF0000",
+        "Woodbury": "#0000FF",
+        "St. Thomas Academy": "#008000",
+        "Forest Lake": "#FFD700",
+        "Black Bears": "#000000"
+    },
+    "TEAM_EMOJIS": {
+        "Stillwater": "red circle",
+        "Woodbury": "blue circle",
+        "St. Thomas Academy": "green circle",
+        "Forest Lake": "yellow circle",
+        "Black Bears": "black circle"
     }
 }
