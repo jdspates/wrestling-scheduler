@@ -1,4 +1,4 @@
-# app.py - FINAL: REAL EMOJIS + PDF COLORS + YELLOW EARLY
+# app.py - FINAL: FIXED SYNTAX + EMOJIS + PDF COLORS + YELLOW ROWS
 import streamlit as st
 import pandas as pd
 import io
@@ -27,7 +27,6 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
-    # REAL EMOJIS for the web table
     "TEAM_EMOJIS": {
         "Stillwater": "red circle", "Woodbury": "blue circle", "St. Thomas Academy": "green circle",
         "Forest Lake": "yellow circle", "Black Bears": "black circle"
@@ -70,10 +69,8 @@ def generate_initial_matchups(active):
             random.shuffle(group)
             for w in group:
                 if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
-                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"]
-                opps = [o for o in opps if is_compatible(w,o) and
-                        abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
-                        abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+                # FIXED: Added missing ] at the end
+                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w,o))
                 w['matches'].append(best)
@@ -104,8 +101,7 @@ def build_suggestions(active, bout_list):
     sugg = []
     for w in under_min:
         opps = [o for o in active if o != w and o not in w['matches']]
-        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
-                abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps: opps = [o for o in active if o != w and o not in w['matches']]
         opps = sorted(opps, key=lambda o: matchup_score(w,o))[:3]
         for o in opps:
