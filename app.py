@@ -50,7 +50,7 @@ def generate_initial_matchups(active):
             random.shuffle(group)
             for w in group:
                 if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
-                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"]
+                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
                 opps = [o for o in opps if is_compatible(w,o) and
                         abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
                         abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
@@ -301,3 +301,4 @@ if uploaded:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
