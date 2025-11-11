@@ -1,4 +1,4 @@
-# app.py - FINAL: PDF TEAM COLORS + YELLOW EARLY + EXCEL YELLOW + EMOJI WEB
+# app.py - FINAL: REAL EMOJIS + PDF COLORS + YELLOW EARLY
 import streamlit as st
 import pandas as pd
 import io
@@ -14,7 +14,7 @@ import json
 import os
 from openpyxl.styles import PatternFill
 
-# ===================== CONFIG FROM FILE =====================
+# ===================== CONFIG =====================
 CONFIG_FILE = 'config.json'
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
         "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
         "Forest Lake": "#FFD700", "Black Bears": "#000000"
     },
+    # REAL EMOJIS for the web table
     "TEAM_EMOJIS": {
         "Stillwater": "red circle", "Woodbury": "blue circle", "St. Thomas Academy": "green circle",
         "Forest Lake": "yellow circle", "Black Bears": "black circle"
@@ -69,7 +70,10 @@ def generate_initial_matchups(active):
             random.shuffle(group)
             for w in group:
                 if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
-                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"]
+                opps = [o for o in opps if is_compatible(w,o) and
+                        abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
+                        abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w,o))
                 w['matches'].append(best)
@@ -100,7 +104,8 @@ def build_suggestions(active, bout_list):
     sugg = []
     for w in under_min:
         opps = [o for o in active if o != w and o not in w['matches']]
-        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and
+                abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps: opps = [o for o in active if o != w and o not in w['matches']]
         opps = sorted(opps, key=lambda o: matchup_score(w,o))[:3]
         for o in opps:
@@ -286,7 +291,7 @@ if st.session_state.initialized:
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m['mat'] == mat_num]
         if not mat_bouts:
-            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove', 'Slot', 'Early?', 'Wrestler 1', 'G/L/W', 'Wrestler 2', 'G/L/W 2', 'Score', 'bout_num', 'is_early'])
+            mat_dfs[mat_num] = pd.DataFrame(columns=['Remove','Slot','Early?','Wrestler 1','G/L/W','Wrestler 2','G/L/W 2','Score','bout_num','is_early'])
             continue
 
         rows = []
@@ -359,7 +364,7 @@ if st.session_state.initialized:
                     st.success(f"Removed {len(to_remove)} match(es)!")
                     st.rerun()
 
-    # === UNDO LAST REMOVAL ===
+    # === UNDO ===
     if st.session_state.last_removed:
         st.markdown("---")
         if st.button("Undo Last Removal", type="primary"):
@@ -377,32 +382,32 @@ if st.session_state.initialized:
             st.success("Undo successful!")
             st.rerun()
 
-    # === GENERATE EXCEL + PDF ===
+    # === EXCEL + PDF ===
     if st.button("Generate Meet", type="primary"):
-        # === EXCEL WITH YELLOW EARLY ===
+        # ----- EXCEL (yellow early rows) -----
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name='Matchups', index=False)
             for m in range(1, CONFIG["NUM_MATS"]+1):
                 data = [e for e in st.session_state.mat_schedules if e['mat'] == m]
                 if not data:
-                    pd.DataFrame([['', '', '']], columns=['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']).to_excel(writer, sheet_name=f'Mat {m}', index=False)
+                    pd.DataFrame([['', '', '']], columns=['#','Wrestler 1 (Team)','Wrestler 2 (Team)']).to_excel(writer, sheet_name=f'Mat {m}', index=False)
                     continue
-                df = pd.DataFrame(data)[['mat_bout_num', 'w1', 'w2']]
-                df.columns = ['#', 'Wrestler 1 (Team)', 'Wrestler 2 (Team)']
+                df = pd.DataFrame(data)[['mat_bout_num','w1','w2']]
+                df.columns = ['#','Wrestler 1 (Team)','Wrestler 2 (Team)']
                 df.to_excel(writer, sheet_name=f'Mat {m}', index=False)
-                # Apply yellow fill to early rows
+
                 wb = writer.book
                 ws = wb[f'Mat {m}']
                 yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-                for idx, row in df.iterrows():
+                for idx, _ in df.iterrows():
                     bout = next(b for b in st.session_state.bout_list if b['bout_num'] == data[idx]['bout_num'])
                     if bout['is_early']:
-                        for col in range(1, 4):  # A-C
+                        for col in range(1,4):   # A-C
                             ws.cell(row=idx+2, column=col).fill = yellow_fill
         excel_bytes = output.getvalue()
 
-        # === PDF WITH TEAM COLORS + YELLOW EARLY ===
+        # ----- PDF (team colors + yellow early) -----
         pdf_buffer = io.BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
         elements = []
@@ -415,14 +420,14 @@ if st.session_state.initialized:
                 elements.append(PageBreak())
                 continue
 
-            table_data = [['#', 'Wrestler 1', 'Wrestler 2']]
+            table_data = [['#','Wrestler 1','Wrestler 2']]
             for e in data:
                 bout = next(b for b in st.session_state.bout_list if b['bout_num'] == e['bout_num'])
-                color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
-                color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
-                w1_para = Paragraph(f'<font color="{color1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
-                w2_para = Paragraph(f'<font color="{color2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])
-                table_data.append([e['mat_bout_num'], w1_para, w2_para])
+                c1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
+                c2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
+                w1 = Paragraph(f'<font color="{c1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
+                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])
+                table_data.append([e['mat_bout_num'], w1, w2])
 
             table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
             style = TableStyle([
@@ -432,11 +437,10 @@ if st.session_state.initialized:
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ])
-            # Add yellow background for early rows
-            for row_idx, row in enumerate(table_data[1:], 1):
-                bout = next(b for b in st.session_state.bout_list if b['bout_num'] == data[row_idx-1]['bout_num'])
+            for r_idx, _ in enumerate(table_data[1:], 1):
+                bout = next(b for b in st.session_state.bout_list if b['bout_num'] == data[r_idx-1]['bout_num'])
                 if bout['is_early']:
-                    style.add('BACKGROUND', (0, row_idx), (-1, row_idx), HexColor("#FFFF99"))
+                    style.add('BACKGROUND', (0, r_idx), (-1, r_idx), HexColor("#FFFF99"))
             table.setStyle(style)
 
             elements.append(Paragraph(f"Mat {m}", styles['Title']))
@@ -450,7 +454,8 @@ if st.session_state.initialized:
 
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with col2:
             st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
