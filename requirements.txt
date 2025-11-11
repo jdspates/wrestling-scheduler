@@ -1,4 +1,4 @@
 streamlit
 pandas
 openpyxl
-reportlab
+reportlab==4.0.9
