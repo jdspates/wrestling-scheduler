@@ -1,4 +1,4 @@
-# app.py - FINAL FIXED: HTML COLORS RENDERED + EARLY LABELS
+# app.py - FINAL FIXED: No unsafe_allow_html, Emoji Colors + Hidden Metadata
 import streamlit as st
 import pandas as pd
 import io
@@ -21,9 +21,9 @@ DEFAULT_CONFIG = {
     "MAX_LEVEL_DIFF": 1,
     "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
-    "TEAM_COLORS": {
-        "Stillwater": "#FF0000", "Woodbury": "#0000FF", "St. Thomas Academy": "#008000",
-        "Forest Lake": "#FFD700", "Black Bears": "#000000"
+    "TEAM_EMOJIS": {  # Emoji for colors (no HTML needed)
+        "Stillwater": "🔴", "Woodbury": "🔵", "St. Thomas Academy": "🟢",
+        "Forest Lake": "🟡", "Black Bears": "⚫"
     }
 }
 
@@ -287,11 +287,11 @@ if st.session_state.initialized:
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
-            # Team colors in HTML
-            color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
-            color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
-            w1_html = f'<span style="color:{color1}; font-weight:bold">{bout["w1_name"]}</span> ({bout["w1_team"]})'
-            w2_html = f'<span style="color:{color2}; font-weight:bold">{bout["w2_name"]}</span> ({bout["w2_team"]})'
+            # Emoji for team colors
+            emoji1 = CONFIG["TEAM_EMOJIS"].get(bout['w1_team'], "⚪")
+            emoji2 = CONFIG["TEAM_EMOJIS"].get(bout['w2_team'], "⚪")
+            w1_str = f"{emoji1} {bout['w1_name']} ({bout['w1_team']})"
+            w2_str = f"{emoji2} {bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
             early_label = "🔥 Early" if bout['is_early'] else ""
@@ -300,9 +300,9 @@ if st.session_state.initialized:
                 'Remove': False,
                 'Slot': m['mat_bout_num'],
                 'Early?': early_label,
-                'Wrestler 1': w1_html,
+                'Wrestler 1': w1_str,
                 'G/L/W': w1_glw,
-                'Wrestler 2': w2_html,
+                'Wrestler 2': w2_str,
                 'G/L/W 2': w2_glw,
                 'Score': f"{bout['score']:.1f}",
                 'bout_num': bout['bout_num'],
@@ -332,12 +332,11 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2", help="Wrestler 2 with team"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score"),
-                    "bout_num": st.column_config.NumberColumn("bout_num"),
-                    "is_early": st.column_config.CheckboxColumn("is_early"),
+                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # Hidden metadata
+                    "is_early": st.column_config.CheckboxColumn("is_early", width=0),  # Hidden metadata
                 },
                 use_container_width=True,
                 hide_index=True,
-                unsafe_allow_html=True,  # Enables HTML rendering in TextColumns
                 key=f"mat_editor_{i}"
             )
 
