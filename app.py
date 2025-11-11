@@ -1,4 +1,4 @@
-# app.py - FINAL, STABLE, 100% DESKTOP MATCH
+# app.py - FINAL + HIGHLIGHTS + TEAM COLORS
 import streamlit as st
 import pandas as pd
 import io
@@ -34,20 +34,18 @@ if os.path.exists(CONFIG_FILE):
 else:
     CONFIG = DEFAULT_CONFIG
 
-# ===================== CORE LOGIC (EXACT FROM DESKTOP) =====================
+# ===================== CORE LOGIC =====================
 def is_compatible(w1, w2):
     if w1['team'] == w2['team']: return False
     if (w1['grade'] == 5 and w2['grade'] in [7,8]) or (w2['grade'] == 5 and w1['grade'] in [7,8]):
         return False
     return True
 
-def max_weight_diff(weight):
-    return max(CONFIG["MIN_WEIGHT_DIFF"], weight * CONFIG["WEIGHT_DIFF_FACTOR"])
+def max_weight_diff(w): 
+    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 
 def matchup_score(w1, w2):
-    w_diff = abs(w1['weight'] - w2['weight'])
-    l_diff = abs(w1['level'] - w2['level'])
-    return round(w_diff + l_diff * 10, 1)
+    return round(abs(w1['weight'] - w2['weight']) + abs(w1['level'] - w2['level']) * 10, 1)
 
 def generate_initial_matchups(active):
     bouts = set()
@@ -62,18 +60,10 @@ def generate_initial_matchups(active):
             added_in_round = False
             random.shuffle(group)
             for w in group:
-                if len(w['matches']) >= CONFIG["MAX_MATCHES"]:
-                    continue
-                opps = [
-                    o for o in active
-                    if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"]
-                    and is_compatible(w, o)
-                    and abs(w['weight'] - o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight']))
-                    and abs(w['level'] - o['level']) <= CONFIG["MAX_LEVEL_DIFF"]
-                ]
-                if not opps:
-                    continue
-                best = min(opps, key=lambda o: matchup_score(w, o))
+                if len(w['matches']) >= CONFIG["MAX_MATCHES"]: continue
+                opps = [o for o in active if o != w and o not in w['matches'] and len(o['matches']) < CONFIG["MAX_MATCHES"] and is_compatible(w,o) and abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+                if not opps: continue
+                best = min(opps, key=lambda o: matchup_score(w,o))
                 w['matches'].append(best)
                 best['matches'].append(w)
                 bouts.add(frozenset({w['id'], best['id']}))
@@ -81,9 +71,9 @@ def generate_initial_matchups(active):
                 break
     bout_list = []
     for idx, b in enumerate(bouts, 1):
-        id_list = list(b)
-        w1 = next(w for w in active if w['id'] == id_list[0])
-        w2 = next(w for w in active if w['id'] == id_list[1])
+        ids = list(b)
+        w1 = next(w for w in active if w['id'] == ids[0])
+        w2 = next(w for w in active if w['id'] == ids[1])
         score = matchup_score(w1, w2)
         avg_w = (w1['weight'] + w2['weight']) / 2
         is_early = w1['early'] or w2['early']
@@ -101,24 +91,15 @@ def build_suggestions(active, bout_list):
     under_min = [w for w in active if len(w['matches']) < CONFIG["MIN_MATCHES"]]
     sugg = []
     for w in under_min:
-        opps = [
-            o for o in active
-            if o != w and o not in w['matches']
-            and abs(w['weight'] - o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight']))
-            and abs(w['level'] - o['level']) <= CONFIG["MAX_LEVEL_DIFF"]
-        ]
-        if not opps:
-            opps = [o for o in active if o != w and o not in w['matches']]
-        opps = sorted(opps, key=lambda o: matchup_score(w, o))[:3]
+        opps = [o for o in active if o != w and o not in w['matches']]
+        opps = [o for o in opps if abs(w['weight']-o['weight']) <= min(max_weight_diff(w['weight']), max_weight_diff(o['weight'])) and abs(w['level']-o['level']) <= CONFIG["MAX_LEVEL_DIFF"]]
+        if not opps: opps = [o for o in active if o != w and o not in w['matches']]
+        opps = sorted(opps, key=lambda o: matchup_score(w,o))[:3]
         for o in opps:
-            score = matchup_score(w, o)
-            team_note = "SAME TEAM" if w['team'] == o['team'] else ""
             sugg.append({
-                'wrestler': w['name'], 'level': w['level'], 'weight': w['weight'], 'team': w['team'],
-                'current_matches': len(w['matches']), 'early': w['early'],
-                'vs': o['name'], 'vs_level': o['level'], 'vs_weight': o['weight'], 'vs_team': o['team'],
-                'opponent_matches': len(o['matches']), 'vs_early': o['early'],
-                'score': score, 'note': team_note,
+                'wrestler': w['name'], 'team': w['team'], 'level': w['level'], 'weight': w['weight'],
+                'current': len(w['matches']), 'vs': o['name'], 'vs_team': o['team'],
+                'vs_level': o['level'], 'vs_weight': o['weight'], 'score': matchup_score(w,o),
                 '_w': w, '_o': o
             })
     return sugg
@@ -162,12 +143,10 @@ def generate_mat_schedule(bout_list, gap=4):
             best = None
             best_score = -float('inf')
             for b in early_bouts:
-                if b['w1_id'] in first_half_wrestlers or b['w2_id'] in first_half_wrestlers:
-                    continue
+                if b['w1_id'] in first_half_wrestlers or b['w2_id'] in first_half_wrestlers: continue
                 l1 = last_slot.get(b['w1_id'], -100)
                 l2 = last_slot.get(b['w2_id'], -100)
-                if l1 >= slot - 1 or l2 >= slot - 1:
-                    continue
+                if l1 >= slot - 1 or l2 >= slot - 1: continue
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
@@ -186,14 +165,12 @@ def generate_mat_schedule(bout_list, gap=4):
             for b in remaining:
                 l1 = last_slot.get(b['w1_id'], -100)
                 l2 = last_slot.get(b['w2_id'], -100)
-                if l1 >= slot - gap or l2 >= slot - gap:
-                    continue
+                if l1 >= slot - gap or l2 >= slot - gap: continue
                 gap_val = min(slot - l1 - 1, slot - l2 - 1)
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
-            if best is None:
-                best = remaining[0]
+            if best is None: best = remaining[0]
             remaining.remove(best)
             scheduled.append((slot, best))
             last_slot[best['w1_id']] = slot
@@ -257,7 +234,6 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error: {e}")
 
-# Only show UI if initialized
 if st.session_state.initialized:
     # === SUGGESTIONS ===
     st.subheader("Suggested Matches")
@@ -312,21 +288,30 @@ if st.session_state.initialized:
             rows = []
             for m in mat_data:
                 bout = next(b for b in st.session_state.bout_list if b['bout_num'] == m['bout_num'])
+                # Team color
+                color1 = CONFIG["TEAM_COLORS"].get(bout['w1_team'], "#000000")
+                color2 = CONFIG["TEAM_COLORS"].get(bout['w2_team'], "#000000")
+                w1_name = f"<span style='color:{color1}'>{bout['w1_name']}</span> ({bout['w1_team']})"
+                w2_name = f"<span style='color:{color2}'>{bout['w2_name']}</span> ({bout['w2_team']})"
                 rows.append({
                     '#': m['mat_bout_num'],
-                    'Wrestler 1': m['w1'],
+                    'Wrestler 1': w1_name,
                     'G/L/W': f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}",
-                    'Wrestler 2': m['w2'],
+                    'Wrestler 2': w2_name,
                     'G/L/W2': f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}",
                     'Score': f"{bout['score']:.1f}",
                     'Remove': False,
-                    'bout_num': bout['bout_num']
+                    'bout_num': bout['bout_num'],
+                    'is_early': bout['is_early']
                 })
             df_mat = pd.DataFrame(rows)
-            edited_mat = st.data_editor(df_mat, use_container_width=True, hide_index=True, key=f"mat_{i}")
+            # Highlight early matches
+            def style_early(row):
+                return ['background-color: #FFFF99' if row['is_early'] else '' for _ in row]
+            df_styled = df_mat.style.apply(style_early, axis=1)
+            edited_mat = st.data_editor(df_styled, use_container_width=True, hide_index=True, key=f"mat_{i}")
 
-            # Remove
-            to_remove = [row['bout_num'] for _, row in edited_mat.iterrows() if row['Remove']]
+            to_remove = [row['bout_num'] for _, row in df_mat.iterrows() if edited_mat.data.iloc[_]['Remove']]
             if to_remove:
                 for bn in to_remove:
                     for b in st.session_state.bout_list:
