@@ -1,4 +1,4 @@
-# app.py - FINAL: fire EMOJI + COLORED DOT + FULLY WORKING (NO HTML)
+# app.py - FINAL: NO ERRORS + fire EMOJI + FULLY WORKING
 import streamlit as st
 import pandas as pd
 import io
@@ -376,7 +376,7 @@ if st.session_state.initialized:
             bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
             c1 = TEAM_COLORS.get(bout["w1_team"], "#CCCCCC")
             c2 = TEAM_COLORS.get(bout["w2_team"], "#CCCCCC")
-            dot1 = f"•"  # Use bullet as dot
+            dot1 = "•"  # Use bullet as dot
             w1_str = f"{dot1} {bout['w1_name']} ({bout['w1_team']})"
             w2_str = f"{dot1} {bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
@@ -409,7 +409,7 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
-                    "bout_num": st.column_config.NumberColumn("bout_num", hide=True),
+                    "bout_num": st.column_config.NumberColumn("bout_num", hidden=True),  # FIXED: hidden=True
                 },
                 use_container_width=True,
                 hide_index=True,
