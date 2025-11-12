@@ -1,4 +1,4 @@
-# app.py - FINAL: PDF UNDER EXCEL + DRAG-TO-REORDER ROWS IN MAT PREVIEWS
+# app.py - FINAL: PDF UNDER EXCEL + DRAG-TO-REORDER (FIXED FOR ST 1.35+)
 import streamlit as st
 import pandas as pd
 import io
@@ -328,7 +328,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have enough matches.")
 
-    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER -----
+    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER (FIXED: USE st.dataframe) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -336,46 +336,40 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # Build original dataframe
+        # Build original dataframe (with "Remove" column for logic)
         rows = []
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
-                "Early?": "fire" if b["is_early"] else "",
-                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
+                "Early?": "🔥" if b["is_early"] else "",
+                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], '⚪')} {b['w1_name']} ({b['w1_team']})",
                 "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
+                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], '⚪')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
                 "bout_num": b["bout_num"]
             })
         full_df = pd.DataFrame(rows)
-        disp_df = full_df.drop(columns=["bout_num"])
+        disp_df = full_df.drop(columns=["Remove", "bout_num"])  # Display without "Remove" or hidden ID
 
-        editor_key = f"mat_editor_{mat}"
-        edited = st.data_editor(
-            disp_df,
-            column_config={
-                "Remove": st.column_config.CheckboxColumn("Remove"),
-                "Slot": st.column_config.NumberColumn("Slot", disabled=True),
-                "Early?": st.column_config.TextColumn("Early?"),
-                "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
-                "G/L/W": st.column_config.TextColumn("G/L/W"),
-                "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
-                "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
-                "Score": st.column_config.NumberColumn("Score", disabled=True),
-            },
-            use_container_width=True,
-            hide_index=True,
-            key=editor_key,
-            selection_mode="multi-row",  # Enables drag-to-reorder
-        )
+        # === DRAG DISPLAY: st.dataframe (read-only + selections) ===
+        df_key = f"mat_df_{mat}"
+        with st.expander(f"Mat {mat} (Drag rows to reorder)", expanded=True):
+            selected_rows = st.dataframe(
+                disp_df,
+                use_container_width=True,
+                hide_index=True,
+                key=df_key,
+                selection_mode="multi-row",  # Enables drag-to-reorder selections
+                on_selection="rerun",        # Auto-rerun on selection change
+            )
 
         # === DRAG REORDER LOGIC ===
-        sel = st.session_state.get(editor_key, {}).get("row_selection", {}).get("rows", [])
+        sel = st.session_state.get(df_key, {}).get("selection", {}).get("rows", [])
         if sel:
+            # Reorder based on selection (using original full_df for mapping)
             reordered_full = _reorder_rows_by_selection(full_df, sel)
             new_schedule = []
             for idx, row in reordered_full.iterrows():
@@ -383,30 +377,44 @@ if st.session_state.initialized:
                                    if e["mat"] == mat and e["bout_num"] == row["bout_num"])
                 sched_entry["mat_bout_num"] = idx + 1
                 new_schedule.append(sched_entry)
+            # Update global schedule
             st.session_state.mat_schedules = [
                 e for e in st.session_state.mat_schedules if e["mat"] != mat
             ] + new_schedule
-            st.success(f"Mat {mat} order updated!")
+            st.success(f"Mat {mat} order updated! 🎯")
             st.rerun()
 
-        # === REMOVE BUTTON ===
-        with st.expander(f"Mat {mat}", expanded=True):
-            if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
-                rem = [full_df.iloc[i]["bout_num"] for i in edited[edited["Remove"]].index]
-                if rem:
-                    for n in rem:
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == n)
-                        b["manual"] = "Removed"
-                        for p in [(b["w1_id"], b["w2_id"]), (b["w2_id"], b["w1_id"])]:
-                            w1 = next(w for w in st.session_state.active if w["id"] == p[0])
-                            w2 = next(w for w in st.session_state.active if w["id"] == p[1])
-                            if w2 in w1["matches"]:
-                                w1["matches"].remove(w2)
-                    st.session_state.last_removed = rem[0]
-                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.success(f"Removed {len(rem)} match(es)!")
-                    st.rerun()
+        # === REMOVE LOGIC: Separate checkboxes (no display tie-in) ===
+        # Rebuild remove_df fresh each run (since no editing on display)
+        remove_df = pd.DataFrame([{"Remove": False, "bout_num": row["bout_num"]} for _, row in full_df.iterrows()])
+        remove_key = f"remove_{mat}"
+        removed = st.data_editor(
+            remove_df,
+            column_config={"Remove": st.column_config.CheckboxColumn("Remove"), "bout_num": st.column_config.NumberColumn("ID", disabled=True)},
+            disabled=["bout_num"],
+            hide_index=True,
+            use_container_width=True,
+            key=remove_key,
+            width=0,  # Invisible: height auto-adjusts to 0 if no rows, but logic works
+        )
+        if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
+            # Map visible indices to original bout_num
+            rem_indices = removed[removed["Remove"]].index.tolist()
+            rem = [full_df.iloc[i]["bout_num"] for i in rem_indices]
+            if rem:
+                for n in rem:
+                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == n)
+                    b["manual"] = "Removed"
+                    for p in [(b["w1_id"], b["w2_id"]), (b["w2_id"], b["w1_id"])]:
+                        w1 = next(w for w in st.session_state.active if w["id"] == p[0])
+                        w2 = next(w for w in st.session_state.active if w["id"] == p[1])
+                        if w2 in w1["matches"]:
+                            w1["matches"].remove(w2)
+                st.session_state.last_removed = rem[0]
+                st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                st.success(f"Removed {len(rem)} match(es)!")
+                st.rerun()
 
     # ----- UNDO -----
     if st.session_state.last_removed:
