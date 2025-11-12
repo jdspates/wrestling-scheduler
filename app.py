@@ -1,4 +1,4 @@
-# app.py – FULL SCRIPT WITH REAL COLORED CIRCLE ICONS (ALL CIRCLES)
+# app.py - FINAL: REAL COLORED CIRCLE EMOJIS (VISIBLE IN CODE & APP)
 import streamlit as st
 import pandas as pd
 import io
@@ -15,23 +15,21 @@ import os
 from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# 1. CONFIG & REAL EMOJI MAPS
+# CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
-
-# Hex colours for the PDF
 COLOR_MAP = {
-    "red":    ("#FF0000", "red circle"),
-    "blue":   ("#0000FF", "blue circle"),
-    "green":  ("#008000", "green circle"),
+    "red": ("#FF0000", "red circle"),
+    "blue": ("#0000FF", "blue circle"),
+    "green": ("#008000", "green circle"),
     "yellow": ("#FFD700", "yellow circle"),
-    "black":  ("#000000", "black circle"),
-    "white":  ("#FFFFFF", "white circle"),
+    "black": ("#000000", "black circle"),
+    "white": ("#FFFFFF", "white circle"),
     "purple": ("#800080", "purple circle"),
     "orange": ("#FFA500", "orange circle")
 }
 
-# REAL COLORED CIRCLE ICONS – ALL ARE CIRCLES (visible in editor)
+# REAL COLORED CIRCLE EMOJIS – VISIBLE IN YOUR EDITOR
 COLOR_DOT_MAP = {
     "red":    "red circle",   # red circle
     "blue":   "blue circle",  # blue circle
@@ -43,7 +41,7 @@ COLOR_DOT_MAP = {
     "orange": "orange circle" # orange circle
 }
 
-# EARLY MATCH CLOCK – clean analog clock (circle style)
+# REAL CLOCK – VISIBLE IN EDITOR
 EARLY_CLOCK = "clock"  # clock
 
 DEFAULT_CONFIG = {
@@ -62,9 +60,6 @@ DEFAULT_CONFIG = {
     ]
 }
 
-# ----------------------------------------------------------------------
-# 2. Load / create config
-# ----------------------------------------------------------------------
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "r") as f:
         CONFIG = json.load(f)
@@ -76,13 +71,7 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# 3. Build look-ups after TEAMS exists
-# ----------------------------------------------------------------------
-TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}   # hex for PDF
-TEAM_DOTS   = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS} # real circle emoji
-
-# ----------------------------------------------------------------------
-# 4. SESSION STATE
+# SESSION STATE
 # ----------------------------------------------------------------------
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
@@ -98,7 +87,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# 5. MEET SETTINGS
+# MEET SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -158,8 +147,12 @@ if changed:
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 
+TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
+TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
+TEAM_DOTS = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS}
+
 # ----------------------------------------------------------------------
-# 6. CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
@@ -322,7 +315,7 @@ def generate_mat_schedule(bout_list, gap=4):
     return schedules
 
 # ----------------------------------------------------------------------
-# 7. STREAMLIT UI
+# STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
@@ -411,7 +404,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS – REAL CIRCLE ICONS -----
+    # ----- MAT PREVIEWS – REAL EMOJIS (VISIBLE IN CODE) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -423,7 +416,6 @@ if st.session_state.initialized:
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
 
-            # real circle dot + optional clock
             w1_dot = TEAM_DOTS.get(b["w1_team"], "white circle")
             w2_dot = TEAM_DOTS.get(b["w2_team"], "white circle")
             clock = EARLY_CLOCK if b["is_early"] else ""
