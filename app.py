@@ -18,7 +18,6 @@ from openpyxl.styles import PatternFill
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
-
 # Color name → (hex, emoji)
 COLOR_MAP = {
     "red": ("#FF0000", "red circle"),
@@ -30,7 +29,6 @@ COLOR_MAP = {
     "purple": ("#800080", "purple circle"),
     "orange": ("#FFA500", "orange circle")
 }
-
 # Default config
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -47,7 +45,6 @@ DEFAULT_CONFIG = {
         {"name": "", "color": "black"}
     ]
 }
-
 # Load or create config
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "r") as f:
@@ -56,7 +53,6 @@ else:
     CONFIG = DEFAULT_CONFIG
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
-
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
@@ -79,16 +75,15 @@ if "last_removed" not in st.session_state:
 # SETTINGS MENU – COLORED EMOJI DOT + COLOR NAME
 # ----------------------------------------------------------------------
 st.sidebar.header("Team Settings")
-
 changed = False
 for i in range(5):
     team = TEAMS[i]
     col1, col2 = st.sidebar.columns([1, 4])
-    
+   
     with col1:
         emoji = COLOR_MAP[team["color"]][1]
         st.markdown(f"<div style='font-size:32px; text-align:center;'>{emoji}</div>", unsafe_allow_html=True)
-    
+   
     with col2:
         new_name = st.text_input(
             f"Team {i+1} Name",
@@ -104,14 +99,13 @@ for i in range(5):
             index=color_options.index(current_color),
             key=f"color_{i}"
         )
-    
+   
     if new_name != team["name"]:
         team["name"] = new_name
         changed = True
     if new_color != team["color"]:
         team["color"] = new_color
         changed = True
-
 if changed:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
@@ -323,7 +317,7 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error: {e}")
 
 if st.session_state.initialized:
-    # ----- SUGGESTIONS -----
+    # ----- SUGGESTIONS (idx hidden) -----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -337,11 +331,13 @@ if st.session_state.initialized:
                 "vs_Lvl": f"{s['vs_level']:.1f}",
                 "vs_Wt": f"{s['vs_weight']:.0f}",
                 "Score": f"{s['score']:.1f}",
-                "idx": i  # HIDDEN BELOW
+                "idx": i  # internal only
             })
-        sugg_df = pd.DataFrame(sugg_data)
+        sugg_full_df = pd.DataFrame(sugg_data)  # keep idx
+        sugg_display_df = sugg_full_df.drop(columns=["idx"])  # hide from UI
+
         edited = st.data_editor(
-            sugg_df,
+            sugg_display_df,
             column_config={
                 "Add": st.column_config.CheckboxColumn("Add"),
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
@@ -351,14 +347,18 @@ if st.session_state.initialized:
                 "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
                 "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
                 "Score": st.column_config.NumberColumn("Score"),
-                "idx": st.column_config.NumberColumn("idx", width=0),  # HIDDEN
             },
             use_container_width=True,
             hide_index=True,
             key="sugg_editor"
         )
+
         if st.button("Add Selected"):
-            to_add = [st.session_state.suggestions[row["idx"]] for _, row in edited.iterrows() if row["Add"]]
+            # Use original index (row.name) to get idx from full df
+            to_add = [
+                st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
+                for _, row in edited.iterrows() if row["Add"]
+            ]
             for s in to_add:
                 w, o = s["_w"], s["_o"]
                 if o not in w["matches"]: w["matches"].append(o)
@@ -379,14 +379,13 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PRE  PREVIEWS -----
+    # ----- MAT PREVIEWS (bout_num hidden) -----
     st.subheader("Mat Previews")
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat_num]
         if not mat_bouts:
             st.write(f"**Mat {mat_num}: No matches**")
             continue
-
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
@@ -397,7 +396,6 @@ if st.session_state.initialized:
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
             early = "fire" if bout["is_early"] else ""
-
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
@@ -407,14 +405,14 @@ if st.session_state.initialized:
                 "Wrestler 2": w2_str,
                 "G/L/W 2": w2_glw,
                 "Score": f"{bout['score']:.1f}",
-                "bout_num": bout["bout_num"]
+                "bout_num": bout["bout_num"]  # internal only
             })
-
-        df = pd.DataFrame(rows)
+        full_df = pd.DataFrame(rows)
+        display_df = full_df.drop(columns=["bout_num"])
 
         with st.expander(f"Mat {mat_num}", expanded=True):
             edited = st.data_editor(
-                df,
+                display_df,
                 column_config={
                     "Remove": st.column_config.CheckboxColumn("Remove"),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
@@ -424,15 +422,16 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
-                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # HIDDEN
                 },
                 use_container_width=True,
                 hide_index=True,
                 key=f"mat_editor_{mat_num}"
             )
-
             if st.button(f"Apply Removals on Mat {mat_num}", key=f"apply_mat_{mat_num}"):
-                to_remove = edited[edited["Remove"]]["bout_num"].dropna().astype(int).tolist()
+                to_remove = [
+                    full_df.iloc[i]["bout_num"]
+                    for i in edited[edited["Remove"]].index
+                ]
                 if to_remove:
                     for num in to_remove:
                         for b in st.session_state.bout_list:
@@ -442,6 +441,7 @@ if st.session_state.initialized:
                                 w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                                 if w2 in w1["matches"]: w1["matches"].remove(w2)
                                 if w1 in w2["matches"]: w2["matches"].remove(w1)
+                    st.session_state.last_removed = to_remove[0]  # remember one for undo
                     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
                     st.success(f"Removed {len(to_remove)} match(es)!")
