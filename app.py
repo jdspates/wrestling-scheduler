@@ -1,4 +1,4 @@
-# app.py - FINAL: PDF UNDER EXCEL + DRAG-TO-REORDER (FIXED: on_select="rerun")
+# app.py - FINAL: DRAG-TO-REORDER + REMOVE + PDF/EXCEL ORDER
 import streamlit as st
 import pandas as pd
 import io
@@ -13,21 +13,20 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import itertools
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 COLOR_MAP = {
-    "red": ("#FF0000", "red circle"),
-    "blue": ("#0000FF", "blue circle"),
-    "green": ("#008000", "green circle"),
-    "yellow": ("#FFD700", "yellow circle"),
-    "black": ("#000000", "black circle"),
-    "white": ("#FFFFFF", "white circle"),
-    "purple": ("#800080", "purple circle"),
-    "orange": ("#FFA500", "orange circle")
+    "red": ("#FF0000", "Red Circle"),
+    "blue": ("#0000FF", "Blue Circle"),
+    "green": ("#008000", "Green Circle"),
+    "yellow": ("#FFD700", "Yellow Circle"),
+    "black": ("#000000", "Black Circle"),
+    "white": ("#FFFFFF", "White Circle"),
+    "purple": ("#800080", "Purple Circle"),
+    "orange": ("#FFA500", "Orange Circle")
 }
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -80,7 +79,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# MEET SETTINGS – ALL CONFIG + TEAMS + RESET
+# MEET SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -272,7 +271,7 @@ if uploaded and not st.session_state.initialized:
     except Exception as e: st.error(f"Error: {e}")
 
 if st.session_state.initialized:
-    # ----- SUGGESTIONS (idx hidden) -----
+    # ----- SUGGESTIONS -----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         data = [{
@@ -328,7 +327,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have enough matches.")
 
-    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER (FIXED: on_select="rerun") -----
+    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER (FINAL) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -336,39 +335,49 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # Build original dataframe (with "Remove" for logic)
         rows = []
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
-                "Early?": "🔥" if b["is_early"] else "",
-                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], '⚪')} {b['w1_name']} ({b['w1_team']})",
+                "Early?": "Fire" if b["is_early"] else "",
+                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'Circle')} {b['w1_name']} ({b['w1_team']})",
                 "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], '⚪')} {b['w2_name']} ({b['w2_team']})",
+                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'Circle')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
                 "bout_num": b["bout_num"]
             })
         full_df = pd.DataFrame(rows)
-        disp_df = full_df.drop(columns=["bout_num"])  # Keep "Remove" visible for user
+        disp_df = full_df.drop(columns=["bout_num"])
 
-        editor_key = f"mat_df_{mat}"
-        with st.expander(f"Mat {mat} (Drag selected rows to reorder)", expanded=True):
-            edited = st.dataframe(
+        editor_key = f"mat_editor_{mat}"
+        with st.expander(f"Mat {mat} – Drag rows to reorder", expanded=True):
+            edited = st.data_editor(
                 disp_df,
+                column_config={
+                    "Remove": st.column_config.CheckboxColumn("Remove", default=False),
+                    "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                    "Early?": st.column_config.TextColumn("Early?"),
+                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                    "G/L/W": st.column_config.TextColumn("G/L/W"),
+                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                    "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
+                    "Score": st.column_config.NumberColumn("Score", disabled=True),
+                },
                 use_container_width=True,
                 hide_index=True,
                 key=editor_key,
-                selection_mode="multi-row",  # Enables row selection + drag
-                on_select="rerun",           # Auto-rerun on selection/drag
+                selection_mode="multi-row",
+                on_select="rerun",
             )
 
-        # === DRAG REORDER LOGIC ===
-        sel = st.session_state.get(editor_key, {}).get("selection", {}).get("rows", [])
-        if sel:
-            reordered_full = _reorder_rows_by_selection(full_df, sel)
+        # === DRAG REORDER ===
+        sel_state = st.session_state.get(editor_key, {})
+        sel_rows = sel_state.get("selection", {}).get("rows", [])
+        if sel_rows:
+            reordered_full = _reorder_rows_by_selection(full_df, sel_rows)
             new_schedule = []
             for idx, row in reordered_full.iterrows():
                 sched_entry = next(e for e in st.session_state.mat_schedules
@@ -378,14 +387,15 @@ if st.session_state.initialized:
             st.session_state.mat_schedules = [
                 e for e in st.session_state.mat_schedules if e["mat"] != mat
             ] + new_schedule
-            st.success(f"Mat {mat} order updated! 🎯")
+            st.success(f"Mat {mat} order updated!")
             st.rerun()
 
         # === REMOVE BUTTON ===
         if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
-            rem = [full_df.iloc[i]["bout_num"] for i in edited[edited["Remove"]].index]
-            if rem:
-                for n in rem:
+            rem_indices = edited[edited["Remove"]].index.tolist()
+            rem_bouts = [full_df.iloc[i]["bout_num"] for i in rem_indices]
+            if rem_bouts:
+                for n in rem_bouts:
                     b = next(x for x in st.session_state.bout_list if x["bout_num"] == n)
                     b["manual"] = "Removed"
                     for p in [(b["w1_id"], b["w2_id"]), (b["w2_id"], b["w1_id"])]:
@@ -393,10 +403,10 @@ if st.session_state.initialized:
                         w2 = next(w for w in st.session_state.active if w["id"] == p[1])
                         if w2 in w1["matches"]:
                             w1["matches"].remove(w2)
-                st.session_state.last_removed = rem[0]
+                st.session_state.last_removed = rem_bouts[0]
                 st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
                 st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.success(f"Removed {len(rem)} match(es)!")
+                st.success(f"Removed {len(rem_bouts)} match(es)!")
                 st.rerun()
 
     # ----- UNDO -----
