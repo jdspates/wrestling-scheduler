@@ -244,11 +244,26 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     return mat_schedules
 
 # ----------------------------------------------------------------------
+# HELPER: Remove match
+# ----------------------------------------------------------------------
+def remove_match(bout_num):
+    b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
+    b["manual"] = "Removed"
+    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+    if w2 in w1["matches"]: w1["matches"].remove(w2)
+    if w1 in w2["matches"]: w2["matches"].remove(w1)
+    st.session_state.undo_stack.append(bout_num)
+    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.success("Match removed.")
+
+# ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# HIDE FORMS + REMOVE GAPS + HIDE STREAMLIT BUTTONS
+# HIDE FORMS + REMOVE ALL GAPS
 st.markdown("""
 <style>
     div[data-testid="stForm"] { display: none !important; }
@@ -257,9 +272,6 @@ st.markdown("""
     .block-container { padding: 1rem 0 !important; }
     .css-1d391kg { padding: 0 !important; margin: 0 !important; }
     [data-testid="stVerticalBlock"] { gap: 0 !important; }
-    /* Hide Streamlit buttons but keep layout */
-    [data-testid="stButton"] { height: 0 !important; padding: 0 !important; margin: 0 !important; }
-    [data-testid="stButton"] > button { visibility: hidden !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -448,15 +460,18 @@ if st.session_state.initialized:
                 down_key = f"down_mat{mat}_idx{idx}"
                 remove_key = f"remove_mat{mat}_idx{idx}"
 
-                # JS to click hidden Streamlit button
-                up_js = f"document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{up_key}\"]').click()"
-                down_js = f"document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{down_key}\"]').click()"
-                remove_js = f"document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{remove_key}\"]').click()"
+                up_submit = f"submit_up_{up_key}"
+                down_submit = f"submit_down_{down_key}"
+                remove_submit = f"submit_remove_{remove_key}"
+
+                up_js = f"document.getElementById('{up_submit}').click();"
+                down_js = f"document.getElementById('{down_submit}').click();"
+                remove_js = f"document.getElementById('{remove_submit}').click();"
 
                 html_content = f"""
                 <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
                             display:flex;justify-content:space-between;align-items:center;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);margin-bottom:2px;">
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     <div style="flex:1;">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
@@ -493,34 +508,19 @@ if st.session_state.initialized:
                 """
                 components.html(html_content, height=90, scrolling=False)
 
-                # Hidden Streamlit buttons (triggered by JS)
-                col1, col2, col3, col4 = st.columns([1,1,1,8])
-                with col1:
-                    if st.button("Up", key=up_key):
-                        if idx > 0:
-                            st.session_state.mat_schedules = swap_schedule_positions(
-                                st.session_state.mat_schedules, mat, idx, idx-1)
-                            st.rerun()
-                with col2:
-                    if st.button("Down", key=down_key):
-                        if idx < len(rows)-1:
-                            st.session_state.mat_schedules = swap_schedule_positions(
-                                st.session_state.mat_schedules, mat, idx, idx+1)
-                            st.rerun()
-                with col3:
-                    if st.button("Remove", key=remove_key):
-                        bout_num = r["bout_num"]
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
-                        b["manual"] = "Removed"
-                        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-                        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-                        if w2 in w1["matches"]: w1["matches"].remove(w2)
-                        if w1 in w2["matches"]: w2["matches"].remove(w1)
-                        st.session_state.undo_stack.append(bout_num)
-                        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-                        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                        st.success("Match removed.")
-                        st.rerun()
+                # Hidden forms with on_click
+                with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i-1) if i > 0 else None, key=up_submit)
+                with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i+1) if i < len(rows)-1 else None, key=down_submit)
+                with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", on_click=lambda bn=r["bout_num"]: remove_match(bn), key=remove_submit)
+
+                # Trigger rerun on any action
+                if st.session_state.get(up_submit, False) or \
+                   st.session_state.get(down_submit, False) or \
+                   st.session_state.get(remove_submit, False):
+                    st.rerun()
 
     # --- UNDO ---
     if st.session_state.undo_stack:
