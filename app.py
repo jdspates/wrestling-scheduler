@@ -1,4 +1,4 @@
-# app.py – FINAL: FULL SCROLL + DRAG + ZERO SPACING + NO ERRORS
+# app.py – FINAL: RIGHT-CLICK DELETE + CLEAN CARDS + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -258,6 +258,31 @@ st.markdown("""
     h1 { margin-top:0 !important; }
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
+
+    /* CONTEXT MENU */
+    #context-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 8px 0;
+        z-index: 1000;
+        display: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #context-menu button {
+        width: 100%;
+        text-align: left;
+        padding: 8px 16px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+    #context-menu button:hover {
+        background: #f0f0f0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -406,7 +431,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG‑TO‑REORDER + SCROLL ----
+    # ---- MAT PREVIEWS – RIGHT-CLICK DELETE + ORIGINAL CARD LOOK ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -417,7 +442,6 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # ---- Build HTML cards (fixed typo) ----
             cards_html = ""
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -425,7 +449,7 @@ if st.session_state.initialized:
                 w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
                 cards_html += f'''
-                <div class="drag-card" id="card-{idx}" draggable="true">
+                <div class="drag-card" id="card-{idx}" draggable="true" data-bout="{b['bout_num']}">
                     <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
@@ -447,8 +471,10 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- Drag component with scrollable container ----
             drag_js = f"""
+            <div id="context-menu">
+                <button id="delete-match">Delete Match</button>
+            </div>
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
                     {cards_html}
@@ -456,7 +482,11 @@ if st.session_state.initialized:
             </div>
             <script>
               const container = document.getElementById('mat-{mat}-container');
+              const menu = document.getElementById('context-menu');
               let dragged = null;
+              let targetBout = null;
+
+              // DRAG
               container.querySelectorAll('.drag-card').forEach(card => {{
                 card.addEventListener('dragstart', () => {{ dragged = card; card.style.opacity = '0.5'; }});
                 card.addEventListener('dragend', () => {{ card.style.opacity = '1'; updateOrder(); }});
@@ -467,7 +497,28 @@ if st.session_state.initialized:
                   if (after == null) container.appendChild(dragged);
                   else container.insertBefore(dragged, after);
                 }});
+
+                // RIGHT-CLICK
+                card.addEventListener('contextmenu', e => {{
+                  e.preventDefault();
+                  targetBout = card.getAttribute('data-bout');
+                  menu.style.display = 'block';
+                  menu.style.left = e.pageX + 'px';
+                  menu.style.top = e.pageY + 'px';
+                }});
               }});
+
+              // DELETE
+              document.getElementById('delete-match').addEventListener('click', () => {{
+                if (targetBout) {{
+                  Streamlit.setComponentValue({{remove: parseInt(targetBout)}});
+                }}
+                menu.style.display = 'none';
+              }});
+
+              // HIDE MENU ON CLICK ELSEWHERE
+              document.addEventListener('click', () => menu.style.display = 'none');
+
               function getDragAfter(c, y) {{
                 const els = [...c.querySelectorAll('.drag-card:not([style*="opacity: 0.5"])')];
                 return els.reduce((closest, child) => {{
@@ -477,6 +528,7 @@ if st.session_state.initialized:
                   return closest;
                 }}, {{offset: Number.NEGATIVE_INFINITY}}).element;
               }}
+
               function updateOrder() {{
                 const order = [...container.children].map(c => c.id.split('-')[1]);
                 Streamlit.setComponentValue({{mat: {mat}, order: order.map(Number)}});
@@ -486,14 +538,17 @@ if st.session_state.initialized:
 
             result = components.html(drag_js, height=520)
 
-            # ---- Reorder handling ----
-            if result and isinstance(result, dict) and "order" in result:
-                new_order = result["order"]
-                mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
-                if len(new_order) == len(mat_entries):
-                    reordered = [mat_entries[i] for i in new_order]
-                    st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
+            if result and isinstance(result, dict):
+                if "remove" in result:
+                    remove_match(result["remove"])
                     rerun_needed = True
+                elif "order" in result:
+                    new_order = result["order"]
+                    mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
+                    if len(new_order) == len(mat_entries):
+                        reordered = [mat_entries[i] for i in new_order]
+                        st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
+                        rerun_needed = True
 
     if rerun_needed:
         st.rerun()
@@ -508,7 +563,7 @@ if st.session_state.initialized:
             b["manual"] = ""
             w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
             w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-            if w2 not in w1["  matches"]: w1["matches"].append(w2)
+            if w2 not in w1["matches"]: w1["matches"].append(w2)
             if w1 not in w2["matches"]: w2["matches"].append(w1)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
