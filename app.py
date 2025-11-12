@@ -1,4 +1,4 @@
-# app.py - FINAL: REAL COLOURED DOTS + CLOCK ICON + ALL FEATURES
+# app.py – FULL SCRIPT WITH REAL EMOJI ICONS
 import streamlit as st
 import pandas as pd
 import io
@@ -15,11 +15,11 @@ import os
 from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# 1. CONFIG & REAL EMOJI MAPS (must be defined BEFORE any reference)
+# 1. CONFIG & REAL EMOJI MAPS
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 
-# Hex colours for PDF
+# Hex colours for the PDF
 COLOR_MAP = {
     "red":    ("#FF0000", "red circle"),
     "blue":   ("#0000FF", "blue circle"),
@@ -31,18 +31,20 @@ COLOR_MAP = {
     "orange": ("#FFA500", "orange circle")
 }
 
-# REAL COLOURED DOT EMOJIS (Unicode – these render as coloured circles on all modern OS)
+# ----------------------------------------------------------------------
+# REAL EMOJIS – **actual Unicode glyphs** (copy-paste exactly!)
+# ----------------------------------------------------------------------
 COLOR_DOT_MAP = {
-    "red":    "red circle",
-    "blue":   "blue circle",
-    "green":  "green circle",
-    "yellow": "yellow circle",
-    "black":  "black circle",
-    "white":  "white circle",
-    "purple": "purple circle",
-    "orange": "orange circle"
+    "red":    "red circle",   # red circle
+    "blue":   "blue circle",  # blue circle
+    "green":  "green circle", # green circle
+    "yellow": "yellow circle",# yellow circle
+    "black":  "black circle", # black circle
+    "white":  "white circle", # white circle
+    "purple": "purple circle",# purple circle
+    "orange": "orange circle" # orange circle
 }
-EARLY_CLOCK = "clock"
+EARLY_CLOCK = "clock"          # clock (analog clock face)
 
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -74,7 +76,7 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# 3. Build emoji look-ups **after** TEAMS exists
+# 3. Build look-ups **after** TEAMS exists
 # ----------------------------------------------------------------------
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}   # hex for PDF
 TEAM_DOTS   = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS} # real emoji
@@ -96,7 +98,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# 5. MEET SETTINGS
+# 5. MEET SETTINGS (unchanged)
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -324,7 +326,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
@@ -409,7 +411,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS WITH REAL COLOURED DOTS + CLOCK ICON -----
+    # ----- MAT PREVIEWS – REAL ICONS -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -421,7 +423,7 @@ if st.session_state.initialized:
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
 
-            # Real coloured dot + optional clock
+            # real coloured dot + optional clock
             w1_dot = TEAM_DOTS.get(b["w1_team"], "white circle")
             w2_dot = TEAM_DOTS.get(b["w2_team"], "white circle")
             clock = EARLY_CLOCK if b["is_early"] else ""
@@ -544,4 +546,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
