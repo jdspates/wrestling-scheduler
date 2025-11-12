@@ -1,4 +1,4 @@
-# app.py - FINAL: TEAM COLORS + EARLY MATCHES IN MAT PREVIEWS (NO GLOBAL HTML)
+# app.py - FINAL: TEAM COLORS + EARLY MATCHES + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -144,7 +144,7 @@ TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 # ----------------------------------------------------------------------
 def color_badge(team_name: str) -> str:
     if not team_name or team_name not in TEAM_COLORS:
-        return team_name
+        return f"<small>{team_name}</small>"
     color = TEAM_COLORS[team_name]
     return (
         f'<div style="display:inline-block;'
@@ -312,7 +312,7 @@ def generate_mat_schedule(bout_list, gap=4):
     return schedules
 
 # ----------------------------------------------------------------------
-# STREAMLIT in APP
+# STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
@@ -417,9 +417,9 @@ if st.session_state.initialized:
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
                 "Early": "fire" if b["is_early"] else "",
-                "W1": f"**{b['w1_name']}**<br>{color_badge(b['w1_team'])}",
+                "W1": f"<strong>{b['w1_name']}</strong><br>{color_badge(b['w1_team'])}",
                 "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "W2": f"**{b['w2_name']}**<br>{color_badge(b['w2_team'])}",
+                "W2": f"<strong>{b['w2_name']}</strong><br>{color_badge(b['w2_team'])}",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": round(b["score"], 1),
                 "_bout_num": b["bout_num"]
@@ -435,8 +435,8 @@ if st.session_state.initialized:
                     "Remove": st.column_config.CheckboxColumn("Remove"),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
                     "Early": st.column_config.TextColumn("Early"),
-                    "W1": st.column_config.TextColumn("Wrestler 1", unsafe_allow_html=True),
-                    "W2": st.column_config.TextColumn("Wrestler 2", unsafe_allow_html=True),
+                    "W1": st.column_config.TextColumn("Wrestler 1"),
+                    "W2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W": st.column_config.TextColumn("G/L/W"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
@@ -444,6 +444,7 @@ if st.session_state.initialized:
                 use_container_width=True,
                 hide_index=True,
                 key=f"mat_edit_{mat}",
+                unsafe_allow_html=True  # THIS ENABLES HTML IN TEXT COLUMNS
             )
 
             if st.button(f"Apply Removals – Mat {mat}", key=f"apply_mat_{mat}"):
@@ -533,4 +534,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
