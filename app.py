@@ -94,7 +94,7 @@ def generate_initial_matchups(active):
                         if o != w and o not in w["matches"]
                         and len(o["matches"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
-                        and abs(w["_modes"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
+                        and abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                         and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
@@ -593,3 +593,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
