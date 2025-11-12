@@ -1,4 +1,4 @@
-# app.py - FINAL: COLORED DOT + FIRE EMOJI + NO TEXT + NO ERRORS
+# app.py - FINAL: COLORED DOT + FIRE EMOJI + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -412,7 +412,6 @@ if st.session_state.initialized:
 
             # REMOVALS
             if st.button("Apply Removals on This Mat", key=f"apply_mat_{i}"):
-                # Use st.data_editor to capture edits
                 edited_df = st.data_editor(
                     df,
                     column_config={
@@ -506,7 +505,7 @@ if st.session_state.initialized:
                 c1 = TEAM_COLORS.get(bout["w1_team"], "#000000")
                 c2 = TEAM_COLORS.get(bout["w2_team"], "#000000")
                 w1 = Paragraph(f'<font color="{c1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
-                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]10})', styles["Normal"])
+                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])  # FIXED
                 table_data.append([e["mat_bout_num"], w1, w2])
             table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
             style = TableStyle([
