@@ -1,4 +1,4 @@
-# app.py – FINAL: DRAG + REMOVE + SCROLL + ZERO SPACING
+# app.py – FINAL: REMOVE ON RIGHT + TRASH ICON + DRAG + SCROLL
 import streamlit as st
 import pandas as pd
 import io
@@ -136,7 +136,7 @@ def generate_mat_schedule(bout_list, gap=4):
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
-        early_bouts = [ contou for b in mat_bouts if b["is_early"]]
+        early_bouts = [b for b in mat_bouts if b["is_early"]]
         non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
         total_slots = len(mat_bouts)
         first_half_end = (total_slots + 1) // 2
@@ -256,16 +256,20 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .drag-card { margin:0 !important; cursor:move; user-select:none; position:relative; }
-    .drag-card:active { opacity:0.7; }
-    .remove-btn {
-        position: absolute; top: 8px; right: 8px;
-        background: #ff4d4f; color: white; border: none;
-        border-radius: 4px; width: 24px; height: 24px;
-        font-size: 14px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
+    .drag-card { 
+        margin:0 !important; cursor:move; user-select:none; 
+        display:flex; align-items:center; gap:8px; padding:4px 0;
     }
-    .remove-btn:hover { background: #d4380d; }
+    .drag-card:active { opacity:0.7; }
+    .card-content {
+        flex:1; background:#fff; border:1px solid #e6e6e6; border-radius:8px; 
+        padding:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1);
+    }
+    .remove-btn {
+        background:#ff4d4f; color:white; border:none; border-radius:6px;
+        width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    }
+    .remove-btn:hover { background:#d4380d; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -365,7 +369,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG + REMOVE + SCROLL ----
+    # ---- MAT PREVIEWS – REMOVE ON RIGHT + TRASH ICON ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -376,7 +380,7 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # ---- Build cards with REMOVE button ----
+            # ---- Build cards with REMOVE on right ----
             cards_html = ""
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -385,8 +389,7 @@ if st.session_state.initialized:
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
                 cards_html += f'''
                 <div class="drag-card" id="card-{idx}" draggable="true">
-                    <button class="remove-btn" data-bout="{b['bout_num']}">Trash</button>
-                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-right:32px;">
+                    <div class="card-content" style="background:{bg};">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
@@ -404,6 +407,12 @@ if st.session_state.initialized:
                             Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
                         </div>
                     </div>
+                    <button class="remove-btn" data-bout="{b['bout_num']}">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="white" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                        </svg>
+                    </button>
                 </div>
                 '''
 
