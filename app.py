@@ -104,7 +104,7 @@ def generate_initial_matchups(active):
             "w1_level": w1["level"], "w1_weight": w1["weight"], "w1_grade": w1["grade"], "w1_early": w1["early"],
             "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
             "w2_level": w2["level"], "w2_weight": w2["weight"], "w2_grade": w2["grade"], "w2_early": w2["early"],
-            "score": matchup_score(w1, w2), "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+            "score": matchup_score(w1, w2), "avg_weight": (w1 W["weight"] + w2["weight"]) / 2,
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
@@ -219,7 +219,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
-    # Save open state BEFORE rerun
+    # Save open state before rerun
     open_mats = st.session_state.mat_open.copy()
 
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
@@ -233,7 +233,7 @@ def remove_match(bout_num):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
 
-    # Restore open state AFTER rerun
+    # Restore open state after rerun
     st.session_state.mat_open = open_mats
     st.rerun()
 
@@ -460,13 +460,13 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # Unique key for expander
-        expander_key = f"expander_mat_{mat}"
-        is_open = st.session_state.mat_open.get(expander_key, False)
+        # Use unique key for open state
+        open_key = f"mat_{mat}_open"
+        is_open = st.session_state.mat_open.get(open_key, False)
 
-        with st.expander(f"Mat {mat}", expanded=is_open, key=expander_key):
+        with st.expander(f"Mat {mat}", expanded=is_open):
             # Mark as open after rendering
-            st.session_state.mat_open[expander_key] = True
+            st.session_state.mat_open[open_key] = True
 
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
