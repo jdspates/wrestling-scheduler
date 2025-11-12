@@ -1,4 +1,4 @@
-# app.py - FINAL: COLORED DOT + FIRE EMOJI + NO ERRORS
+# app.py - FINAL: COLORED DOT + FIRE EMOJI + NO TEXT + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -382,7 +382,8 @@ if st.session_state.initialized:
             w2_str = f"{dot2}{bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-            early_label = "fire Early" if bout["is_early"] else ""  # fire emoji
+            # REAL FIRE EMOJI
+            early_label = "fire Early" if bout["is_early"] else ""
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
@@ -405,13 +406,31 @@ if st.session_state.initialized:
             if df.empty:
                 st.write("No matches")
                 continue
-            # RENDER HTML + fire emoji
+            # RENDER HTML + EMOJIS
             html_table = df.to_html(escape=False, index=False)
             st.markdown(html_table, unsafe_allow_html=True)
 
             # REMOVALS
             if st.button("Apply Removals on This Mat", key=f"apply_mat_{i}"):
-                edited_df = st.session_state[f"mat_editor_{i}"]
+                # Use st.data_editor to capture edits
+                edited_df = st.data_editor(
+                    df,
+                    column_config={
+                        "Remove": st.column_config.CheckboxColumn("Remove"),
+                        "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                        "Early?": st.column_config.TextColumn("Early?"),
+                        "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                        "G/L/W": st.column_config.TextColumn("G/L/W"),
+                        "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                        "G/L/W 2": st.column_config.TextColumn("G/L/W"),
+                        "Score": st.column_config.NumberColumn("Score"),
+                        "bout_num": st.column_config.NumberColumn("bout_num", width=0),
+                        "is_early": st.column_config.CheckboxColumn("is_early", width=0),
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    key=f"mat_editor_{i}"
+                )
                 to_remove = edited_df[edited_df["Remove"] == True]["bout_num"].dropna().astype(int).tolist()
                 if to_remove:
                     st.session_state.last_removed = to_remove[-1]
@@ -487,7 +506,7 @@ if st.session_state.initialized:
                 c1 = TEAM_COLORS.get(bout["w1_team"], "#000000")
                 c2 = TEAM_COLORS.get(bout["w2_team"], "#000000")
                 w1 = Paragraph(f'<font color="{c1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
-                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])
+                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]10})', styles["Normal"])
                 table_data.append([e["mat_bout_num"], w1, w2])
             table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
             style = TableStyle([
