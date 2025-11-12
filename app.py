@@ -1,4 +1,4 @@
-# app.py – RED TRASH ICON DELETE + UNDO + CLEAN CARDS + NO ERRORS
+# app.py – RED TRASH ICON (TOP-RIGHT) + UNDO + NO FLICKER + NO AUTO-DELETE
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components  # <-- ADDED
+import streamlit.components.v1 as components
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -55,9 +55,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "delete_bout"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -253,6 +253,29 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
+# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
+if not hasattr(st.session_state, "delete_component"):
+    delete_js = """
+    <script>
+      window.deleteBout = null;
+      document.addEventListener('click', e => {
+        if (e.target.classList.contains('trash-btn')) {
+          e.preventDefault();
+          window.deleteBout = e.target.getAttribute('data-bout');
+          Streamlit.setComponentValue(window.deleteBout);
+        }
+      });
+    </script>
+    """
+    components.html(delete_js, height=0)
+    st.session_state.delete_component = True
+
+# Handle delete
+if st.session_state.delete_bout is not None:
+    remove_match(int(st.session_state.delete_bout))
+    st.session_state.delete_bout = None
+    st.rerun()
+
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -429,7 +452,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ICON DELETE ----
+    # ---- MAT PREVIEWS – RED TRASH ICON (TOP-RIGHT) ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -441,18 +464,15 @@ if st.session_state.initialized:
 
         with st.expander(f"Mat {mat}", expanded=True):
             cards_html = ""
-            delete_inputs = ""
-
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
-                input_id = f"delete_{b['bout_num']}"
 
                 cards_html += f'''
                 <div class="drag-card" id="card-{idx}" draggable="true">
-                    <button class="trash-btn" onclick="document.getElementById('{input_id}').value='{b['bout_num']}';document.getElementById('{input_id}').dispatchEvent(new Event('input', {{bubbles:true}}))">X</button>
+                    <button class="trash-btn" data-bout="{b['bout_num']}">X</button>
                     <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
@@ -473,14 +493,12 @@ if st.session_state.initialized:
                     </div>
                 </div>
                 '''
-                delete_inputs += f'<input type="hidden" id="{input_id}" value="">'
 
-            full_html = f"""
+            drag_js = f"""
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
                     {cards_html}
                 </div>
-                {delete_inputs}
             </div>
             <script>
               const container = document.getElementById('mat-{mat}-container');
@@ -511,19 +529,10 @@ if st.session_state.initialized:
               }}
             </script>
             """
-            result = components.html(full_html, height=520)
+            drag_result = components.html(drag_js, height=520)
 
-            # Handle delete
-            if result:
-                for bout in bouts:
-                    input_id = f"delete_{bout['bout_num']}"
-                    if hasattr(result, input_id) and getattr(result, input_id):
-                        remove_match(bout["bout_num"])
-                        st.rerun()
-
-            # Handle drag
-            if isinstance(result, dict) and "order" in result:
-                new_order = result["order"]
+            if isinstance(drag_result, dict) and "order" in drag_result:
+                new_order = drag_result["order"]
                 mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
                 if len(new_order) == len(mat_entries):
                     reordered = [mat_entries[i] for i in new_order]
