@@ -1,4 +1,4 @@
-# app.py - FINAL: FIXED SYNTAX + KEYERROR + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS
+# app.py - FINAL: PDF BUTTON NEXT TO EXCEL + ALL PREVIOUS FIXES
 import streamlit as st
 import pandas as pd
 import io
@@ -351,11 +351,23 @@ if st.session_state.initialized:
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}", "bout_num": b["bout_num"]
             })
-        full = pd.DataFrame(rows); disp = full.drop(columns=["bout_num"])
+        full = pd.DataFrame(rows)
+        disp = full.drop(columns=["bout_num"])
+
         with st.expander(f"Mat {mat}", expanded=True):
-            ed = st.data_editor(disp,
-                column_config={c: st.column_config.TextColumn(c) if c != "Remove" else st.column_config.CheckboxColumn(c) for c in disp.columns},
-                use_container_width=True, hide_index=True, key=f"mat_{mat}")
+            # Fixed: Use explicit column config for each column
+            column_config = {
+                "Remove": st.column_config.CheckboxColumn("Remove"),
+                "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                "Early?": st.column_config.TextColumn("Early?"),
+                "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                "G/L/W": st.column_config.TextColumn("G/L/W"),
+                "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
+                "Score": st.column_config.NumberColumn("Score", disabled=True)
+            }
+            ed = st.data_editor(disp, column_config=column_config, use_container_width=True, hide_index=True, key=f"mat_{mat}")
+
             if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
                 rem = [full.iloc[i]["bout_num"] for i in ed[ed["Remove"]].index]
                 if rem:
@@ -431,13 +443,13 @@ if st.session_state.initialized:
         doc.build(elements)
         pdf_bytes = buf.getvalue()
 
-        # SIDE-BY-SIDE DOWNLOAD BUTTONS
+        # **PDF BUTTON NEXT TO EXCEL**
         st.markdown("<br>", unsafe_allow_html=True)
-        col1, col2 = st.columns([1, 1])
-        with col1:
+        col_excel, col_pdf = st.columns([1, 1])
+        with col_excel:
             st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with col2:
+        with col_pdf:
             st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
