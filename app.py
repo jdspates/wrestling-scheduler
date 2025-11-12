@@ -553,8 +553,9 @@ if st.session_state.initialized:
         with col1:
             st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with SAY col2:
+        with col2:
             st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
