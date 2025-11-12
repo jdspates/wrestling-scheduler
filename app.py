@@ -1,4 +1,4 @@
-# app.py – FINAL: TIGHT CARDS + BUTTONS INSIDE + NO GAPS + FULL UNDO
+# app.py – FINAL: NO GAPS + BUTTONS IN CARD + FULL UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -69,117 +69,7 @@ if "undo_stack" not in st.session_state:
     st.session_state.undo_stack = []
 
 # ----------------------------------------------------------------------
-# STREAMLIT APP
-# ----------------------------------------------------------------------
-st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
-
-# HIDE FORMS + REMOVE ALL GAPS
-st.markdown("""
-<style>
-    div[data-testid="stForm"] { display: none !important; }
-    div[data-testid="stExpander"] > div > div { padding-top: 0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
-    /* Remove Streamlit default spacing */
-    .block-container { padding-top: 1rem !important; }
-    .css-1d391kg { padding: 0 !important; }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
-
-# --- UPLOAD ---
-uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
-if uploaded and not st.session_state.initialized:
-    try:
-        df = pd.read_csv(uploaded)
-        required = ["id","name","team","grade","level","weight","early_matches","scratch"]
-        if not all(c in df.columns for c in required):
-            st.error("Missing columns. Need: " + ", ".join(required))
-            st.stop()
-        wrestlers = df.to_dict("records")
-        for w in wrestlers:
-            w["id"] = int(w["id"])
-            w["grade"] = int(w["grade"])
-            w["level"] = float(w["level"])
-            w["weight"] = float(w["weight"])
-            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
-            w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
-            w["matches"] = []
-        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
-        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
-        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-        st.session_state.initialized = True
-        st.success("Roster loaded and matchups generated!")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
-# ----------------------------------------------------------------------
-# MEET SETTINGS
-# ----------------------------------------------------------------------
-st.sidebar.header("Meet Settings")
-changed = False
-st.sidebar.subheader("Match & Scheduling Rules")
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
-    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
-    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
-with col2:
-    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
-    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01,
-                                  format="%.2f", key="weight_factor")
-    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5,
-                                     key="min_weight_diff")
-if new_min > new_max:
-    st.sidebar.error("Min Matches cannot exceed Max Matches!")
-    new_min = new_max
-st.sidebar.markdown("---")
-st.sidebar.subheader("Team Names & Colors")
-for i in range(5):
-    team = TEAMS[i]
-    st.sidebar.markdown(f"**Team {i+1}**")
-    new_name = st.sidebar.text_input("Name", team["name"], key=f"name_{i}", label_visibility="collapsed")
-    new_color = st.sidebar.selectbox(
-        "Color",
-        list(COLOR_MAP.keys()),
-        index=list(COLOR_MAP.keys()).index(team["color"]),
-        format_func=lambda x: x.capitalize(),
-        key=f"color_{i}",
-        label_visibility="collapsed"
-    )
-    if new_name != team["name"]: team["name"], changed = new_name, True
-    if new_color != team["color"]: team["color"], changed = new_color, True
-
-if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
-    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
-    new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
-    CONFIG.update({
-        "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
-        "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
-        "MIN_WEIGHT_DIFF": new_min_weight
-    })
-    changed = True
-
-st.sidebar.markdown("---")
-if st.sidebar.button("Reset to Default", type="secondary"):
-    CONFIG = DEFAULT_CONFIG.copy()
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Reset! Refresh to apply.")
-    st.rerun()
-if changed:
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Settings saved! Refresh to apply.")
-    st.rerun()
-
-TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
-TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
-
-# ----------------------------------------------------------------------
-# CORE LOGIC
+# CORE LOGIC (MOVED TO TOP)
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
@@ -204,7 +94,7 @@ def generate_initial_matchups(active):
                         if o != w and o not in w["matches"]
                         and len(o["matches"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
-                        and abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
+                        and abs(w["_modes"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                         and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
@@ -352,6 +242,115 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     for idx, entry in enumerate(mat_entries, 1):
         entry["mat_bout_num"] = idx
     return mat_schedules
+
+# ----------------------------------------------------------------------
+# STREAMLIT APP
+# ----------------------------------------------------------------------
+st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
+
+# HIDE FORMS + REMOVE ALL GAPS
+st.markdown("""
+<style>
+    div[data-testid="stForm"] { display: none !important; }
+    div[data-testid="stExpander"] > div > div { padding-top: 0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
+    .block-container { padding-top: 1rem !important; }
+    .css-1d391kg { padding: 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("Wrestling Meet Scheduler")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
+
+# --- UPLOAD ---
+uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
+if uploaded and not st.session_state.initialized:
+    try:
+        df = pd.read_csv(uploaded)
+        required = ["id","name","team","grade","level","weight","early_matches","scratch"]
+        if not all(c in df.columns for c in required):
+            st.error("Missing columns. Need: " + ", ".join(required))
+            st.stop()
+        wrestlers = df.to_dict("records")
+        for w in wrestlers:
+            w["id"] = int(w["id"])
+            w["grade"] = int(w["grade"])
+            w["level"] = float(w["level"])
+            w["weight"] = float(w["weight"])
+            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
+            w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
+            w["matches"] = []
+        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
+        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
+        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+        st.session_state.initialized = True
+        st.success("Roster loaded and matchups generated!")
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+# ----------------------------------------------------------------------
+# MEET SETTINGS
+# ----------------------------------------------------------------------
+st.sidebar.header("Meet Settings")
+changed = False
+st.sidebar.subheader("Match & Scheduling Rules")
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
+    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
+    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
+with col2:
+    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
+    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01,
+                                  format="%.2f", key="weight_factor")
+    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5,
+                                     key="min_weight_diff")
+if new_min > new_max:
+    st.sidebar.error("Min Matches cannot exceed Max Matches!")
+    new_min = new_max
+st.sidebar.markdown("---")
+st.sidebar.subheader("Team Names & Colors")
+for i in range(5):
+    team = TEAMS[i]
+    st.sidebar.markdown(f"**Team {i+1}**")
+    new_name = st.sidebar.text_input("Name", team["name"], key=f"name_{i}", label_visibility="collapsed")
+    new_color = st.sidebar.selectbox(
+        "Color",
+        list(COLOR_MAP.keys()),
+        index=list(COLOR_MAP.keys()).index(team["color"]),
+        format_func=lambda x: x.capitalize(),
+        key=f"color_{i}",
+        label_visibility="collapsed"
+    )
+    if new_name != team["name"]: team["name"], changed = new_name, True
+    if new_color != team["color"]: team["color"], changed = new_color, True
+
+if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
+    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
+    new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
+    CONFIG.update({
+        "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
+        "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
+        "MIN_WEIGHT_DIFF": new_min_weight
+    })
+    changed = True
+
+st.sidebar.markdown("---")
+if st.sidebar.button("Reset to Default", type="secondary"):
+    CONFIG = DEFAULT_CONFIG.copy()
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(CONFIG, f, indent=4)
+    st.sidebar.success("Reset! Refresh to apply.")
+    st.rerun()
+if changed:
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(CONFIG, f, indent=4)
+    st.sidebar.success("Settings saved! Refresh to apply.")
+    st.rerun()
+
+TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
+TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 
 # ----------------------------------------------------------------------
 # MAIN APP (continued)
