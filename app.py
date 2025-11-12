@@ -1,4 +1,4 @@
-# app.py – RED TRASH ICON (TOP-RIGHT) + UNDO + NO FLICKER + NO AUTO-DELETE
+# app.py – RED TRASH ICON (TOP-RIGHT) + CLICK WORKS + UNDO + CLEAN CARDS
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,6 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -55,9 +54,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "delete_bout"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -253,29 +252,6 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
-if not hasattr(st.session_state, "delete_component"):
-    delete_js = """
-    <script>
-      window.deleteBout = null;
-      document.addEventListener('click', e => {
-        if (e.target.classList.contains('trash-btn')) {
-          e.preventDefault();
-          window.deleteBout = e.target.getAttribute('data-bout');
-          Streamlit.setComponentValue(window.deleteBout);
-        }
-      });
-    </script>
-    """
-    components.html(delete_js, height=0)
-    st.session_state.delete_component = True
-
-# Handle delete
-if st.session_state.delete_bout is not None:
-    remove_match(int(st.session_state.delete_bout))
-    st.session_state.delete_bout = None
-    st.rerun()
-
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -286,20 +262,22 @@ st.markdown("""
     .drag-card { margin:0 !important; cursor:move; user-select:none; position:relative; }
     .drag-card:active { opacity:0.7; }
     .trash-btn {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        background: #ff4444;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        width: 20px;
-        height: 20px;
-        font-size: 12px;
-        cursor: pointer;
-        z-index: 10;
+        position: absolute !important;
+        top: 4px !important;
+        right: 4px !important;
+        background: #ff4444 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 4px !important;
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        z-index: 10 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
     }
-    .trash-btn:hover { background: #cc0000; }
+    .trash-btn:hover { background: #cc0000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -463,84 +441,44 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            cards_html = ""
-            for idx, m in enumerate(bouts):
-                b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
-                bg = "#fff3cd" if b["is_early"] else "#ffffff"
-                w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
-                w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
+            col1, col2 = st.columns([1, 20])
+            with col1:
+                st.write("")  # spacer
+            with col2:
+                for idx, m in enumerate(bouts):
+                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
+                    bg = "#fff3cd" if b["is_early"] else "#ffffff"
+                    w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
+                    w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                cards_html += f'''
-                <div class="drag-card" id="card-{idx}" draggable="true">
-                    <button class="trash-btn" data-bout="{b['bout_num']}">X</button>
-                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-                            <div style="display:flex;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
-                                <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
+                    # Trash button with unique key
+                    trash_key = f"trash_{b['bout_num']}"
+                    col_trash, col_card = st.columns([0.1, 1])
+                    with col_trash:
+                        if st.button("X", key=trash_key, help="Delete match"):
+                            remove_match(b["bout_num"])
+                            st.rerun()
+                    with col_card:
+                        st.markdown(f"""
+                        <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);position:relative;">
+                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
+                                    <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
+                                    <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
+                                </div>
+                                <div style="font-weight:700;color:#333;">vs</div>
+                                <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                                    <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
+                                    <div style="font-size:0.85rem;color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
+                                    <div style="font-weight:600;font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
+                                </div>
                             </div>
-                            <div style="font-weight:700;color:#333;">vs</div>
-                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-size:0.85rem;color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
-                                <div style="font-weight:600;font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
+                            <div style="font-size:0.8rem;color:#555;">
+                                Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
                             </div>
                         </div>
-                        <div style="font-size:0.8rem;color:#555;">
-                            Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
-                        </div>
-                    </div>
-                </div>
-                '''
-
-            drag_js = f"""
-            <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
-                <div id="mat-{mat}-container">
-                    {cards_html}
-                </div>
-            </div>
-            <script>
-              const container = document.getElementById('mat-{mat}-container');
-              let dragged = null;
-              container.querySelectorAll('.drag-card').forEach(card => {{
-                card.addEventListener('dragstart', () => {{ dragged = card; card.style.opacity = '0.5'; }});
-                card.addEventListener('dragend', () => {{ card.style.opacity = '1'; updateOrder(); }});
-                card.addEventListener('dragover', e => e.preventDefault());
-                card.addEventListener('drop', e => {{
-                  e.preventDefault();
-                  const after = getDragAfter(container, e.clientY);
-                  if (after == null) container.appendChild(dragged);
-                  else container.insertBefore(dragged, after);
-                }});
-              }});
-              function getDragAfter(c, y) {{
-                const els = [...c.querySelectorAll('.drag-card:not([style*="opacity: 0.5"])')];
-                return els.reduce((closest, child) => {{
-                  const box = child.getBoundingClientRect();
-                  const offset = y - box.top - box.height / 2;
-                  if (offset < 0 && offset > closest.offset) return {{offset: offset, element: child}};
-                  return closest;
-                }}, {{offset: Number.NEGATIVE_INFINITY}}).element;
-              }}
-              function updateOrder() {{
-                const order = [...container.children].map(c => c.id.split('-')[1]);
-                Streamlit.setComponentValue({{mat: {mat}, order: order.map(Number)}});
-              }}
-            </script>
-            """
-            drag_result = components.html(drag_js, height=520)
-
-            if isinstance(drag_result, dict) and "order" in drag_result:
-                new_order = drag_result["order"]
-                mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
-                if len(new_order) == len(mat_entries):
-                    reordered = [mat_entries[i] for i in new_order]
-                    st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
-                    rerun_needed = True
-
-    if rerun_needed:
-        st.rerun()
+                        """, unsafe_allow_html=True)
 
     # ---- UNDO ----
     if st.session_state.undo_stack:
