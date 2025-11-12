@@ -1,9 +1,8 @@
-# app.py – CARD-ONLY + FULL UNDO + SCORE AFTER BOTH WRESTLERS
+# app.py – CARD-ONLY + FULL UNDO + SCORE AFTER BOTH + ALL HTML FIXED
 import streamlit as st
 import pandas as pd
 import io
 import random
-from collections import defaultdict
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
@@ -65,12 +64,11 @@ if "suggestions" not in st.session_state:
     st.session_state.suggestions = []
 if "active" not in st.session_state:
     st.session_state.active = []
-# NEW: undo stack – each entry is the bout_num that was removed
 if "undo_stack" not in st.session_state:
-    st.session_state.undo_stack = []      # list of bout_num (int)
+    st.session_state.undo_stack = []  # Stores bout_num of removed matches
 
 # ----------------------------------------------------------------------
-# MEET SETTINGS – ALL CONFIG + TEAMS + RESET
+# MEET SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -129,7 +127,6 @@ if changed:
 
 TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
-TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -138,7 +135,9 @@ def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
+
 def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
@@ -285,7 +284,7 @@ def generate_mat_schedule(bout_list, gap=4):
     return schedules
 
 # ----------------------------------------------------------------------
-# HELPER – swap positions inside a mat
+# HELPER: Swap positions in mat
 # ----------------------------------------------------------------------
 def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     entries = [e for e in mat_schedules if e["mat"] == mat_num]
@@ -309,8 +308,9 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
+# --- UPLOAD ---
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
     try:
@@ -338,7 +338,7 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error: {e}")
 
 if st.session_state.initialized:
-    # ----- SUGGESTIONS -----
+    # --- SUGGESTIONS ---
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -395,7 +395,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS (CARD-ONLY) -----
+    # --- MAT PREVIEWS (CARD ONLY) ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -407,35 +407,30 @@ if st.session_state.initialized:
             for m in bouts:
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
                 rows.append({
-                    "Remove": False,
                     "Slot": m["mat_bout_num"],
                     "Early?": "Early" if b["is_early"] else "",
                     "Wrestler 1": f"{b['w1_name']} ({b['w1_team']})",
-                    "W1 Color": TEAM_COLORS.get(b["w1_team"], ""),
+                    "W1 Color": TEAM_COLORS.get(b["w1_team"], "#999999"),
                     "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
                     "Wrestler 2": f"{b['w2_name']} ({b['w2_team']})",
-                    "W2 Color": TEAM_COLORS.get(b["w2_team"], ""),
+                    "W2 Color": TEAM_COLORS.get(b["w2_team"], "#999999"),
                     "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                     "Score": f"{b['score']:.1f}",
                     "bout_num": b["bout_num"]
                 })
-            # ---------- CARD VIEW ----------
             st.markdown("<div style='display:flex;flex-direction:column;gap:8px;'>", unsafe_allow_html=True)
             for idx, r in enumerate(rows):
-                w1_color = r["W1 Color"] or "#999999"
-                w2_color = r["W2 Color"] or "#999999"
                 bg = "#fff3cd" if r["Early?"] else "#ffffff"
-                fire = "Early" if r["Early?"] else ""
                 left_html = f"""
                     <div style="display:flex;align-items:center;gap:10px;">
-                        <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
+                        <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
                         <div style="font-weight:600;">{r['Wrestler 1']}</div>
                         <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
                     </div>
                 """
                 right_html = f"""
                     <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                        <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
+                        <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
                         <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
                         <div style="font-weight:600;">{r['Wrestler 2']}</div>
                     </div>
@@ -451,16 +446,13 @@ if st.session_state.initialized:
                                 {right_html}
                             </div>
                             <div style="font-size:0.85rem;color:#555;margin-top:6px;">
-                                Slot: {r['Slot']} | {fire} | Score: {r['Score']}
+                                Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
                             </div>
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-                # ----- CARD BUTTONS -----
                 cols = st.columns([1,1,1,8])
                 if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
                     if idx > 0:
@@ -480,7 +472,6 @@ if st.session_state.initialized:
                     w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                     if w2 in w1["matches"]: w1["matches"].remove(w2)
                     if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    # ---- PUSH TO UNDO STACK ----
                     st.session_state.undo_stack.append(bout_num)
                     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -488,14 +479,14 @@ if st.session_state.initialized:
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # ----- UNDO SECTION -----
+    # --- UNDO ---
     if st.session_state.undo_stack:
         st.markdown("---")
-        undo_label = f"Undo ({len(st.session_state.undo_stack)})" if len(st.session_state.undo_stack) > 1 else "Undo Last Removal"
-        if st.button(undo_label, type="primary"):
-            bout_num = st.session_state.undo_stack.pop()          # take the most recent removal
+        label = f"Undo ({len(st.session_state.undo_stack)})" if len(st.session_state.undo_stack) > 1 else "Undo Last Removal"
+        if st.button(label, type="primary"):
+            bout_num = st.session_state.undo_stack.pop()
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
-            b["manual"] = ""                                      # restore
+            b["manual"] = ""
             w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
             w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
             if w2 not in w1["matches"]: w1["matches"].append(w2)
@@ -505,9 +496,8 @@ if st.session_state.initialized:
             st.success("Undo successful!")
             st.rerun()
 
-    # ----- GENERATE MEET + PDF UNDER EXCEL -----
+    # --- GENERATE MEET ---
     if st.button("Generate Meet", type="primary"):
-        # EXCEL
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
@@ -525,7 +515,6 @@ if st.session_state.initialized:
                     if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
                         for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
         excel_bytes = out.getvalue()
-        # PDF
         buf = io.BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=letter); elements = []; styles = getSampleStyleSheet()
         for m in range(1, CONFIG["NUM_MATS"]+1):
@@ -552,7 +541,6 @@ if st.session_state.initialized:
             if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
         doc.build(elements)
         pdf_bytes = buf.getvalue()
-        # DOWNLOAD BUTTONS
         st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
