@@ -1,4 +1,4 @@
-# app.py - FINAL: NO ERRORS + fire EMOJI + FULLY WORKING
+# app.py - FINAL: fire EMOJI + COLORED EMOJI DOTS + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -76,7 +76,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# SETTINGS MENU – COLORED DOT + COLOR NAME
+# SETTINGS MENU – COLORED EMOJI DOT + COLOR NAME
 # ----------------------------------------------------------------------
 st.sidebar.header("Team Settings")
 
@@ -86,9 +86,8 @@ for i in range(5):
     col1, col2 = st.sidebar.columns([1, 4])
     
     with col1:
-        color_hex = COLOR_MAP[team["color"]][0]
-        dot_html = f'<div style="width:32px;height:32px;background:{color_hex};border-radius:50%;border:2px solid #333;margin:auto;"></div>'
-        st.markdown(dot_html, unsafe_allow_html=True)
+        emoji = COLOR_MAP[team["color"]][1]
+        st.markdown(f"<div style='font-size:32px; text-align:center;'>{emoji}</div>", unsafe_allow_html=True)
     
     with col2:
         new_name = st.text_input(
@@ -250,7 +249,8 @@ def generate_mat_schedule(bout_list, gap=4):
                 if score > best_score:
                     best_score = score
                     best = b
-            if best is None: break
+            if best is None: first_early = b
+                break
             early_bouts.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
@@ -374,11 +374,10 @@ if st.session_state.initialized:
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
-            c1 = TEAM_COLORS.get(bout["w1_team"], "#CCCCCC")
-            c2 = TEAM_COLORS.get(bout["w2_team"], "#CCCCCC")
-            dot1 = "•"  # Use bullet as dot
-            w1_str = f"{dot1} {bout['w1_name']} ({bout['w1_team']})"
-            w2_str = f"{dot1} {bout['w2_name']} ({bout['w2_team']})"
+            emoji1 = TEAM_EMOJIS.get(bout["w1_team"], "circle")
+            emoji2 = TEAM_EMOJIS.get(bout["w2_team"], "circle")
+            w1_str = f"{emoji1} {bout['w1_name']} ({bout['w1_team']})"
+            w2_str = f"{emoji2} {bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
             early = "fire" if bout["is_early"] else ""
@@ -409,7 +408,7 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
-                    "bout_num": st.column_config.NumberColumn("bout_num", hidden=True),  # FIXED: hidden=True
+                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # HIDDEN COLUMN
                 },
                 use_container_width=True,
                 hide_index=True,
