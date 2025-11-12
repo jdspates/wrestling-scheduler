@@ -1,4 +1,4 @@
-# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO SPACING
+# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -23,7 +23,9 @@ COLOR_MAP = {
     "green": ("#008000", "green circle"),
     "yellow": ("#FFD700", "yellow circle"),
     "black": ("#000000", "black circle"),
-    "...
+    "white": ("#FFFFFF", "white circle"),
+    "purple": ("#800080", "purple circle"),
+    "orange": ("#FFA500", "orange circle")
 }
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -281,7 +283,6 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 4px;
-        height: 100%;
         margin-bottom: 6px;
     }
     .trash-col {
