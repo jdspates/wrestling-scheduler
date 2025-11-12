@@ -1,4 +1,4 @@
-# app.py – FINAL: TRASH ICON ON RIGHT + RED + DRAG + SCROLL
+# app.py – FINAL: SUGGESTIONS + RED TRASH ON RIGHT + DRAG + SCROLL
 import streamlit as st
 import pandas as pd
 import io
@@ -56,7 +56,8 @@ TEAMS = CONFIG["TEAMS"]
 # SESSION STATE
 # ----------------------------------------------------------------------
 for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
-    if key not in st.session_state:
+    if key not in `
+        st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
@@ -257,7 +258,7 @@ st.markdown("""
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
 
-    /* CARD + BUTTON LAYOUT */
+    /* CARD + TRASH ON SAME LINE */
     .drag-card {
         margin:0 !important; cursor:move; user-select:none;
         display:flex; align-items:center; gap:12px; padding:6px 0;
@@ -369,14 +370,64 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
+    # ---- SUGGESTED MATCHUPS – FULLY RESTORED ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
-        # ... (same as before) ...
-        pass
+        sugg_data = []
+        for i, s in enumerate(st.session_state.suggestions):
+            sugg_data.append({
+                "Add": False,
+                "Wrestler": f"{s['wrestler']} ({s['team']})",
+                "Lvl": f"{s['level']:.1f}",
+                "Wt": f"{s['weight']:.0f}",
+                "vs": f"{s['vs']} ({s['vs_team']})",
+                "vs_Lvl": f"{s['vs_level']:.1f}",
+                "vs_Wt": f"{s['vs_weight']:.0f}",
+                "Score": f"{s['score']:.1f}",
+                "idx": i
+            })
+        sugg_full_df = pd.DataFrame(sugg_data)
+        sugg_display_df = sugg_full_df.drop(columns=["idx"])
+        edited = st.data_editor(
+            sugg_display_df,
+            column_config={
+                "Add": st.column_config.CheckboxColumn("Add"),
+                "Wrestler": st.column_config.TextColumn("Wrestler"),
+                "Lvl": st.column_config.NumberColumn("Lvl"),
+                "Wt": st.column_config.NumberColumn("Wt"),
+                "vs": st.column_config.TextColumn("vs"),
+                "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
+                "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
+                "Score": st.column_config.NumberColumn("Score"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="sugg_editor"
+        )
+        if st.button("Add Selected"):
+            to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
+                      for _, row in edited.iterrows() if row["Add"]]
+            for s in to_add:
+                w, o = s["_w"], s["_o"]
+                if o not in w["matches"]: w["matches"].append(o)
+                if w not in o["matches"]: o["matches"].append(w)
+                st.session_state.bout_list.append({
+                    "bout_num": len(st.session_state.bout_list)+1,
+                    "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
+                    "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
+                    "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
+                    "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
+                    "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
+                    "is_early": w["early"] or o["early"], "manual": "Yes"
+                })
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.success("Matches added!")
+            st.rerun()
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ICON ON RIGHT ----
+    # ---- MAT PREVIEWS – RED TRASH ON RIGHT ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -387,7 +438,7 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # ---- Build cards with RED TRASH ICON on right ----
+            # ---- Build cards with RED TRASH on right ----
             cards_html = ""
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
