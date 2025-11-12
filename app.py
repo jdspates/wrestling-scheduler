@@ -1,4 +1,4 @@
-# app.py – FINAL: TIGHT CARDS + WORKING BUTTONS + FULL UNDO + NORMAL PAGE PADDING
+# app.py – FIXED: Clickable Up/Down/Remove buttons + normal page padding
 import streamlit as st
 import pandas as pd
 import io
@@ -69,16 +69,13 @@ if "undo_stack" not in st.session_state:
     st.session_state.undo_stack = []
 
 # ----------------------------------------------------------------------
-# CORE LOGIC
+# CORE LOGIC (unchanged)
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
-
-def max_weight_diff(w): 
-    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
-
+def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
@@ -225,7 +222,7 @@ def generate_mat_schedule(bout_list, gap=4):
     return schedules
 
 # ----------------------------------------------------------------------
-# HELPER: Swap positions
+# HELPERS
 # ----------------------------------------------------------------------
 def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     entries = [e for e in mat_schedules if e["mat"] == mat_num]
@@ -244,9 +241,6 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
         entry["mat_bout_num"] = idx
     return mat_schedules
 
-# ----------------------------------------------------------------------
-# HELPER: Remove match
-# ----------------------------------------------------------------------
 def remove_match(bout_num):
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
@@ -264,39 +258,19 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# === BALANCED CSS: TIGHT CARDS + NORMAL PAGE PADDING ===
+# === BALANCED CSS (unchanged) ===
 st.markdown("""
 <style>
-    /* Hide form submit buttons */
-    div[data-testid="stForm"] { 
-        display: none !important; 
-    }
-
-    /* Tight expanders and card spacing */
-    div[data-testid="stExpander"] > div > div { 
-        padding: 0 !important; 
-        margin: 0 !important; 
-    }
-    div[data-testid="stVerticalBlock"] > div { 
-        gap: 0.5rem !important; 
-    }
-
-    /* Restore normal page padding */
+    div[data-testid="stForm"] { display: none !important; }
+    div[data-testid="stExpander"] > div > div { padding: 0 !important; margin: 0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.5rem !important; }
     .block-container {
         padding: 2rem 1rem !important;
         max-width: 1200px !important;
         margin: 0 auto !important;
     }
-    .main .block-container {
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-    }
-
-    /* Fix title clipping */
-    h1 { 
-        margin-top: 0 !important; 
-        padding-top: 0 !important; 
-    }
+    .main .block-container { padding-left: 2rem !important; padding-right: 2rem !important; }
+    h1 { margin-top: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -331,7 +305,7 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error: {e}")
 
 # ----------------------------------------------------------------------
-# MEET SETTINGS
+# SETTINGS (unchanged)
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -357,12 +331,10 @@ for i in range(5):
     st.sidebar.markdown(f"**Team {i+1}**")
     new_name = st.sidebar.text_input("Name", team["name"], key=f"name_{i}", label_visibility="collapsed")
     new_color = st.sidebar.selectbox(
-        "Color",
-        list(COLOR_MAP.keys()),
+        "Color", list(COLOR_MAP.keys()),
         index=list(COLOR_MAP.keys()).index(team["color"]),
         format_func=lambda x: x.capitalize(),
-        key=f"color_{i}",
-        label_visibility="collapsed"
+        key=f"color_{i}", label_visibility="collapsed"
     )
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
@@ -391,10 +363,10 @@ TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 
 # ----------------------------------------------------------------------
-# MAIN APP (continued)
+# MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # --- SUGGESTIONS ---
+    # --- SUGGESTIONS (unchanged) ---
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -432,7 +404,7 @@ if st.session_state.initialized:
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
-                w, o = s["w"], s["_o"]
+                w, o = s["_w"], s["_o"]
                 if o not in w["matches"]: w["matches"].append(o)
                 if w not in o["matches"]: o["matches"].append(w)
                 st.session_state.bout_list.append({
@@ -451,7 +423,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS: TIGHT CARDS + WORKING BUTTONS ---
+    # --- MAT PREVIEWS – **FIXED BUTTONS** ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -475,7 +447,7 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
             for idx, r in enumerate(rows):
-                bg = "#fff3cd" if r["Early?"] else "#ffffff"
+                # ---- UNIQUE KEYS FOR THIS CARD ----
                 up_key = f"up_mat{mat}_idx{idx}"
                 down_key = f"down_mat{mat}_idx{idx}"
                 remove_key = f"remove_mat{mat}_idx{idx}"
@@ -485,59 +457,79 @@ if st.session_state.initialized:
                 up_js = f"document.getElementById('{up_submit}').click();"
                 down_js = f"document.getElementById('{down_submit}').click();"
                 remove_js = f"document.getElementById('{remove_submit}').click();"
-                html_content = f"""
-                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
-                            display:flex;justify-content:space-between;align-items:center;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <div style="flex:1;">
-                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-                            <div style="display:flex;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-weight:600;font-size:1rem;">{r['Wrestler 1']}</div>
-                                <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
+
+                # ---- CARD + HIDDEN FORMS IN ONE CONTAINER ----
+                card_container = st.container()
+                with card_container:
+                    # HTML card
+                    bg = "#fff3cd" if r["Early?"] else "#ffffff"
+                    html_content = f"""
+                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
+                                display:flex;justify-content:space-between;align-items:center;
+                                box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <div style="flex:1;">
+                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                                    <div style="font-weight:600;font-size:1rem;">{r['Wrestler 1']}</div>
+                                    <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
+                                </div>
+                                <div style="font-weight:700;color:#333;">vs</div>
+                                <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                                    <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                                    <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
+                                    <div style="font-weight:600;font-size:1rem;">{r['Wrestler 2']}</div>
+                                </div>
                             </div>
-                            <div style="font-weight:700;color:#333;">vs</div>
-                            <div style="display:flex:flex-direction:row-reverse;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
-                                <div style="font-weight:600;font-size:1rem;">{r['Wrestler 2']}</div>
+                            <div style="font-size:0.8rem;color:#555;">
+                                Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
                             </div>
                         </div>
-                        <div style="font-size:0.8rem;color:#555;">
-                            Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
+                        <div style="display:flex;gap:6px;">
+                            <button onclick="{up_js}"
+                                    style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
+                                Up
+                            </button>
+                            <button onclick="{down_js}"
+                                    style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
+                                Down
+                            </button>
+                            <button onclick="{remove_js}"
+                                    style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#ffd6cc;cursor:pointer;">
+                                Remove
+                            </button>
                         </div>
                     </div>
-                    <div style="display:flex;gap:6px;">
-                        <button onclick="{up_js}"
-                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
-                            Up
-                        </button>
-                        <button onclick="{down_js}"
-                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
-                            Down
-                        </button>
-                        <button onclick="{remove_js}"
-                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#ffd6cc;cursor:pointer;">
-                            Remove
-                        </button>
-                    </div>
-                </div>
-                """
-                components.html(html_content, height=90, scrolling=False)
-                # Hidden forms with on_click
-                with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i-1) if i > 0 else None, key=up_submit)
-                with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i+1) if i < len(rows)-1 else None, key=down_submit)
-                with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", on_click=lambda bn=r["bout_num"]: remove_match(bn), key=remove_submit)
-                # Trigger rerun on any action
+                    """
+                    components.html(html_content, height=90, scrolling=False)
+
+                    # ---- HIDDEN FORMS (must be *inside* the same container) ----
+                    with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
+                        st.form_submit_button(
+                            label="", 
+                            on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i-1) if i > 0 else None,
+                            key=up_submit
+                        )
+                    with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
+                        st.form_submit_button(
+                            label="",
+                            on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i+1) if i < len(rows)-1 else None,
+                            key=down_submit
+                        )
+                    with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
+                        st.form_submit_button(
+                            label="",
+                            on_click=lambda bn=r["bout_num"]: remove_match(bn),
+                            key=remove_submit
+                        )
+
+                # ---- RERUN IF ANY BUTTON WAS CLICKED ----
                 if st.session_state.get(up_submit, False) or \
                    st.session_state.get(down_submit, False) or \
                    st.session_state.get(remove_submit, False):
                     st.rerun()
 
-    # --- UNDO ---
+    # --- UNDO (unchanged) ---
     if st.session_state.undo_stack:
         st.markdown("---")
         label = f"Undo ({len(st.session_state.undo_stack)})" if len(st.session_state.undo_stack) > 1 else "Undo Last Removal"
@@ -554,7 +546,7 @@ if st.session_state.initialized:
             st.success("Undo successful!")
             st.rerun()
 
-    # --- GENERATE MEET ---
+    # --- GENERATE MEET (unchanged) ---
     if st.button("Generate Meet", type="primary"):
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
