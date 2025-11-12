@@ -262,7 +262,7 @@ st.markdown("""
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
 
-    /* CONTEXT MENU - OUTSIDE SCROLL */
+    /* CONTEXT MENU */
     #context-menu {
         position: fixed;
         background: white;
@@ -414,7 +414,7 @@ if st.session_state.initialized:
         )
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
-                      for _, row in edited.iterrows() if row["idx"]]
+                      for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
                 w, o = s["_w"], s["_o"]
                 if o not in w["matches"]: w["matches"].append(o)
@@ -475,11 +475,14 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- FIXED: Context menu OUTSIDE + CORRECT JS ----
+            # ---- FIXED: RIGHT-CLICK DELETE WITH HIDDEN INPUT ----
             drag_js = f"""
+            <!-- HIDDEN INPUT FOR DELETE -->
+            <input type="hidden" id="delete-input-{mat}" value="">
+
             <!-- CONTEXT MENU -->
-            <div id="context-menu" style="position:fixed; background:white; border:1px solid #ccc; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); padding:8px 0; z-index:9999; display:none; font-family:sans-serif;">
-                <button id="delete-match" style="width:100%; text-align:left; padding:8px 16px; background:none; border:none; cursor:pointer; font-size:0.9rem;">Delete Match</button>
+            <div id="context-menu-{mat}" style="position:fixed; background:white; border:1px solid #ccc; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); padding:8px 0; z-index:9999; display:none; font-family:sans-serif;">
+                <button id="delete-match-{mat}" style="width:100%; text-align:left; padding:8px 16px; background:none; border:none; cursor:pointer; font-size:0.9rem;">Delete Match</button>
             </div>
 
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
@@ -489,7 +492,8 @@ if st.session_state.initialized:
             </div>
             <script>
               const container = document.getElementById('mat-{mat}-container');
-              const menu = document.getElementById('context-menu');
+              const menu = document.getElementById('context-menu-{mat}');
+              const deleteInput = document.getElementById('delete-input-{mat}');
               let dragged = null;
               let targetBout = null;
 
@@ -517,14 +521,15 @@ if st.session_state.initialized:
               }});
 
               // DELETE
-              document.getElementById('delete-match').addEventListener('click', () => {{
+              document.getElementById('delete-match-{mat}').addEventListener('click', () => {{
                 if (targetBout) {{
-                  Streamlit.setComponentValue({{remove: parseInt(targetBout)}});
+                  deleteInput.value = targetBout;
+                  deleteInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
                 }}
                 menu.style.display = 'none';
               }});
 
-              // HIDE MENU ON CLICK ANYWHERE
+              // HIDE MENU
               document.addEventListener('click', e => {{
                 if (!menu.contains(e.target)) menu.style.display = 'none';
               }});
@@ -546,19 +551,20 @@ if st.session_state.initialized:
             </script>
             """
 
-            result = components.html(drag_js, height=520)
+            result = components.html(drag_js, height=520, key=f"mat_{mat}")
 
-            if result and isinstance(result, dict):
-                if "remove" in result:
-                    remove_match(result["remove"])
+            # Handle delete from hidden input
+            if result and isinstance(result, str) and result.isdigit():
+                remove_match(int(result))
+                rerun_needed = True
+            # Handle reorder
+            elif result and isinstance(result, dict) and "order" in result:
+                new_order = result["order"]
+                mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
+                if len(new_order) == len(mat_entries):
+                    reordered = [mat_entries[i] for i in new_order]
+                    st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
                     rerun_needed = True
-                elif "order" in result:
-                    new_order = result["order"]
-                    mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
-                    if len(new_order) == len(mat_entries):
-                        reordered = [mat_entries[i] for i in new_order]
-                        st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
-                        rerun_needed = True
 
     if rerun_needed:
         st.rerun()
