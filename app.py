@@ -123,7 +123,7 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
-    valid = [b and b["manual"] != "Removed" for b in bout_list]
+    valid = [b for b in bout_list if b["manual"] != "Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
     per_mat = len(valid) // CONFIG["NUM_MATS"]
     extra = len(valid) % CONFIG["NUM_MATS"]
@@ -546,3 +546,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
