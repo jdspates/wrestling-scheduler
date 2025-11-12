@@ -1,4 +1,4 @@
-# app.py – FINAL: RIGHT-CLICK DELETE + CLEAN CARDS + ALL FEATURES
+# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -435,7 +435,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RIGHT-CLICK DELETE + ORIGINAL CARD LOOK ----
+    # ---- MAT PREVIEWS – RIGHT-CLICK DELETE + UNDO ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -475,16 +475,30 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- RIGHT-CLICK DELETE (NO KEY) ----
-            drag_js = f"""
-            <!-- HIDDEN INPUT FOR DELETE -->
+            # ---- DELETE COMPONENT (hidden input) ----
+            delete_js = f"""
             <input type="hidden" id="delete-input-{mat}" value="">
+            <script>
+              let targetBout = null;
+              document.querySelectorAll('[data-bout]').forEach(card => {{
+                card.addEventListener('contextmenu', e => {{
+                  e.preventDefault();
+                  targetBout = card.getAttribute('data-bout');
+                  const input = document.getElementById('delete-input-{mat}');
+                  input.value = targetBout;
+                  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                }});
+              }});
+            </script>
+            """
+            delete_result = components.html(delete_js, height=0)
 
-            <!-- CONTEXT MENU -->
-            <div id="context-menu-{mat}" style="position:fixed; background:white; border:1px solid #ccc; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); padding:8px 0; z-index:9999; display:none; font-family:sans-serif;">
-                <button id="delete-match-{mat}" style="width:100%; text-align:left; padding:8px 16px; background:none; border:none; cursor:pointer; font-size:0.9rem;">Delete Match</button>
-            </div>
+            if delete_result and isinstance(delete_result, str) and delete_result.isdigit():
+                remove_match(int(delete_result))
+                rerun_needed = True
 
+            # ---- DRAG COMPONENT ----
+            drag_js = f"""
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
                     {cards_html}
@@ -492,12 +506,7 @@ if st.session_state.initialized:
             </div>
             <script>
               const container = document.getElementById('mat-{mat}-container');
-              const menu = document.getElementById('context-menu-{mat}');
-              const deleteInput = document.getElementById('delete-input-{mat}');
               let dragged = null;
-              let targetBout = null;
-
-              // DRAG
               container.querySelectorAll('.drag-card').forEach(card => {{
                 card.addEventListener('dragstart', () => {{ dragged = card; card.style.opacity = '0.5'; }});
                 card.addEventListener('dragend', () => {{ card.style.opacity = '1'; updateOrder(); }});
@@ -508,32 +517,7 @@ if st.session_state.initialized:
                   if (after == null) container.appendChild(dragged);
                   else container.insertBefore(dragged, after);
                 }});
-
-                // RIGHT-CLICK
-                card.addEventListener('contextmenu', e => {{
-                  e.preventDefault();
-                  e.stopPropagation();
-                  targetBout = card.getAttribute('data-bout');
-                  menu.style.display = 'block';
-                  menu.style.left = (e.pageX + 5) + 'px';
-                  menu.style.top = (e.pageY + 5) + 'px';
-                }});
               }});
-
-              // DELETE
-              document.getElementById('delete-match-{mat}').addEventListener('click', () => {{
-                if (targetBout) {{
-                  deleteInput.value = targetBout;
-                  deleteInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                }}
-                menu.style.display = 'none';
-              }});
-
-              // HIDE MENU
-              document.addEventListener('click', e => {{
-                if (!menu.contains(e.target)) menu.style.display = 'none';
-              }});
-
               function getDragAfter(c, y) {{
                 const els = [...c.querySelectorAll('.drag-card:not([style*="opacity: 0.5"])')];
                 return els.reduce((closest, child) => {{
@@ -543,23 +527,16 @@ if st.session_state.initialized:
                   return closest;
                 }}, {{offset: Number.NEGATIVE_INFINITY}}).element;
               }}
-
               function updateOrder() {{
                 const order = [...container.children].map(c => c.id.split('-')[1]);
                 Streamlit.setComponentValue({{mat: {mat}, order: order.map(Number)}});
               }}
             </script>
             """
+            drag_result = components.html(drag_js, height=520)
 
-            result = components.html(drag_js, height=520)
-
-            # Handle delete from hidden input
-            if result and isinstance(result, str) and result.isdigit():
-                remove_match(int(result))
-                rerun_needed = True
-            # Handle reorder
-            elif result and isinstance(result, dict) and "order" in result:
-                new_order = result["order"]
+            if drag_result and isinstance(drag_result, dict) and "order" in drag_result:
+                new_order = drag_result["order"]
                 mat_entries = [e for e in st.session_state.mat_schedules if e["mat"] == mat]
                 if len(new_order) == len(mat_entries):
                     reordered = [mat_entries[i] for i in new_order]
