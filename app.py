@@ -1,4 +1,4 @@
-# app.py - FINAL: PDF BUTTON NEXT TO EXCEL + ALL PREVIOUS FIXES
+# app.py - FINAL: PDF UNDER EXCEL + ALL FIXES + NO EMOJI + MEET SETTINGS
 import streamlit as st
 import pandas as pd
 import io
@@ -148,7 +148,7 @@ def is_compatible(w1, w2):
 
 def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 def matchup_score(w1, w2):
-    return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
+     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
 def generate_initial_matchups(active):
     bouts = set()
@@ -355,7 +355,6 @@ if st.session_state.initialized:
         disp = full.drop(columns=["bout_num"])
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # Fixed: Use explicit column config for each column
             column_config = {
                 "Remove": st.column_config.CheckboxColumn("Remove"),
                 "Slot": st.column_config.NumberColumn("Slot", disabled=True),
@@ -398,7 +397,7 @@ if st.session_state.initialized:
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.success("Undo successful!"); st.rerun()
 
-    # ----- GENERATE MEET + SIDE-BY-SIDE DOWNLOAD BUTTONS -----
+    # ----- GENERATE MEET + PDF UNDER EXCEL -----
     if st.button("Generate Meet", type="primary"):
         # EXCEL
         out = io.BytesIO()
@@ -443,14 +442,10 @@ if st.session_state.initialized:
         doc.build(elements)
         pdf_bytes = buf.getvalue()
 
-        # **PDF BUTTON NEXT TO EXCEL**
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_excel, col_pdf = st.columns([1, 1])
-        with col_excel:
-            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with col_pdf:
-            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
+        # DOWNLOAD BUTTONS — PDF UNDER EXCEL
+        st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
