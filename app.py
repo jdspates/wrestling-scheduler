@@ -1,4 +1,4 @@
-# app.py – FULL SCRIPT WITH REAL EMOJI ICONS
+# app.py – FULL SCRIPT WITH REAL COLORED CIRCLE ICONS (ALL CIRCLES)
 import streamlit as st
 import pandas as pd
 import io
@@ -31,9 +31,7 @@ COLOR_MAP = {
     "orange": ("#FFA500", "orange circle")
 }
 
-# ----------------------------------------------------------------------
-# REAL EMOJIS – **actual Unicode glyphs** (copy-paste exactly!)
-# ----------------------------------------------------------------------
+# REAL COLORED CIRCLE ICONS – ALL ARE CIRCLES (visible in editor)
 COLOR_DOT_MAP = {
     "red":    "red circle",   # red circle
     "blue":   "blue circle",  # blue circle
@@ -44,7 +42,9 @@ COLOR_DOT_MAP = {
     "purple": "purple circle",# purple circle
     "orange": "orange circle" # orange circle
 }
-EARLY_CLOCK = "clock"          # clock (analog clock face)
+
+# EARLY MATCH CLOCK – clean analog clock (circle style)
+EARLY_CLOCK = "clock"  # clock
 
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -76,10 +76,10 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# 3. Build look-ups **after** TEAMS exists
+# 3. Build look-ups after TEAMS exists
 # ----------------------------------------------------------------------
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}   # hex for PDF
-TEAM_DOTS   = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS} # real emoji
+TEAM_DOTS   = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS} # real circle emoji
 
 # ----------------------------------------------------------------------
 # 4. SESSION STATE
@@ -98,7 +98,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# 5. MEET SETTINGS (unchanged)
+# 5. MEET SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -411,7 +411,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS – REAL ICONS -----
+    # ----- MAT PREVIEWS – REAL CIRCLE ICONS -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -423,7 +423,7 @@ if st.session_state.initialized:
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
 
-            # real coloured dot + optional clock
+            # real circle dot + optional clock
             w1_dot = TEAM_DOTS.get(b["w1_team"], "white circle")
             w2_dot = TEAM_DOTS.get(b["w2_team"], "white circle")
             clock = EARLY_CLOCK if b["is_early"] else ""
