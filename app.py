@@ -1,4 +1,4 @@
-# app.py – CTRL+Z WORKS + COLLAPSED MATS + RED X (TIGHT, CENTERED)
+# app.py – COLLAPSED MATS + CTRL+Z UNDO + RED X + OPEN STATE PERSIST
 import streamlit as st
 import pandas as pd
 import io
@@ -54,9 +54,11 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_trigger"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_hidden", "mat_open"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else 0
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else {}
+        if key == "undo_hidden": st.session_state[key] = False
+        if key == "mat_open": st.session_state[key] = {}
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -260,9 +262,7 @@ if not hasattr(st.session_state, "undo_button_ready"):
         if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
           const btn = document.querySelector('[data-testid="stButton"] button[kind="secondary"]:contains("UNDO_HIDDEN")');
-          if (btn) {
-            btn.click();
-          }
+          if (btn) btn.click();
         }
       });
     </script>
@@ -341,6 +341,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.initialized = True
+        st.session_state.mat_open = {}  # Reset open state
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
         st.error(f"Error: {e}")
@@ -464,7 +465,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + RED X ----
+    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + PERSIST OPEN STATE + RED X ----
     st.subheader("Mat Previews")
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -473,7 +474,14 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        with st.expander(f"Mat {mat}", expanded=False):  # COLLAPSED
+        # Use session state to remember open/closed
+        key = f"mat_{mat}_open"
+        is_open = st.session_state.mat_open.get(key, False)
+
+        with st.expander(f"Mat {mat}", expanded=is_open):
+            # Update open state
+            st.session_state.mat_open[key] = True
+
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
@@ -535,7 +543,7 @@ if st.session_state.initialized:
                 df.to_excel(writer, f"Mat {m}", index=False)
                 ws = writer.book[f"Mat {m}"]
                 fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-                for i, _ in df.iterrows():
+                for i, _ in df.iterrows():
                     if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
                         for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
         excel_bytes = out.getvalue()
