@@ -1,4 +1,4 @@
-# app.py – FINAL: NO HTML ESCAPING + FULL UNDO + CARDS ONLY
+# app.py – FINAL: CARDS WITH BUTTONS + FULL UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components  # THIS IS THE KEY
+import streamlit.components.v1 as components  # FOR HTML + JS
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -104,6 +104,7 @@ for i in range(5):
     )
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
+
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
@@ -113,6 +114,7 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
         "MIN_WEIGHT_DIFF": new_min_weight
     })
     changed = True
+
 st.sidebar.markdown("---")
 if st.sidebar.button("Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
@@ -396,7 +398,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS (CARDS ONLY - FINAL FIX) ---
+    # --- MAT PREVIEWS: CARDS WITH BUTTONS ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -421,48 +423,78 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
 
-            # --- RENDER CARDS USING components.html() ---
-            for r in rows:
+            # --- RENDER EACH CARD WITH BUTTONS ---
+            for idx, r in enumerate(rows):
                 bg = "#fff3cd" if r["Early?"] else "#ffffff"
+                up_key = f"up_mat{mat}_idx{idx}"
+                down_key = f"down_mat{mat}_idx{idx}"
+                remove_key = f"remove_mat{mat}_idx{idx}"
+
+                up_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{up_key}\"]').click()"
+                down_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{down_key}\"]').click()"
+                remove_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{remove_key}\"]').click()"
+
                 html_content = f"""
-                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
-                            display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <div style="display:flex;flex-direction:column;">
-                        <div style="display:flex;align-items:center;gap:12px;">
+                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:12px;
+                            display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
                             <div style="display:flex;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-weight:600;">{r['Wrestler 1']}</div>
+                                <div style="font-weight:600;font-size:1rem;">{r['Wrestler 1']}</div>
                                 <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
                             </div>
-                            <div style="font-weight:700;margin-left:12px;color:#333;">vs</div>
+                            <div style="font-weight:700;color:#333;">vs</div>
                             <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
                                 <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
-                                <div style="font-weight:600;">{r['Wrestler 2']}</div>
+                                <div style="font-weight:600;font-size:1rem;">{r['Wrestler 2']}</div>
                             </div>
                         </div>
-                        <div style="font-size:0.85rem;color:#555;margin-top:6px;">
+                        <div style="font-size:0.8rem;color:#555;">
                             Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
                         </div>
                     </div>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="{up_js}" 
+                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
+                            Up
+                        </button>
+                        <button onclick="{down_js}" 
+                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
+                            Down
+                        </button>
+                        <button onclick="{remove_js}" 
+                                style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#ffd6cc;cursor:pointer;">
+                            Remove
+                        </button>
+                    </div>
                 </div>
                 """
-                components.html(html_content, height=80, scrolling=False)
+                components.html(html_content, height=100, scrolling=False)
 
-            # --- RENDER BUTTONS BELOW ---
-            for idx, r in enumerate(rows):
-                cols = st.columns([1,1,1,8])
-                if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
+                # Hidden buttons (triggered by JS)
+                col1, col2, col3, col4 = st.columns([1,1,1,8])
+                with col1:
+                    st.button("Up", key=up_key, use_container_width=True)
+                with col2:
+                    st.button("Down", key=down_key, use_container_width=True)
+                with col3:
+                    st.button("Remove", key=remove_key, use_container_width=True)
+
+                # Handle actions
+                if st.session_state.get(up_key, False):
                     if idx > 0:
                         st.session_state.mat_schedules = swap_schedule_positions(
                             st.session_state.mat_schedules, mat, idx, idx-1)
                         st.rerun()
-                if cols[1].button("Down", key=f"down_mat{mat}_idx{idx}"):
+                if st.session_state.get(down_key, False):
                     if idx < len(rows)-1:
                         st.session_state.mat_schedules = swap_schedule_positions(
                             st.session_state.mat_schedules, mat, idx, idx+1)
                         st.rerun()
-                if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
+                if st.session_state.get(remove_key, False):
                     bout_num = r["bout_num"]
                     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
                     b["manual"] = "Removed"
@@ -544,4 +576,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
