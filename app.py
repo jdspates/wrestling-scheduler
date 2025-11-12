@@ -1,4 +1,4 @@
-# app.py - FINAL: MAT SORTING FIXED + PDF UNDER EXCEL + ALL FIXES + DRAG REORDER
+# app.py - FINAL: MAT SORTING FIXED + PDF UNDER EXCEL + ALL FIXES + DRAG REORDER + BETTER UI
 import streamlit as st
 import pandas as pd
 import io
@@ -289,6 +289,33 @@ def generate_mat_schedule(bout_list, gap=4):
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
+
+# CSS: DRAG HANDLE STYLING
+st.markdown("""
+<style>
+div[data-testid="column"]:nth-child(1) {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+}
+div[data-testid="column"]:nth-child(1) > div > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    cursor: grab;
+    user-select: none;
+}
+div[data-testid="column"]:nth-child(1)::before {
+    content: "Drag";
+    font-weight: bold;
+}
+div[data-testid="column"]:nth-child(1):hover {
+    background-color: #f0f2f6;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
@@ -375,14 +402,18 @@ if st.session_state.initialized:
     # ----- MAT PREVIEWS (bout_num hidden) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
-        bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
-        if not bouts:
+        mat_schedule = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
+        if not mat_schedule:
             st.write(f"**Mat {mat}: No matches**")
             continue
+        # Sort by current slot (important!)
+        mat_schedule.sort(key=lambda x: x["slot"])
         rows = []
-        for m in bouts:
+        for idx, m in enumerate(mat_schedule, 1):
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
             rows.append({
+                "Drag": "",  # Will become drag handle via column config
+                "Slot": idx,
                 "Remove": False,
                 "Early?": "fire" if b["is_early"] else "",
                 "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
@@ -391,60 +422,72 @@ if st.session_state.initialized:
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
                 "bout_num": b["bout_num"],
-                "Slot": m["mat_bout_num"]
             })
-        full_df = pd.DataFrame(rows).set_index("Slot")
-        display_df = full_df.drop(columns=["bout_num"])
+        df = pd.DataFrame(rows)
+        # === CONFIG: Drag Handle + Clean UI ===
+        column_config = {
+            "Drag": st.column_config.TextColumn(
+                "Drag",
+                width="small",
+                disabled=True,
+            ),
+            "Slot": st.column_config.NumberColumn(
+                "Slot",
+                disabled=True,
+                width="small",
+            ),
+            "Remove": st.column_config.CheckboxColumn("Remove"),
+            "Early?": st.column_config.TextColumn("Early?", width="small"),
+            "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+            "G/L/W": st.column_config.TextColumn("G/L/W"),
+            "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+            "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
+            "Score": st.column_config.NumberColumn("Score", disabled=True),
+        }
         with st.expander(f"Mat {mat}", expanded=True):
-            column_config = {
-                "_index": st.column_config.IndexColumn(
-                    label="Slot",
-                    width="small",
-                    reorderable=True,
-                ),
-                "Remove": st.column_config.CheckboxColumn("Remove"),
-                "Early?": st.column_config.TextColumn("Early?"),
-                "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
-                "G/L/W": st.column_config.TextColumn("G/L/W"),
-                "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
-                "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
-                "Score": st.column_config.NumberColumn("Score", disabled=True),
-            }
             edited = st.data_editor(
-                display_df,
+                df.drop(columns=["bout_num"]),
                 column_config=column_config,
                 use_container_width=True,
-                hide_index=False,
-                key=f"mat_editor_{mat}"
+                hide_index=True,
+                key=f"mat_editor_{mat}",
+                # This enables drag-to-reorder
+                column_order=["Drag", "Slot", "Remove", "Early?", "Wrestler 1", "G/L/W", "Wrestler 2", "G/L/W 2", "Score"],
+                num_rows="fixed",
             )
+            # === APPLY BUTTON ===
             if st.button(f"Apply Changes on Mat {mat}", key=f"apply_mat_{mat}"):
-                # Handle removals
-                removed_slots = edited.index[edited["Remove"]]
-                removed_bout_nums = [full_df.loc[sl, "bout_num"] for sl in removed_slots]
-                if removed_bout_nums:
-                    for num in removed_bout_nums:
+                # --- Handle Removals ---
+                removed_bouts = edited[edited["Remove"]]["bout_num"].tolist()
+                if removed_bouts:
+                    for num in removed_bouts:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == num)
                         b["manual"] = "Removed"
                         w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
                         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                         if w2 in w1["matches"]: w1["matches"].remove(w2)
                         if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    st.session_state.last_removed = removed_bout_nums[0]
-                    # Remove from mat_schedules
-                    st.session_state.mat_schedules = [m for m in st.session_state.mat_schedules if m["bout_num"] not in removed_bout_nums]
-                # Handle reordering for remaining
-                non_removed = ~edited["Remove"]
-                non_removed_slots = edited.index[non_removed]
-                non_removed_bout_nums = [full_df.loc[sl, "bout_num"] for sl in non_removed_slots]
-                # Update slots
-                mat_entries = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
-                entry_dict = {m["bout_num"]: m for m in mat_entries}
-                for new_slot, bout_num in enumerate(non_removed_bout_nums, 1):
-                    entry = entry_dict[bout_num]
-                    entry["slot"] = new_slot
-                    entry["mat_bout_num"] = new_slot
+                    st.session_state.last_removed = removed_bouts[0] if removed_bouts else None
+
+                # --- Handle Reordering ---
+                non_removed = edited[~edited["Remove"]]
+                new_bout_nums = non_removed["bout_num"].tolist()
+
+                # Update mat_schedules with new slot order
+                mat_entries = {m["bout_num"]: m for m in st.session_state.mat_schedules if m["mat"] == mat}
+                for new_slot, bout_num in enumerate(new_bout_nums, 1):
+                    if bout_num in mat_entries:
+                        mat_entries[bout_num]["slot"] = new_slot
+                        mat_entries[bout_num]["mat_bout_num"] = new_slot
+
+                # Remove deleted from schedules
+                st.session_state.mat_schedules = [
+                    m for m in st.session_state.mat_schedules
+                    if m["mat"] != mat or m["bout_num"] not in removed_bouts
+                ]
+
                 st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.success(f"Applied changes to Mat {mat}! {len(removed_bout_nums)} removed, order updated.")
+                st.success(f"Applied changes to Mat {mat}! {len(removed_bouts)} removed, order updated.")
                 st.rerun()
     # ----- UNDO -----
     if st.session_state.last_removed:
