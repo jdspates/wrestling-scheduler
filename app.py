@@ -271,7 +271,6 @@ if not hasattr(st.session_state, "undo_button_ready"):
 # Handle undo from button or Ctrl+Z
 if st.session_state.get("undo_hidden"):
     undo_last()
-    # Reset trigger
     st.session_state.undo_hidden = False
     st.rerun()
 
