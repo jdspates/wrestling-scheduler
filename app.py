@@ -1,4 +1,4 @@
-# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + NO CRASH ON IMPORT
+# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -262,6 +262,31 @@ st.markdown("""
     h1 { margin-top:0 !important; }
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
+
+    /* CONTEXT MENU */
+    #global-context-menu {
+        position: fixed;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 8px 0;
+        z-index: 9999;
+        display: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #global-context-menu button {
+        width: 100%;
+        text-align: left;
+        padding: 8px 16px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+    #global-context-menu button:hover {
+        background: #f0f0f0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -414,7 +439,47 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RIGHT-CLICK DELETE + UNDO ----
+    # ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
+    if not hasattr(st.session_state, "delete_component_rendered"):
+        delete_global_js = """
+        <div id="global-delete-comp">
+          <div id="global-context-menu">
+            <button id="delete-match-btn">Delete Match</button>
+          </div>
+          <script>
+            let targetBout = null;
+            const menu = document.getElementById('global-context-menu');
+            const btn = document.getElementById('delete-match-btn');
+            document.addEventListener('contextmenu', e => {
+              const card = e.target.closest('[data-bout]');
+              if (card) {
+                e.preventDefault();
+                targetBout = card.getAttribute('data-bout');
+                menu.style.display = 'block';
+                menu.style.left = e.pageX + 'px';
+                menu.style.top = e.pageY + 'px';
+              }
+            });
+            btn.addEventListener('click', () => {
+              if (targetBout) {
+                Streamlit.setComponentValue(targetBout);
+              }
+              menu.style.display = 'none';
+            });
+            document.addEventListener('click', () => menu.style.display = 'none');
+          </script>
+        </div>
+        """
+        delete_result = components.html(delete_global_js, height=0)
+        st.session_state.delete_component_rendered = True
+    else:
+        delete_result = None
+
+    if delete_result and isinstance(delete_result, str) and delete_result.isdigit():
+        remove_match(int(delete_result))
+        st.rerun()
+
+    # ---- MAT PREVIEWS – DRAG ONLY ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -454,43 +519,6 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- DELETE COMPONENT ----
-            delete_js = f"""
-            <div id="delete-comp-{mat}">
-              <script>
-                document.querySelectorAll('[data-bout]').forEach(el => {{
-                  el.oncontextmenu = e => {{
-                    e.preventDefault();
-                    const bout = el.getAttribute('data-bout');
-                    const menu = document.createElement('div');
-                    menu.style.position = 'fixed';
-                    menu.style.left = e.pageX + 'px';
-                    menu.style.top = e.pageY + 'px';
-                    menu.style.background = 'white';
-                    menu.style.border = '1px solid #ccc';
-                    menu.style.borderRadius = '6px';
-                    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    menu.style.padding = '8px 0';
-                    menu.style.zIndex = '9999';
-                    menu.innerHTML = '<button style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:0.9rem;">Delete Match</button>';
-                    menu.onclick = () => {{
-                      Streamlit.setComponentValue(bout);
-                      document.body.removeChild(menu);
-                    }};
-                    document.body.appendChild(menu);
-                    setTimeout(() => document.body.onclick = () => document.body.removeChild(menu), 0);
-                  }};
-                }});
-              </script>
-            </div>
-            """
-            delete_result = components.html(delete_js, height=0)
-
-            if delete_result and isinstance(delete_result, str) and delete_result.isdigit():
-                remove_match(int(delete_result))
-                rerun_needed = True
-
-            # ---- DRAG COMPONENT ----
             drag_js = f"""
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
