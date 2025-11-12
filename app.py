@@ -74,7 +74,6 @@ def matchup_score(w1, w2):
 
 def generate_initial_matchups(active):
     bouts = set()
-    for level…
     for level in sorted({w["level"] for w in active}, reverse=True):
         group = [w for w in active if w["level"] == level]
         while True:
