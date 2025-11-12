@@ -1,4 +1,4 @@
-# app.py - FINAL: FIXED KEYERROR + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS
+# app.py - FINAL: FIXED SYNTAX + KEYERROR + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS
 import streamlit as st
 import pandas as pd
 import io
@@ -141,7 +141,7 @@ TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
-def is_compatible[w1, w2]:
+def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
@@ -222,7 +222,14 @@ def generate_mat_schedule(bout_list, gap=4):
                 scheduled.append((1, first))
                 for wid in [first["w1_id"], first["w2_id"]]: last_slot[wid] = 1; first_half_wrestlers.add(wid)
                 slot = 2
-        while early and len(scheduled) <…
+        while early and len(scheduled) < first_half_end:
+            best = max((b for b in early if b["w1_id"] not in first_half_wrestlers and b["w2_id"] not in first_half_wrestlers),
+                       key=lambda b: min(slot - last_slot.get(b["w1_id"], -100) - 1, slot - last_slot.get(b["w2_id"], -100) - 1), default=None)
+            if not best: break
+            early.remove(best)
+            scheduled.append((slot, best))
+            for wid in [best["w1_id"], best["w2_id"]]: last_slot[wid] = slot; first_half_wrestlers.add(wid)
+            slot += 1
         remaining = non_early + early
         while remaining:
             best = max(remaining, key=lambda b: min(slot - last_slot.get(b["w1_id"], -100) - 1, slot - last_slot.get(b["w2_id"], -100) - 1), default=None) or remaining[0]
@@ -273,7 +280,6 @@ if st.session_state.initialized:
     # ----- SUGGESTIONS (idx hidden) -----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
-        # NOTE: suggestion dict now has wrestler/opponent fields directly
         data = [{
             "Add": False,
             "Wrestler": f"{s['wrestler']} ({s['team']})",
