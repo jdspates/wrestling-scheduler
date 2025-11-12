@@ -1,4 +1,4 @@
-# app.py - FINAL: FIXED SYNTAX + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS
+# app.py - FINAL: FIXED KEYERROR + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS
 import streamlit as st
 import pandas as pd
 import io
@@ -141,7 +141,7 @@ TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
-def is_compatible(w1, w2):
+def is_compatible[w1, w2]:
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
@@ -194,9 +194,12 @@ def build_suggestions(active, bout_list):
         opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps: opps = [o for o in active if o != w and o not in w["matches"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
-            sugg.append({**{k: w[k] for k in ["name","team","level","weight"]}, "current": len(w["matches"]),
-                         "vs": o["name"], "vs_team": o["team"], "vs_level": o["level"], "vs_weight": o["weight"],
-                         "score": matchup_score(w, o), "_w": w, "_o": o})
+            sugg.append({
+                "wrestler": w["name"], "team": w["team"], "level": w["level"], "weight": w["weight"],
+                "current": len(w["matches"]), "vs": o["name"], "vs_team": o["team"],
+                "vs_level": o["level"], "vs_weight": o["weight"], "score": matchup_score(w, o),
+                "_w": w, "_o": o
+            })
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
@@ -219,14 +222,7 @@ def generate_mat_schedule(bout_list, gap=4):
                 scheduled.append((1, first))
                 for wid in [first["w1_id"], first["w2_id"]]: last_slot[wid] = 1; first_half_wrestlers.add(wid)
                 slot = 2
-        while early and len(scheduled) < first_half_end:
-            best = max((b for b in early if b["w1_id"] not in first_half_wrestlers and b["w2_id"] not in first_half_wrestlers),
-                       key=lambda b: min(slot - last_slot.get(b["w1_id"], -100) - 1, slot - last_slot.get(b["w2_id"], -100) - 1), default=None)
-            if not best: break
-            early.remove(best)
-            scheduled.append((slot, best))
-            for wid in [best["w1_id"], best["w2_id"]]: last_slot[wid] = slot; first_half_wrestlers.add(wid)
-            slot += 1
+        while early and len(scheduled) <…
         remaining = non_early + early
         while remaining:
             best = max(remaining, key=lambda b: min(slot - last_slot.get(b["w1_id"], -100) - 1, slot - last_slot.get(b["w2_id"], -100) - 1), default=None) or remaining[0]
@@ -235,8 +231,12 @@ def generate_mat_schedule(bout_list, gap=4):
             for wid in [best["w1_id"], best["w2_id"]]: last_slot[wid] = slot
             slot += 1
         for s, b in scheduled:
-            schedules.append({**{k: b[k] for k in ["bout_num","w1_name","w2_name","w1_team","w2_team","is_early"]},
-                             "mat": mat_num, "slot": s, "w1": f"{b['w1_name']} ({b['w1_team']})", "w2": f"{b['w2_name']} ({b['w2_team']})"})
+            schedules.append({
+                "mat": mat_num, "slot": s, "bout_num": b["bout_num"],
+                "w1": f"{b['w1_name']} ({b['w1_team']})",
+                "w2": f"{b['w2_name']} ({b['w2_team']})",
+                "w1_team": b["w1_team"], "w2_team": b["w2_team"], "is_early": b["is_early"]
+            })
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         entries = sorted([e for e in schedules if e["mat"] == mat], key=lambda x: x["slot"])
         for i, e in enumerate(entries, 1): e["mat_bout_num"] = i
@@ -270,26 +270,47 @@ if uploaded and not st.session_state.initialized:
     except Exception as e: st.error(f"Error: {e}")
 
 if st.session_state.initialized:
-    # ----- SUGGESTIONS -----
+    # ----- SUGGESTIONS (idx hidden) -----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
-        data = [{"Add": False, "Wrestler": f"{s['name']} ({s['team']})", "Lvl": f"{s['level']:.1f}",
-                 "Wt": f"{s['weight']:.0f}", "vs": f"{s['vs']} ({s['vs_team']})",
-                 "vs_Lvl": f"{s['vs_level']:.1f}", "vs_Wt": f"{s['vs_weight']:.0f}",
-                 "Score": f"{s['score']:.1f}", "idx": i} for i, s in enumerate(st.session_state.suggestions)]
-        full_df = pd.DataFrame(data); display_df = full_df.drop(columns=["idx"])
-        edited = st.data_editor(display_df, column_config={c: st.column_config.TextColumn(c) if c != "Add" else st.column_config.CheckboxColumn(c) for c in display_df.columns},
-                                use_container_width=True, hide_index=True, key="sugg_editor")
+        # NOTE: suggestion dict now has wrestler/opponent fields directly
+        data = [{
+            "Add": False,
+            "Wrestler": f"{s['wrestler']} ({s['team']})",
+            "Lvl": f"{s['level']:.1f}",
+            "Wt": f"{s['weight']:.0f}",
+            "vs": f"{s['vs']} ({s['vs_team']})",
+            "vs_Lvl": f"{s['vs_level']:.1f}",
+            "vs_Wt": f"{s['vs_weight']:.0f}",
+            "Score": f"{s['score']:.1f}",
+            "idx": i
+        } for i, s in enumerate(st.session_state.suggestions)]
+        full_df = pd.DataFrame(data)
+        display_df = full_df.drop(columns=["idx"])
+
+        edited = st.data_editor(
+            display_df,
+            column_config={
+                "Add": st.column_config.CheckboxColumn("Add"),
+                "Wrestler": st.column_config.TextColumn("Wrestler"),
+                "Lvl": st.column_config.NumberColumn("Lvl"),
+                "Wt": st.column_config.NumberColumn("Wt"),
+                "vs": st.column_config.TextColumn("vs"),
+                "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
+                "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
+                "Score": st.column_config.NumberColumn("Score")
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="sugg_editor"
+        )
+
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[full_df.iloc[r.name]["idx"]] for _, r in edited.iterrows() if r["Add"]]
             for s in to_add:
                 w, o = s["_w"], s["_o"]
-                # FIXED: Add both directions safely
-                if o not in w["matches"]:
-                    w["matches"].append(o)
-                if w not in o["matches"]:
-                    o["matches"].append(w)
-                # Add bout
+                if o not in w["matches"]: w["matches"].append(o)
+                if w not in o["matches"]: o["matches"].append(w)
                 st.session_state.bout_list.append({
                     "bout_num": len(st.session_state.bout_list) + 1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
@@ -308,7 +329,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have enough matches.")
 
-    # ----- MAT PREVIEWS -----
+    # ----- MAT PREVIEWS (bout_num hidden) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -326,8 +347,9 @@ if st.session_state.initialized:
             })
         full = pd.DataFrame(rows); disp = full.drop(columns=["bout_num"])
         with st.expander(f"Mat {mat}", expanded=True):
-            ed = st.data_editor(disp, column_config={c: st.column_config.TextColumn(c) if c != "Remove" else st.column_config.CheckboxColumn(c) for c in disp.columns},
-                                use_container_width=True, hide_index=True, key=f"mat_{mat}")
+            ed = st.data_editor(disp,
+                column_config={c: st.column_config.TextColumn(c) if c != "Remove" else st.column_config.CheckboxColumn(c) for c in disp.columns},
+                use_container_width=True, hide_index=True, key=f"mat_{mat}")
             if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
                 rem = [full.iloc[i]["bout_num"] for i in ed[ed["Remove"]].index]
                 if rem:
