@@ -1,4 +1,4 @@
-# app.py – FULL SCRIPT WITH COLORED CIRCLES + CLOCK (HTML/CSS)
+# app.py - FINAL: MAT SORTING FIXED + PDF UNDER EXCEL + ALL FIXES
 import streamlit as st
 import pandas as pd
 import io
@@ -15,34 +15,20 @@ import os
 from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# 1. CONFIG & COLOR MAP
+# CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
+
 COLOR_MAP = {
-    "red":    ("#FF0000", "red circle"),
-    "blue":   ("#0000FF", "blue circle"),
-    "green":  ("#008000", "green circle"),
+    "red": ("#FF0000", "red circle"),
+    "blue": ("#0000FF", "blue circle"),
+    "green": ("#008000", "green circle"),
     "yellow": ("#FFD700", "yellow circle"),
-    "black":  ("#000000", "black circle"),
-    "white":  ("#FFFFFF", "white circle"),
+    "black": ("#000000", "black circle"),
+    "white": ("#FFFFFF", "white circle"),
     "purple": ("#800080", "purple circle"),
     "orange": ("#FFA500", "orange circle")
 }
-
-# HTML COLORED CIRCLES (ALL CIRCLES, NO EMOJIS)
-COLOR_DOT_MAP = {
-    "red":    '<span style="color:#FF0000;font-size:16px;">●</span>',
-    "blue":   '<span style="color:#0000FF;font-size:16px;">●</span>',
-    "green":  '<span style="color:#008000;font-size:16px;">●</span>',
-    "yellow": '<span style="color:#FFD700;font-size:16px;">●</span>',
-    "black":  '<span style="color:#000000;font-size:16px;">●</span>',
-    "white":  '<span style="color:#FFFFFF;font-size:16px;">●</span>',
-    "purple": '<span style="color:#800080;font-size:16px;">●</span>',
-    "orange": '<span style="color:#FFA500;font-size:16px;">●</span>'
-}
-
-# HTML CLOCK ICON FOR EARLY MATCHES
-EARLY_CLOCK = '<span style="font-size:16px;">clock</span>'
 
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -71,7 +57,7 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# 2. SESSION STATE
+# SESSION STATE
 # ----------------------------------------------------------------------
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
@@ -87,22 +73,11 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# 3. GLOBAL CSS (once)
-# ----------------------------------------------------------------------
-st.markdown(
-    """
-    <style>
-    .dot-clock { vertical-align: middle; margin-right: 6px; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ----------------------------------------------------------------------
-# 4. MEET SETTINGS
+# MEET SETTINGS – ALL CONFIG + TEAMS + RESET + NO EMOJI COLUMN
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
+
 st.sidebar.subheader("Match & Scheduling Rules")
 col1, col2 = st.sidebar.columns(2)
 with col1:
@@ -161,10 +136,10 @@ if changed:
 
 TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
-TEAM_DOTS   = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS}
+TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 
 # ----------------------------------------------------------------------
-# 5. CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
@@ -172,7 +147,6 @@ def is_compatible(w1, w2):
     )
 
 def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
-
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
@@ -207,7 +181,7 @@ def generate_initial_matchups(active):
             "w1_level": w1["level"], "w1_weight": w1["weight"], "w1_grade": w1["grade"], "w1_early": w1["early"],
             "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
             "w2_level": w2["level"], "w2_weight": w2["weight"], "w2_grade": w2["grade"], "w2_early": w2["early"],
-            "score": matchup_score(w1, w2), "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+            "score": matchup_score(w and w1, w2), "avg_weight": (w1["weight"] + w2["weight"]) / 2,
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
@@ -229,8 +203,13 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
+    # STEP 1: Get only non-removed bouts
     valid = [b for b in bout_list if b["manual"] != "Removed"]
+    
+    # STEP 2: SORT ALL valid bouts by avg_weight (lightest first)
     valid = sorted(valid, key=lambda x: x["avg_weight"])
+    
+    # STEP 3: Divide into mats (Mat 1 = lightest, Mat 4 = heaviest)
     per_mat = len(valid) // CONFIG["NUM_MATS"]
     extra = len(valid) % CONFIG["NUM_MATS"]
     mats = []
@@ -240,6 +219,7 @@ def generate_mat_schedule(bout_list, gap=4):
         mats.append(valid[start:end])
         start = end
 
+    # STEP 4: Schedule within each mat (early matches first half, gap logic)
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
@@ -251,6 +231,7 @@ def generate_mat_schedule(bout_list, gap=4):
         scheduled = []
         first_half_wrestlers = set()
 
+        # Place first early match if possible
         first_early = None
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
@@ -266,6 +247,7 @@ def generate_mat_schedule(bout_list, gap=4):
             first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
             slot = 2
 
+        # Fill first half with early bouts
         while early_bouts and len(scheduled) < first_half_end:
             best = None
             best_score = -float("inf")
@@ -287,6 +269,7 @@ def generate_mat_schedule(bout_list, gap=4):
             first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
             slot += 1
 
+        # Fill remaining slots
         remaining = non_early_bouts + early_bouts
         while remaining:
             best = None
@@ -307,6 +290,7 @@ def generate_mat_schedule(bout_list, gap=4):
             last_slot[best["w2_id"]] = slot
             slot += 1
 
+        # Add to schedule
         for s, b in scheduled:
             schedules.append({
                 "mat": mat_num,
@@ -319,15 +303,17 @@ def generate_mat_schedule(bout_list, gap=4):
                 "is_early": b["is_early"]
             })
 
+    # Assign mat_bout_num
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [m for m in schedules if m["mat"] == mat_num]
         mat_entries.sort(key=lambda x: x["slot"])
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
+
     return schedules
 
 # ----------------------------------------------------------------------
-# 6. STREAMLIT UI
+# STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
@@ -378,6 +364,7 @@ if st.session_state.initialized:
             })
         sugg_full_df = pd.DataFrame(sugg_data)
         sugg_display_df = sugg_full_df.drop(columns=["idx"])
+
         edited = st.data_editor(
             sugg_display_df,
             column_config={
@@ -394,6 +381,7 @@ if st.session_state.initialized:
             hide_index=True,
             key="sugg_editor"
         )
+
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]] for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -416,36 +404,27 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS – HTML CIRCLES + CLOCK -----
+    # ----- MAT PREVIEWS (bout_num hidden) -----
     st.subheader("Mat Previews")
-    for mat in range(1, CONFIG["NUM_MATS"] + 1):
+    for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
-        if not bouts:
+        if not bouts: 
             st.write(f"**Mat {mat}: No matches**")
             continue
-
         rows = []
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
-
-            w1_dot = TEAM_DOTS.get(b["w1_team"], '<span style="color:#000;">●</span>')
-            w2_dot = TEAM_DOTS.get(b["w2_team"], '<span style="color:#000;">●</span>')
-            clock = EARLY_CLOCK if b["is_early"] else ""
-
-            w1_str = f"{clock} {w1_dot} {b['w1_name']} ({b['w1_team']})".strip()
-            w2_str = f"{clock} {w2_dot} {b['w2_name']} ({b['w2_team']})".strip()
-
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
-                "Wrestler 1": w1_str,
+                "Early?": "fire" if b["is_early"] else "",
+                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
                 "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "Wrestler 2": w2_str,
+                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
                 "bout_num": b["bout_num"]
             })
-
         full_df = pd.DataFrame(rows)
         display_df = full_df.drop(columns=["bout_num"])
 
@@ -453,6 +432,7 @@ if st.session_state.initialized:
             column_config = {
                 "Remove": st.column_config.CheckboxColumn("Remove"),
                 "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                "Early?": st.column_config.TextColumn("Early?"),
                 "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
                 "G/L/W": st.column_config.TextColumn("G/L/W"),
                 "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
@@ -466,14 +446,15 @@ if st.session_state.initialized:
                 hide_index=True,
                 key=f"mat_editor_{mat}"
             )
+
             if st.button(f"Apply Removals on Mat {mat}", key=f"apply_mat_{mat}"):
                 to_remove = [full_df.iloc[i]["bout_num"] for i in edited[edited["Remove"]].index]
                 if to_remove:
                     for num in to_remove:
-                        bout = next(x for x in st.session_state.bout_list if x["bout_num"] == num)
-                        bout["manual"] = "Removed"
-                        w1 = next(w for w in st.session_state.active if w["id"] == bout["w1_id"])
-                        w2 = next(w for w in st.session_state.active if w["id"] == bout["w2_id"])
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == num)
+                        b["manual"] = "Removed"
+                        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+                        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                         if w2 in w1["matches"]: w1["matches"].remove(w2)
                         if w1 in w2["matches"]: w2["matches"].remove(w1)
                     st.session_state.last_removed = to_remove[0]
@@ -543,7 +524,7 @@ if st.session_state.initialized:
         doc.build(elements)
         pdf_bytes = buf.getvalue()
 
-        # DOWNLOADS
+        # PDF UNDER EXCEL
         st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
