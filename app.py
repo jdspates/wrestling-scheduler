@@ -406,7 +406,7 @@ if st.session_state.initialized:
                             <div style="display:flex;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
                                 <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
-                                <div style="font-size:0.85rem;color:#444;">{b["_w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
+                                <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
                             </div>
                             <div style="font-weight:700;color:#333;">vs</div>
                             <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
@@ -477,3 +477,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
