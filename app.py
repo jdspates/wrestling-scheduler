@@ -422,7 +422,7 @@ if st.session_state.initialized:
             </table>
             """
 
-            # RENDER FULL HTML WITH UNSAFE MODE
+            # THIS LINE IS CRITICAL — DO NOT REMOVE
             st.markdown(html, unsafe_allow_html=True)
 
             # Handle removals
