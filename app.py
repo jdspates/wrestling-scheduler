@@ -372,9 +372,9 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat_num}", expanded=True):
-            # Manual HTML table
+            # Build full HTML table
             html = """
-            <table style="width:100%; border-collapse:collapse; font-family:Arial;">
+            <table style="width:100%; border-collapse:collapse; font-family:Arial; margin-top:10px;">
                 <thead>
                     <tr style="background:#f0f0f0; text-align:center;">
                         <th style="padding:8px; border:1px solid #ccc;">Remove</th>
@@ -402,9 +402,7 @@ if st.session_state.initialized:
                 w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
                 early_emoji = "fire" if bout["is_early"] else ""
 
-                # Bout number for removal key
                 bout_key = f"remove_{bout['bout_num']}"
-
                 remove_checkbox = f'<input type="checkbox" id="{bout_key}" name="{bout_key}">'
 
                 html += f"""
@@ -424,6 +422,7 @@ if st.session_state.initialized:
             </table>
             """
 
+            # RENDER FULL HTML WITH UNSAFE MODE
             st.markdown(html, unsafe_allow_html=True)
 
             # Handle removals
