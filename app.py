@@ -1,4 +1,4 @@
-# app.py – FINAL: NO GAPS + BUTTONS IN CARD + FULL UNDO + NO ERRORS
+# app.py – FINAL: TIGHT CARDS + WORKING BUTTONS + FULL UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -69,7 +69,7 @@ if "undo_stack" not in st.session_state:
     st.session_state.undo_stack = []
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (MOVED TO TOP)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
@@ -244,6 +244,21 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     return mat_schedules
 
 # ----------------------------------------------------------------------
+# HELPER: Remove match
+# ----------------------------------------------------------------------
+def remove_match(bout_num):
+    b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
+    b["manual"] = "Removed"
+    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+    if w2 in w1["matches"]: w1["matches"].remove(w2)
+    if w1 in w2["matches"]: w2["matches"].remove(w1)
+    st.session_state.undo_stack.append(bout_num)
+    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.success("Match removed.")
+
+# ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
@@ -252,10 +267,11 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown("""
 <style>
     div[data-testid="stForm"] { display: none !important; }
-    div[data-testid="stExpander"] > div > div { padding-top: 0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
-    .block-container { padding-top: 1rem !important; }
-    .css-1d391kg { padding: 0 !important; }
+    div[data-testid="stExpander"] > div > div { padding: 0 !important; margin: 0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; padding: 0 !important; }
+    .block-container { padding: 1rem 0 !important; }
+    .css-1d391kg { padding: 0 !important; margin: 0 !important; }
+    [data-testid="stVerticalBlock"] { gap: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -413,7 +429,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS: TIGHT CARDS WITH BUTTONS ---
+    # --- MAT PREVIEWS: TIGHT CARDS + WORKING BUTTONS ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -492,37 +508,18 @@ if st.session_state.initialized:
                 """
                 components.html(html_content, height=90, scrolling=False)
 
-                # Hidden forms (invisible)
+                # Hidden forms with on_click
                 with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", key=up_submit)
+                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i-1) if i > 0 else None, key=up_submit)
                 with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", key=down_submit)
+                    st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i+1) if i < len(rows)-1 else None, key=down_submit)
                 with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
-                    st.form_submit_button(label="", key=remove_submit)
+                    st.form_submit_button(label="", on_click=lambda bn=r["bout_num"]: remove_match(bn), key=remove_submit)
 
-                # Handle actions
-                if st.session_state.get(up_submit, False):
-                    if idx > 0:
-                        st.session_state.mat_schedules = swap_schedule_positions(
-                            st.session_state.mat_schedules, mat, idx, idx-1)
-                        st.rerun()
-                if st.session_state.get(down_submit, False):
-                    if idx < len(rows)-1:
-                        st.session_state.mat_schedules = swap_schedule_positions(
-                            st.session_state.mat_schedules, mat, idx, idx+1)
-                        st.rerun()
-                if st.session_state.get(remove_submit, False):
-                    bout_num = r["bout_num"]
-                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
-                    b["manual"] = "Removed"
-                    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-                    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-                    if w2 in w1["matches"]: w1["matches"].remove(w2)
-                    if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    st.session_state.undo_stack.append(bout_num)
-                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.success("Match removed.")
+                # Trigger rerun on any action
+                if st.session_state.get(up_submit, False) or \
+                   st.session_state.get(down_submit, False) or \
+                   st.session_state.get(remove_submit, False):
                     st.rerun()
 
     # --- UNDO ---
@@ -593,4 +590,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
