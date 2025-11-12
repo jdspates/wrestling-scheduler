@@ -1,4 +1,4 @@
-# app.py - FINAL: MAT SORTING FIXED + PDF UNDER EXCEL + ALL PREVIOUS FIXES
+# app.py - FINAL: MAT SORTING + HIDDEN bout_num + PDF UNDER EXCEL + ALL FIXES
 import streamlit as st
 import pandas as pd
 import io
@@ -337,7 +337,7 @@ if st.session_state.initialized:
                 "vs_Lvl": f"{s['vs_level']:.1f}",
                 "vs_Wt": f"{s['vs_weight']:.0f}",
                 "Score": f"{s['score']:.1f}",
-                "idx": i  # internal
+                "idx": i
             })
         sugg_full_df = pd.DataFrame(sugg_data)
         sugg_display_df = sugg_full_df.drop(columns=["idx"])
@@ -403,7 +403,7 @@ if st.session_state.initialized:
                 "bout_num": b["bout_num"]  # Keep for sorting
             })
         full_df = pd.DataFrame(rows)
-        display_df = full_df.drop(columns=["bout_num"])
+        display_df = full_df.drop(columns=["bout_num"])  # Remove from display
 
         with st.expander(f"Mat {mat}", expanded=True):
             column_config = {
@@ -415,7 +415,6 @@ if st.session_state.initialized:
                 "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                 "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
                 "Score": st.column_config.NumberColumn("Score", disabled=True),
-                "bout_num": st.column_config.NumberColumn("bout_num", hidden=True)  # Hidden but preserved
             }
             edited = st.data_editor(
                 display_df,
