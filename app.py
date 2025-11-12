@@ -30,19 +30,20 @@ COLOR_MAP = {
 }
 
 # REAL COLORED DOT ICONS (Unicode)
+# REAL COLORED DOT + CLOCK ICONS (UNICODE)
 COLOR_DOT_MAP = {
-    "red":    "red circle",
-    "blue":   "blue circle",
-    "green":  "green circle",
-    "yellow": "yellow circle",
-    "black":  "black circle",
-    "white":  "white circle",
-    "purple": "purple circle",
-    "orange": "orange circle"
+    "red":    "red circle",     # U+1F534
+    "blue":   "blue circle",    # U+1F535
+    "green":  "green circle",   # U+1F7E2
+    "yellow": "yellow circle",  # U+1F7E1
+    "black":  "black circle",   # U+26AB
+    "white":  "white circle",   # U+26AA
+    "purple": "purple circle",  # U+1F7E3
+    "orange": "orange circle"   # U+1F7E0
 }
+EARLY_CLOCK = "clock"  # U+1F552 — real analog clock
 
-# Clock icon for early matches
-EARLY_CLOCK = "clock 1:00"
+TEAM_DOTS = {t["name"]: COLOR_DOT_MAP[t["color"]] for t in TEAMS}
 
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -539,3 +540,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
