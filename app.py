@@ -1,4 +1,4 @@
-# app.py – FINAL: RIGHT-CLICK DELETE + NO BROWSER MENU + UNDO + CLEAN CARDS
+# app.py – RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -12,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
+import streamlit.components.v1 as components  # <-- ADDED
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -239,7 +240,7 @@ def remove_match(bout_num):
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-    w2 = next(w for w in st.session_state.active if w["idрежнему"] == b["w2_id"])
+    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
     if b["w2_id"] in w1["match_ids"]: w1["match_ids"].remove(b["w2_id"])
     if b["w1_id"] in w2["match_ids"]: w2["match_ids"].remove(b["w1_id"])
     st.session_state.undo_stack.append(bout_num)
