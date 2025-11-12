@@ -1,4 +1,4 @@
-# app.py - FINAL: MEET SETTINGS + RESET BUTTON + HIDDEN COLUMNS + fire + COLORED DOTS
+# app.py - FINAL: MEET SETTINGS + RESET + NO EMOJI COLUMN + HIDDEN COLS + fire + COLORED DOTS
 import streamlit as st
 import pandas as pd
 import io
@@ -19,7 +19,7 @@ from openpyxl.styles import PatternFill
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 
-# Color name → (hex, emoji)
+# Color name to (hex, emoji)
 COLOR_MAP = {
     "red": ("#FF0000", "red circle"),
     "blue": ("#0000FF", "blue circle"),
@@ -76,7 +76,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# MEET SETTINGS – ALL CONFIG + TEAMS + RESET BUTTON
+# MEET SETTINGS – ALL CONFIG + TEAMS + RESET BUTTON + NO EMOJI COLUMN
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 
@@ -131,34 +131,33 @@ if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
 
-# --- Team Settings ---
+# --- Team Settings (NO EMOJI COLUMN) ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("Team Names & Colors")
 
 for i in range(5):
     team = TEAMS[i]
-    col1, col2 = st.sidebar.columns([1, 4])
-   
-    with col1:
-        emoji = COLOR_MAP[team["color"]][1]
-        st.markdown(f"<div style='font-size:32px; text-align:center;'>{emoji}</div>", unsafe_allow_html=True)
-   
-    with col2:
-        new_name = st.text_input(
-            f"Team {i+1} Name",
-            value=team["name"],
-            key=f"name_{i}"
-        )
-        color_options = list(COLOR_MAP.keys())
-        current_color = team["color"]
-        new_color = st.selectbox(
-            "Color",
-            options=color_options,
-            format_func=lambda x: x.capitalize(),
-            index=color_options.index(current_color),
-            key=f"color_{i}"
-        )
-   
+    
+    st.sidebar.markdown(f"**Team {i+1}**")
+    
+    new_name = st.sidebar.text_input(
+        "Name",
+        value=team["name"],
+        key=f"name_{i}",
+        label_visibility="collapsed"
+    )
+    
+    color_options = list(COLOR_MAP.keys())
+    current_color = team["color"]
+    new_color = st.sidebar.selectbox(
+        "Color",
+        options=color_options,
+        format_func=lambda x: x.capitalize(),
+        index=color_options.index(current_color),
+        key=f"color_{i}",
+        label_visibility="collapsed"
+    )
+    
     if new_name != team["name"]:
         team["name"] = new_name
         changed = True
