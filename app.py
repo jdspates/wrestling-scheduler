@@ -1,4 +1,4 @@
-# app.py – FINAL: CARDS WITH BUTTONS + FULL UNDO + NO ERRORS
+# app.py – FINAL: CARDS WITH BUTTONS + NO DUPLICATES + FULL UNDO
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components  # FOR HTML + JS
+import streamlit.components.v1 as components
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -398,7 +398,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS: CARDS WITH BUTTONS ---
+    # --- MAT PREVIEWS: CARDS WITH BUTTONS (NO DUPLICATES) ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -423,16 +423,20 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
 
-            # --- RENDER EACH CARD WITH BUTTONS ---
+            # --- RENDER EACH CARD WITH BUTTONS (NO DUPLICATES) ---
             for idx, r in enumerate(rows):
                 bg = "#fff3cd" if r["Early?"] else "#ffffff"
                 up_key = f"up_mat{mat}_idx{idx}"
                 down_key = f"down_mat{mat}_idx{idx}"
                 remove_key = f"remove_mat{mat}_idx{idx}"
 
-                up_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{up_key}\"]').click()"
-                down_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{down_key}\"]').click()"
-                remove_js = f"parent.document.querySelector('[data-testid=\"stButton\"] button[kind=\"secondary\"][aria-label=\"{remove_key}\"]').click()"
+                up_submit = f"submit_up_{up_key}"
+                down_submit = f"submit_down_{down_key}"
+                remove_submit = f"submit_remove_{remove_key}"
+
+                up_js = f"document.getElementById('{up_submit}').click();"
+                down_js = f"document.getElementById('{down_submit}').click();"
+                remove_js = f"document.getElementById('{remove_submit}').click();"
 
                 html_content = f"""
                 <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:12px;
@@ -474,27 +478,26 @@ if st.session_state.initialized:
                 """
                 components.html(html_content, height=100, scrolling=False)
 
-                # Hidden buttons (triggered by JS)
-                col1, col2, col3, col4 = st.columns([1,1,1,8])
-                with col1:
-                    st.button("Up", key=up_key, use_container_width=True)
-                with col2:
-                    st.button("Down", key=down_key, use_container_width=True)
-                with col3:
-                    st.button("Remove", key=remove_key, use_container_width=True)
+                # Hidden form submit buttons (invisible)
+                with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", key=up_submit)
+                with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", key=down_submit)
+                with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
+                    st.form_submit_button(label="", key=remove_submit)
 
                 # Handle actions
-                if st.session_state.get(up_key, False):
+                if st.session_state.get(up_submit, False):
                     if idx > 0:
                         st.session_state.mat_schedules = swap_schedule_positions(
                             st.session_state.mat_schedules, mat, idx, idx-1)
                         st.rerun()
-                if st.session_state.get(down_key, False):
+                if st.session_state.get(down_submit, False):
                     if idx < len(rows)-1:
                         st.session_state.mat_schedules = swap_schedule_positions(
                             st.session_state.mat_schedules, mat, idx, idx+1)
                         st.rerun()
-                if st.session_state.get(remove_key, False):
+                if st.session_state.get(remove_submit, False):
                     bout_num = r["bout_num"]
                     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
                     b["manual"] = "Removed"
