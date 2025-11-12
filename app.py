@@ -239,7 +239,7 @@ def remove_match(bout_num):
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+    w2 = next(w for w in st.session_state.active if w["idрежнему"] == b["w2_id"])
     if b["w2_id"] in w1["match_ids"]: w1["match_ids"].remove(b["w2_id"])
     if b["w1_id"] in w2["match_ids"]: w2["match_ids"].remove(b["w1_id"])
     st.session_state.undo_stack.append(bout_num)
@@ -276,7 +276,6 @@ if not hasattr(st.session_state, "menu_rendered"):
 
       btn.addEventListener('click', () => {
         if (targetBout) {
-          // Use a hidden input to trigger Streamlit rerun
           let input = document.getElementById('delete-signal');
           if (!input) {
             input = document.createElement('input');
@@ -299,7 +298,6 @@ if not hasattr(st.session_state, "menu_rendered"):
 # Handle delete signal
 if st.session_state.delete_bout is not None:
     remove_match(st.session_state.delete_bout)
-    st.session_state.delete_bed_bout = st.session_state.delete_bout
     st.session_state.delete_bout = None
     st.rerun()
 
@@ -387,7 +385,7 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     })
     changed = True
 st.sidebar.markdown("---")
-if st.sidebar.button "Reset to Default", type="secondary"):
+if st.sidebar.button("Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
