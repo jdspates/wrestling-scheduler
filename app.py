@@ -1,4 +1,4 @@
-# app.py - FINAL: NO ERRORS + fire EMOJI + COLORED EMOJI DOTS
+# app.py - FINAL: HIDDEN COLUMNS + fire EMOJI + COLORED DOTS + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -337,10 +337,26 @@ if st.session_state.initialized:
                 "vs_Lvl": f"{s['vs_level']:.1f}",
                 "vs_Wt": f"{s['vs_weight']:.0f}",
                 "Score": f"{s['score']:.1f}",
-                "idx": i
+                "idx": i  # HIDDEN BELOW
             })
         sugg_df = pd.DataFrame(sugg_data)
-        edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True, key="sugg_editor")
+        edited = st.data_editor(
+            sugg_df,
+            column_config={
+                "Add": st.column_config.CheckboxColumn("Add"),
+                "Wrestler": st.column_config.TextColumn("Wrestler"),
+                "Lvl": st.column_config.NumberColumn("Lvl"),
+                "Wt": st.column_config.NumberColumn("Wt"),
+                "vs": st.column_config.TextColumn("vs"),
+                "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
+                "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
+                "Score": st.column_config.NumberColumn("Score"),
+                "idx": st.column_config.NumberColumn("idx", width=0),  # HIDDEN
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="sugg_editor"
+        )
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[row["idx"]] for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -363,7 +379,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS -----
+    # ----- MAT PRE  PREVIEWS -----
     st.subheader("Mat Previews")
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat_num]
@@ -408,7 +424,7 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
-                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),
+                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # HIDDEN
                 },
                 use_container_width=True,
                 hide_index=True,
