@@ -1,4 +1,4 @@
-# app.py – COLLAPSED MATS + CTRL+Z UNDO + RED X (TIGHT, CENTERED)
+# app.py – COLLAPSED MATS + CTRL+Z UNDO (WORKS!) + RED X (TIGHT, CENTERED)
 import streamlit as st
 import pandas as pd
 import io
@@ -54,9 +54,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_trigger"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else 0
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -248,36 +248,31 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- GLOBAL CTRL+Z LISTENER (ONE TIME) ----
-if not hasattr(st.session_state, "undo_listener"):
-    undo_js = """
+# ---- HIDDEN UNDO BUTTON + CTRL+Z LISTENER (ONE TIME) ----
+if not hasattr(st.session_state, "undo_button_ready"):
+    # Hidden button
+    undo_trigger = st.button("UNDO_HIDDEN", key="undo_hidden", help=None)
+    
+    # JS: Ctrl+Z clicks the hidden button
+    ctrl_z_js = """
     <script>
-      let lastUndo = 0;
       document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
-          const now = Date.now();
-          if (now - lastUndo > 100) {  // debounce
-            lastUndo = now;
-            const url = new URL(window.location);
-            url.searchParams.set('undo', now);
-            window.history.pushState({}, '', url);
-            window.dispatchEvent(new Event('popstate'));
-          }
+          const btn = document.querySelector('[data-testid="stButton"] button[kind="secondary"]:contains("UNDO_HIDDEN")');
+          if (btn) btn.click();
         }
       });
     </script>
     """
-    st.markdown(undo_js, unsafe_allow_html=True)
-    st.session_state.undo_listener = True
+    st.markdown(ctrl_z_js, unsafe_allow_html=True)
+    st.session_state.undo_button_ready = True
 
-# Handle Ctrl+Z via URL param
-query_params = st.experimental_get_query_params()
-if "undo" in query_params:
+# Handle undo from button or Ctrl+Z
+if st.session_state.get("undo_hidden"):
     undo_last()
-    # Clear param
-    new_params = {k: v for k, v in query_params.items() if k != "undo"}
-    st.experimental_set_query_params(**new_params)
+    # Reset trigger
+    st.session_state.undo_hidden = False
     st.rerun()
 
 st.markdown("""
