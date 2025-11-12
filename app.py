@@ -1,4 +1,4 @@
-# app.py – COLOR BOXES FIXED + COLLAPSED MATS + CTRL+Z UNDO + RED X + OPEN STATE
+# app.py – COLOR BOXES + COLLAPSED MATS + CTRL+Z UNDO + RED X + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -52,12 +52,12 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# SESSION STATE
+# SESSION STATE (UNCONDITIONAL INIT)
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_trigger", "mat_open"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_hidden", "mat_open"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else {}
-        if key == "undo_trigger": st.session_state[key] = False
+        if key == "undo_hidden": st.session_state[key] = False
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
