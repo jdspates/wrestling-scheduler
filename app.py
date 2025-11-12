@@ -1,9 +1,8 @@
-# app.py – DRAG-REORDER + CLEAN UI (working)
+# app.py – Wrestling Meet Scheduler with DRAG-TO-REORDER
 import streamlit as st
 import pandas as pd
 import io
 import random
-from collections import defaultdict
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
@@ -69,41 +68,31 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# PAGE CONFIG + GLOBAL CSS (drag handle)
+# PAGE CONFIG + GLOBAL CSS (DRAG HANDLE)
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-st.markdown(
-    """
+# DRAG HANDLE: Style the index column
+st.markdown("""
 <style>
-/* Drag-handle column (first column) */
-div[data-testid="column"]:nth-child(1) {
-    width: 70px !important;
-    min-width: 70px !important;
-    max-width: 70px !important;
-}
-div[data-testid="column"]:nth-child(1) > div > div {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    cursor: grab;
-    user-select: none;
-}
-div[data-testid="column"]:nth-child(1)::before {
-    content: "Drag";
+/* Index column = drag handle */
+div[data-testid="stDataFrame"] [data-testid="stIndexCell"] {
+    cursor: grab !important;
+    user-select: none !important;
     font-weight: bold;
+    text-align: center;
+    background: #f8f9fa;
+    min-width: 50px;
+    border-right: 2px solid #dee2e6;
 }
-div[data-testid="column"]:nth-child(1):hover {
-    background: #f0f2f6;
+div[data-testid="stDataFrame"] [data-testid="stIndexCell"]:hover {
+    background: #e9ecef !important;
 }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------
-# SETTINGS (unchanged)
+# SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 changed = False
@@ -160,7 +149,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
@@ -243,7 +232,6 @@ def generate_mat_schedule(bout_list, gap=4):
         slot = 1
         scheduled = []
         first_half_wrestlers = set()
-        # first early if possible
         first = next((b for b in early if last_slot.get(b["w1_id"], -100) < 0 and last_slot.get(b["w2_id"], -100) < 0), None)
         if first:
             early.remove(first)
@@ -252,7 +240,6 @@ def generate_mat_schedule(bout_list, gap=4):
             last_slot[first["w2_id"]] = 1
             first_half_wrestlers.update([first["w1_id"], first["w2_id"]])
             slot = 2
-        # fill first half with early
         while early and len(scheduled) < first_half:
             best = None
             best_score = -float("inf")
@@ -271,7 +258,6 @@ def generate_mat_schedule(bout_list, gap=4):
             last_slot[best["w2_id"]] = slot
             first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
             slot += 1
-        # remaining
         remaining = normal + early
         while remaining:
             best = None
@@ -396,7 +382,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have enough matches.")
 
-    # ------------------- MAT PREVIEWS -------------------
+    # ------------------- MAT PREVIEWS WITH DRAG -------------------
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         mat_sched = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -404,15 +390,13 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # keep current order (slot)
         mat_sched.sort(key=lambda x: x["slot"])
 
         rows = []
         for idx, entry in enumerate(mat_sched, 1):
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == entry["bout_num"])
             rows.append({
-                "Drag": "",                     # drag handle
-                "Slot": idx,                    # current slot (display only)
+                "bout_num": b["bout_num"],
                 "Remove": False,
                 "Early?": "fire" if b["is_early"] else "",
                 "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
@@ -420,13 +404,11 @@ if st.session_state.initialized:
                 "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
-                "bout_num": b["bout_num"],      # hidden key
             })
-        df_full = pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
 
         column_cfg = {
-            "Drag": st.column_config.TextColumn("Drag", width="small", disabled=True),
-            "Slot": st.column_config.NumberColumn("Slot", disabled=True, width="small"),
+            "bout_num": None,
             "Remove": st.column_config.CheckboxColumn("Remove"),
             "Early?": st.column_config.TextColumn("Early?", width="small"),
             "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
@@ -438,48 +420,49 @@ if st.session_state.initialized:
 
         with st.expander(f"Mat {mat}", expanded=True):
             edited = st.data_editor(
-                df_full.drop(columns=["bout_num"]),   # hide internal key from UI
+                df,
                 column_config=column_cfg,
                 use_container_width=True,
-                hide_index=True,
+                hide_index=False,  # Index = drag handle
                 key=f"mat_editor_{mat}",
-                column_order=["Drag","Slot","Remove","Early?","Wrestler 1","G/L/W","Wrestler 2","G/L/W 2","Score"],
-                num_rows="fixed"
+                column_order=["Remove", "Early?", "Wrestler 1", "G/L/W", "Wrestler 2", "G/L/W 2", "Score"],
+                num_rows="dynamic"
             )
 
             if st.button(f"Apply Changes – Mat {mat}", key=f"apply_{mat}"):
-                # ----- REMOVALS -----
-                removed = edited[edited["Remove"]]["bout_num"].tolist()
-                if removed:
-                    for bn in removed:
+                # Get current order from index
+                current_order = edited.index.tolist()
+                bout_nums_in_order = [df.iloc[i]["bout_num"] for i in current_order]
+
+                # Removals
+                removed_mask = edited["Remove"]
+                removed_bouts = edited[removed_mask]["bout_num"].tolist()
+
+                if removed_bouts:
+                    for bn in removed_bouts:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
                         b["manual"] = "Removed"
                         w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
                         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                         if w2 in w1["matches"]: w1["matches"].remove(w2)
                         if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    st.session_state.last_removed = removed[0]
+                    st.session_state.last_removed = removed_bouts[0]
 
-                # ----- RE-ORDERING -----
-                # edited rows keep the order the user dragged
-                keep = edited[~edited["Remove"]].copy()
-                new_order = keep["bout_num"].tolist()
-
-                # update mat_schedules
+                # Update order
                 mat_dict = {e["bout_num"]: e for e in st.session_state.mat_schedules if e["mat"] == mat}
-                for new_slot, bn in enumerate(new_order, 1):
-                    if bn in mat_dict:
+                for new_slot, bn in enumerate(bout_nums_in_order, 1):
+                    if bn in mat_dict and bn not in removed_bouts:
                         mat_dict[bn]["slot"] = new_slot
                         mat_dict[bn]["mat_bout_num"] = new_slot
 
-                # drop removed entries
+                # Clean up
                 st.session_state.mat_schedules = [
                     e for e in st.session_state.mat_schedules
-                    if e["mat"] != mat or e["bout_num"] not in removed
+                    if e["mat"] != mat or e["bout_num"] not in removed_bouts
                 ]
 
                 st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.success(f"Mat {mat}: {len(removed)} removed, order saved.")
+                st.success(f"Mat {mat}: {len(removed_bouts)} removed, order saved!")
                 st.rerun()
 
     # ------------------- UNDO -------------------
@@ -500,7 +483,6 @@ if st.session_state.initialized:
 
     # ------------------- DOWNLOAD -------------------
     if st.button("Generate Meet", type="primary"):
-        # Excel
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
@@ -519,7 +501,6 @@ if st.session_state.initialized:
                         for c in range(1,4): ws.cell(row=i, column=c).fill = fill
         excel_bytes = out.getvalue()
 
-        # PDF
         buf = io.BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=letter)
         elements = []
