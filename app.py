@@ -1,4 +1,4 @@
-# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + ALL FEATURES
+# app.py – FINAL: RIGHT-CLICK DELETE + NO BROWSER MENU + UNDO + CLEAN CARDS
 import streamlit as st
 import pandas as pd
 import io
@@ -253,6 +253,50 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
+# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
+if not hasattr(st.session_state, "delete_component_rendered"):
+    delete_global_js = """
+    <input type="hidden" id="delete-signal" value="">
+    <div id="context-menu">
+      <button id="delete-btn">Delete Match</button>
+    </div>
+    <script>
+      let targetBout = null;
+      const menu = document.getElementById('context-menu');
+      const input = document.getElementById('delete-signal');
+      const btn = document.getElementById('delete-btn');
+
+      // Block browser menu on cards only
+      document.addEventListener('contextmenu', e => {
+        if (e.target.closest('.drag-card')) {
+          e.preventDefault();
+          targetBout = e.target.closest('.drag-card').getAttribute('data-bout');
+          menu.style.display = 'block';
+          menu.style.left = e.pageX + 'px';
+          menu.style.top = e.pageY + 'px';
+        }
+      });
+
+      btn.addEventListener('click', () => {
+        if (targetBout) {
+          input.value = targetBout;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        menu.style.display = 'none';
+      });
+
+      document.addEventListener('click', () => menu.style.display = 'none');
+    </script>
+    """
+    st.session_state.delete_signal = components.html(delete_global_js, height=0)
+    st.session_state.delete_component_rendered = True
+
+# Handle delete
+if st.session_state.delete_signal and isinstance(st.session_state.delete_signal, str) and st.session_state.delete_signal.isdigit():
+    remove_match(int(st.session_state.delete_signal))
+    st.session_state.delete_signal = None
+    st.rerun()
+
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -289,50 +333,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
-if not hasattr(st.session_state, "delete_component_rendered"):
-    delete_global_js = """
-    <input type="hidden" id="delete-signal" value="">
-    <div id="context-menu">
-      <button id="delete-btn">Delete Match</button>
-    </div>
-    <script>
-      let targetBout = null;
-      const menu = document.getElementById('context-menu');
-      const input = document.getElementById('delete-signal');
-      const btn = document.getElementById('delete-btn');
-
-      document.addEventListener('contextmenu', e => {
-        const card = e.target.closest('[data-bout]');
-        if (card) {
-          e.preventDefault();
-          targetBout = card.getAttribute('data-bout');
-          menu.style.display = 'block';
-          menu.style.left = e.pageX + 'px';
-          menu.style.top = e.pageY + 'px';
-        }
-      });
-
-      btn.addEventListener('click', () => {
-        if (targetBout) {
-          input.value = targetBout;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        menu.style.display = 'none';
-      });
-
-      document.addEventListener('click', () => menu.style.display = 'none');
-    </script>
-    """
-    st.session_state.delete_signal = components.html(delete_global_js, height=0)
-    st.session_state.delete_component_rendered = True
-
-# Handle delete
-if st.session_state.delete_signal and isinstance(st.session_state.delete_signal, str) and st.session_state.delete_signal.isdigit():
-    remove_match(int(st.session_state.delete_signal))
-    st.session_state.delete_signal = None
-    st.rerun()
 
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
