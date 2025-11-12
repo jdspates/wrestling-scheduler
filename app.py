@@ -60,13 +60,16 @@ for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active"
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
-def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
+def max_weight_diff(w): 
+    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
@@ -259,15 +262,15 @@ st.markdown("""
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
 
-    /* CONTEXT MENU */
+    /* CONTEXT MENU - OUTSIDE SCROLL */
     #context-menu {
-        position: absolute;
+        position: fixed;
         background: white;
         border: 1px solid #ccc;
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         padding: 8px 0;
-        z-index: 1000;
+        z-index: 9999;
         display: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
@@ -375,6 +378,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
+    # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -410,7 +414,7 @@ if st.session_state.initialized:
         )
         if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
-                      for _, row in edited.iterrows() if row["Add"]]
+                      for _, row in edited.iterrows() if row["idx"]]
             for s in to_add:
                 w, o = s["_w"], s["_o"]
                 if o not in w["matches"]: w["matches"].append(o)
@@ -471,10 +475,13 @@ if st.session_state.initialized:
                 </div>
                 '''
 
+            # ---- FIXED: Context menu OUTSIDE + CORRECT JS ----
             drag_js = f"""
-            <div id="context-menu">
-                <button id="delete-match">Delete Match</button>
+            <!-- CONTEXT MENU -->
+            <div id="context-menu" style="position:fixed; background:white; border:1px solid #ccc; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); padding:8px 0; z-index:9999; display:none; font-family:sans-serif;">
+                <button id="delete-match" style="width:100%; text-align:left; padding:8px 16px; background:none; border:none; cursor:pointer; font-size:0.9rem;">Delete Match</button>
             </div>
+
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
                     {cards_html}
@@ -501,10 +508,11 @@ if st.session_state.initialized:
                 // RIGHT-CLICK
                 card.addEventListener('contextmenu', e => {{
                   e.preventDefault();
+                  e.stopPropagation();
                   targetBout = card.getAttribute('data-bout');
                   menu.style.display = 'block';
-                  menu.style.left = e.pageX + 'px';
-                  menu.style.top = e.pageY + 'px';
+                  menu.style.left = (e.pageX + 5) + 'px';
+                  menu.style.top = (e.pageY + 5) + 'px';
                 }});
               }});
 
@@ -516,8 +524,10 @@ if st.session_state.initialized:
                 menu.style.display = 'none';
               }});
 
-              // HIDE MENU ON CLICK ELSEWHERE
-              document.addEventListener('click', () => menu.style.display = 'none');
+              // HIDE MENU ON CLICK ANYWHERE
+              document.addEventListener('click', e => {{
+                if (!menu.contains(e.target)) menu.style.display = 'none';
+              }});
 
               function getDragAfter(c, y) {{
                 const els = [...c.querySelectorAll('.drag-card:not([style*="opacity: 0.5"])')];
