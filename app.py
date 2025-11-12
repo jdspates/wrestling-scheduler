@@ -1,4 +1,4 @@
-# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO SPACING
+# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -340,7 +340,7 @@ if uploaded and not st.session_state.initialized:
             w["grade"] = int(w["grade"])
             w["level"] = float(w["level"])
             w["weight"] = float(w["weight"])
-            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["w2_early"] in [1,True])
+            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
             w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
             w["match_ids"] = []
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
@@ -458,7 +458,7 @@ if st.session_state.initialized:
                 st.session_state.bout_list.append({
                     "bout_num": len(st.session_state.bout_list)+1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
-                    "w1_level": w["level W1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
+                    "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
                     "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
                     "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
                     "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
