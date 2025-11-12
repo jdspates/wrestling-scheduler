@@ -1,4 +1,4 @@
-# app.py - FINAL: HIDDEN COLUMNS + fire EMOJI + COLORED DOTS + NO ERRORS
+# app.py - FINAL: MEET SETTINGS + RESET BUTTON + HIDDEN COLUMNS + fire + COLORED DOTS
 import streamlit as st
 import pandas as pd
 import io
@@ -18,6 +18,7 @@ from openpyxl.styles import PatternFill
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
+
 # Color name → (hex, emoji)
 COLOR_MAP = {
     "red": ("#FF0000", "red circle"),
@@ -29,6 +30,7 @@ COLOR_MAP = {
     "purple": ("#800080", "purple circle"),
     "orange": ("#FFA500", "orange circle")
 }
+
 # Default config
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -45,14 +47,16 @@ DEFAULT_CONFIG = {
         {"name": "", "color": "black"}
     ]
 }
+
 # Load or create config
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "r") as f:
         CONFIG = json.load(f)
 else:
-    CONFIG = DEFAULT_CONFIG
+    CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
+
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
@@ -72,10 +76,65 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# SETTINGS MENU – COLORED EMOJI DOT + COLOR NAME
+# MEET SETTINGS – ALL CONFIG + TEAMS + RESET BUTTON
 # ----------------------------------------------------------------------
-st.sidebar.header("Team Settings")
+st.sidebar.header("Meet Settings")
+
 changed = False
+
+# --- General Meet Settings ---
+st.sidebar.subheader("Match & Scheduling Rules")
+
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    new_min = st.number_input(
+        "Min Matches per Wrestler",
+        min_value=1, max_value=10, step=1,
+        value=CONFIG["MIN_MATCHES"],
+        key="min_matches"
+    )
+    new_max = st.number_input(
+        "Max Matches per Wrestler",
+        min_value=1, max_value=10, step=1,
+        value=CONFIG["MAX_MATCHES"],
+        key="max_matches"
+    )
+    new_mats = st.number_input(
+        "Number of Mats",
+        min_value=1, max_value=10, step=1,
+        value=CONFIG["NUM_MATS"],
+        key="num_mats"
+    )
+with col2:
+    new_level_diff = st.number_input(
+        "Max Level Difference",
+        min_value=0, max_value=5, step=1,
+        value=CONFIG["MAX_LEVEL_DIFF"],
+        key="max_level_diff"
+    )
+    new_weight_factor = st.slider(
+        "Weight Diff % Factor",
+        min_value=0.0, max_value=0.5, step=0.01,
+        value=CONFIG["WEIGHT_DIFF_FACTOR"],
+        format="%.2f",
+        key="weight_factor"
+    )
+    new_min_weight = st.number_input(
+        "Min Weight Diff (lbs)",
+        min_value=0.0, max_value=50.0, step=0.5,
+        value=CONFIG["MIN_WEIGHT_DIFF"],
+        key="min_weight_diff"
+    )
+
+# Validate: MIN <= MAX
+if new_min > new_max:
+    st.sidebar.error("Min Matches cannot exceed Max Matches!")
+    new_min = new_max
+
+# --- Team Settings ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("Team Names & Colors")
+
 for i in range(5):
     team = TEAMS[i]
     col1, col2 = st.sidebar.columns([1, 4])
@@ -106,13 +165,36 @@ for i in range(5):
     if new_color != team["color"]:
         team["color"] = new_color
         changed = True
+
+# --- Update General Settings ---
+if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
+    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
+    new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
+    CONFIG["MIN_MATCHES"] = new_min
+    CONFIG["MAX_MATCHES"] = new_max
+    CONFIG["NUM_MATS"] = new_mats
+    CONFIG["MAX_LEVEL_DIFF"] = new_level_diff
+    CONFIG["WEIGHT_DIFF_FACTOR"] = new_weight_factor
+    CONFIG["MIN_WEIGHT_DIFF"] = new_min_weight
+    changed = True
+
+# --- Reset to Default Button ---
+st.sidebar.markdown("---")
+if st.sidebar.button("Reset to Default", type="secondary"):
+    CONFIG = DEFAULT_CONFIG.copy()
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(CONFIG, f, indent=4)
+    st.sidebar.success("Reset to defaults! Refresh to apply.")
+    st.rerun()
+
+# --- Save & Apply ---
 if changed:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Settings saved! Refresh to see changes.")
+    st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 
-# Rebuild lookup
+# Rebuild lookup after config load
 TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 TEAM_EMOJIS = {t["name"]: COLOR_MAP[t["color"]][1] for t in TEAMS}
@@ -331,10 +413,10 @@ if st.session_state.initialized:
                 "vs_Lvl": f"{s['vs_level']:.1f}",
                 "vs_Wt": f"{s['vs_weight']:.0f}",
                 "Score": f"{s['score']:.1f}",
-                "idx": i  # internal only
+                "idx": i
             })
-        sugg_full_df = pd.DataFrame(sugg_data)  # keep idx
-        sugg_display_df = sugg_full_df.drop(columns=["idx"])  # hide from UI
+        sugg_full_df = pd.DataFrame(sugg_data)
+        sugg_display_df = sugg_full_df.drop(columns=["idx"])
 
         edited = st.data_editor(
             sugg_display_df,
@@ -354,7 +436,6 @@ if st.session_state.initialized:
         )
 
         if st.button("Add Selected"):
-            # Use original index (row.name) to get idx from full df
             to_add = [
                 st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                 for _, row in edited.iterrows() if row["Add"]
@@ -405,7 +486,7 @@ if st.session_state.initialized:
                 "Wrestler 2": w2_str,
                 "G/L/W 2": w2_glw,
                 "Score": f"{bout['score']:.1f}",
-                "bout_num": bout["bout_num"]  # internal only
+                "bout_num": bout["bout_num"]
             })
         full_df = pd.DataFrame(rows)
         display_df = full_df.drop(columns=["bout_num"])
@@ -441,7 +522,7 @@ if st.session_state.initialized:
                                 w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
                                 if w2 in w1["matches"]: w1["matches"].remove(w2)
                                 if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    st.session_state.last_removed = to_remove[0]  # remember one for undo
+                    st.session_state.last_removed = to_remove[0]
                     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
                     st.success(f"Removed {len(to_remove)} match(es)!")
