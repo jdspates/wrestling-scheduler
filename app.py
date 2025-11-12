@@ -114,7 +114,7 @@ def build_suggestions(active, bout_list):
     sugg = []
     for w in under:
         opps = [o for o in active if o != w and o not in w["matches"]]
-        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
+        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps: opps = [o for o in active if o != w and o not in w["matches"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
@@ -149,7 +149,7 @@ def generate_mat_schedule(bout_list, gap=4):
         first_early = None
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
-            l2 = last_slot.get(b["w2_id"], -100)
+            l2 = last_slot.get(b["w2_id"], - 100)
             if l1 < 0 and l2 < 0:
                 first_early = b
                 break
@@ -261,31 +261,6 @@ st.markdown("""
     h1 { margin-top:0 !important; }
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
-
-    /* CONTEXT MENU */
-    [id^="context-menu-"] {
-        position: fixed;
-        background: white;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        padding: 8px 0;
-        z-index: 9999;
-        display: none;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    [id^="context-menu-"] button {
-        width: 100%;
-        text-align: left;
-        padding: 8px 16px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 0.9rem;
-    }
-    [id^="context-menu-"] button:hover {
-        background: #f0f0f0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -475,21 +450,36 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- DELETE COMPONENT (hidden input) ----
+            # ---- DELETE COMPONENT ----
             delete_js = f"""
-            <input type="hidden" id="delete-input-{mat}" value="">
-            <script>
-              let targetBout = null;
-              document.querySelectorAll('[data-bout]').forEach(card => {{
-                card.addEventListener('contextmenu', e => {{
-                  e.preventDefault();
-                  targetBout = card.getAttribute('data-bout');
-                  const input = document.getElementById('delete-input-{mat}');
-                  input.value = targetBout;
-                  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            <div id="delete-comp-{mat}">
+              <script>
+                let target = null;
+                document.querySelectorAll('[data-bout]').forEach(el => {{
+                  el.oncontextmenu = e => {{
+                    e.preventDefault();
+                    target = el.getAttribute('data-bout');
+                    const menu = document.createElement('div');
+                    menu.style.position = 'fixed';
+                    menu.style.left = e.pageX + 'px';
+                    menu.style.top = e.pageY + 'px';
+                    menu.style.background = 'white';
+                    menu.style.border = '1px solid #ccc';
+                    menu.style.borderRadius = '6px';
+                    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    menu.style.padding = '8px 0';
+                    menu.style.zIndex = '9999';
+                    menu.innerHTML = '<button style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:0.9rem;">Delete Match</button>';
+                    menu.onclick = () => {{
+                      Streamlit.setComponentValue(target);
+                      document.body.removeChild(menu);
+                    }};
+                    document.body.appendChild(menu);
+                    setTimeout(() => document.body.onclick = () => document.body.removeChild(menu), 0);
+                  }};
                 }});
-              }});
-            </script>
+              </script>
+            </div>
             """
             delete_result = components.html(delete_js, height=0)
 
