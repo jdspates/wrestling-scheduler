@@ -1,4 +1,4 @@
-# app.py – COLLAPSED MATS + CTRL+Z UNDO + RED X + OPEN STATE + NO ERRORS
+# app.py – COLOR BOXES FIXED + COLLAPSED MATS + CTRL+Z UNDO + RED X + OPEN STATE
 import streamlit as st
 import pandas as pd
 import io
@@ -250,7 +250,6 @@ def undo_last():
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 # ---- CTRL+Z: 100% WORKING (HIDDEN CHECKBOX + JS CLICK) ----
-# Use a hidden checkbox instead of button to avoid StreamlitValueAssignmentNotAllowedError
 if not hasattr(st.session_state, "undo_setup"):
     st.checkbox("UNDO_HIDDEN", value=False, key="undo_hidden", help=None)
     ctrl_z_js = """
@@ -465,7 +464,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + PERSIST OPEN STATE + RED X ----
+    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + PERSIST OPEN STATE + RED X + COLOR BOXES ----
     st.subheader("Mat Previews")
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
