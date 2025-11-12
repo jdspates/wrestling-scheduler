@@ -1,4 +1,4 @@
-# app.py - FINAL: MEET SETTINGS + RESET + NO EMOJI COLUMN + HIDDEN COLS + fire + COLORED DOTS
+# app.py - FINAL: SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS + fire + COLORED DOTS
 import streamlit as st
 import pandas as pd
 import io
@@ -76,7 +76,7 @@ if "last_removed" not in st.session_state:
     st.session_state.last_removed = None
 
 # ----------------------------------------------------------------------
-# MEET SETTINGS – ALL CONFIG + TEAMS + RESET BUTTON + NO EMOJI COLUMN
+# MEET SETTINGS – ALL CONFIG + TEAMS + RESET + NO EMOJI COLUMN
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
 
@@ -545,7 +545,7 @@ if st.session_state.initialized:
             st.success("Undo successful!")
             st.rerun()
 
-    # ----- EXCEL + PDF -----
+    # ----- EXCEL + PDF (SIDE-BY-SIDE DOWNLOAD BUTTONS) -----
     if st.button("Generate Meet", type="primary"):
         # ---- EXCEL ----
         output = io.BytesIO()
@@ -609,12 +609,22 @@ if st.session_state.initialized:
         doc.build(elements)
         pdf_bytes = pdf_buffer.getvalue()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with col2:
-            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
+        # ---- SIDE-BY-SIDE DOWNLOAD BUTTONS ----
+        col_excel, col_pdf = st.columns([1, 1])
+        with col_excel:
+            st.download_button(
+                label="Download Excel",
+                data=excel_bytes,
+                file_name="meet_schedule.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        with col_pdf:
+            st.download_button(
+                label="Download PDF",
+                data=pdf_bytes,
+                file_name="meet_schedule.pdf",
+                mime="application/pdf"
+            )
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
