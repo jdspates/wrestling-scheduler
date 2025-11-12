@@ -1,4 +1,4 @@
-# app.py – DRAG-TO-REORDER ALL MATS + NO ERRORS
+# app.py – DRAG-TO-REORDER + NO BLANK SPACE + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -357,7 +357,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG-TO-REORDER ALL MATS ----
+    # ---- MAT PREVIEWS – DRAG-TO-REORDER + NO BLANK SPACE ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -398,6 +398,10 @@ if st.session_state.initialized:
                 </div>
                 '''
 
+            # FIXED: Calculate exact height
+            card_height = 95  # ~95px per card (measured)
+            height = len(bouts) * card_height + 20  # +20px buffer
+
             # Drag component
             drag_js = f"""
             <div id="mat-{mat}-container">
@@ -433,8 +437,7 @@ if st.session_state.initialized:
             </script>
             """
 
-            # Render once
-            result = components.html(drag_js, height=150 + len(bouts) * 100)
+            result = components.html(drag_js, height=height)
 
             # Handle reorder
             if result and isinstance(result, dict) and "order" in result:
@@ -445,13 +448,11 @@ if st.session_state.initialized:
                     st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + reordered
                     rerun_needed = True
 
-    # Rerun once at the end
     if rerun_needed:
         st.rerun()
 
     # ---- UNDO, GENERATE MEET (unchanged) ----
     # ... (same as before) ...
-    # (Include the full undo and generate meet blocks from previous version)
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
