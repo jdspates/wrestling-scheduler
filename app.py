@@ -1,4 +1,4 @@
-# app.py – RED TRASH ICON (TOP-RIGHT) + CLICK WORKS + UNDO + CLEAN CARDS
+# app.py – RED X (CENTERED, TIGHT) + UNDO + CLEAN CARDS
 import streamlit as st
 import pandas as pd
 import io
@@ -259,12 +259,10 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .drag-card { margin:0 !important; cursor:move; user-select:none; position:relative; }
-    .drag-card:active { opacity:0.7; }
+    .card-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .trash-col { flex: 0 0 28px; }  /* Tight width */
+    .card-col { flex: 1; }
     .trash-btn {
-        position: absolute !important;
-        top: 4px !important;
-        right: 4px !important;
         background: #ff4444 !important;
         color: white !important;
         border: none !important;
@@ -273,9 +271,11 @@ st.markdown("""
         height: 20px !important;
         font-size: 12px !important;
         cursor: pointer !important;
-        z-index: 10 !important;
         padding: 0 !important;
         line-height: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     .trash-btn:hover { background: #cc0000 !important; }
 </style>
@@ -430,9 +430,8 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ICON (TOP-RIGHT) ----
+    # ---- MAT PREVIEWS – RED X (CENTERED, TIGHT) ----
     st.subheader("Mat Previews")
-    rerun_needed = False
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -441,44 +440,42 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            col1, col2 = st.columns([1, 20])
-            with col1:
-                st.write("")  # spacer
-            with col2:
-                for idx, m in enumerate(bouts):
-                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
-                    bg = "#fff3cd" if b["is_early"] else "#ffffff"
-                    w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
-                    w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
+            for idx, m in enumerate(bouts):
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
+                bg = "#fff3cd" if b["is_early"] else "#ffffff"
+                w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
+                w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                    # Trash button with unique key
-                    trash_key = f"trash_{b['bout_num']}"
-                    col_trash, col_card = st.columns([0.1, 1])
-                    with col_trash:
-                        if st.button("X", key=trash_key, help="Delete match"):
-                            remove_match(b["bout_num"])
-                            st.rerun()
-                    with col_card:
-                        st.markdown(f"""
-                        <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);position:relative;">
-                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-                                <div style="display:flex;align-items:center;gap:10px;">
-                                    <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                    <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
-                                    <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
-                                </div>
-                                <div style="font-weight:700;color:#333;">vs</div>
-                                <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                                    <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                    <div style="font-size:0.85rem;color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
-                                    <div style="font-weight:600;font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
-                                </div>
+                # Unique key for trash button
+                trash_key = f"trash_{b['bout_num']}"
+
+                # Layout: X + Card in flex row
+                col_trash, col_card = st.columns([0.08, 1], gap="small")
+                with col_trash:
+                    if st.button("X", key=trash_key, help="Delete match"):
+                        remove_match(b["bout_num"])
+                        st.rerun()
+                with col_card:
+                    st.markdown(f"""
+                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
+                                <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
+                                <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
                             </div>
-                            <div style="font-size:0.8rem;color:#555;">
-                                Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
+                            <div style="font-weight:700;color:#333;">vs</div>
+                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                                <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
+                                <div style="font-size:0.85rem;color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
+                                <div style="font-weight:600;font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        <div style="font-size:0.8rem;color:#555;">
+                            Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     # ---- UNDO ----
     if st.session_state.undo_stack:
