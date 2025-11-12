@@ -1,9 +1,8 @@
-# app.py - FINAL: FULL ROW HIGHLIGHT + TEAM COLORS + NO EMOJIS + EDITABLE
+# app.py - FINAL: FULL ROW HIGHLIGHT + TEAM COLORS + EDITABLE + NO HTML STRINGS
 import streamlit as st
 import pandas as pd
 import io
 import random
-from collections import defaultdict
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
@@ -131,7 +130,6 @@ if changed:
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 
-TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 
 # ----------------------------------------------------------------------
@@ -387,15 +385,29 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS (HTML + EDITABLE) -----
+    # ----- MAT PREVIEWS (SINGLE STYLED + EDITABLE TABLE) -----
     st.subheader("Mat Previews")
-    for mat in range(1, CONFIG["NUM_MATS"]+1):
+
+    # Inject CSS once
+    if "mat_preview_css_injected" not in st.session_state:
+        st.session_state.mat_preview_css_injected = True
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stDataEditor"] tbody tr[data-row-style="early"] {
+                background-color: #FFFF99 !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # Build full data
         rows = []
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -403,84 +415,50 @@ if st.session_state.initialized:
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
                 "Wrestler 1": f"{b['w1_name']} ({b['w1_team']})",
-                "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
+                "G/L/W 1": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
                 "Wrestler 2": f"{b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
-                "bout_num": b["bout_num"],
-                "w1_team": b["w1_team"],
-                "w2_team": b["w2_team"],
-                "is_early": b["is_early"]
+                "_bout_num": b["bout_num"],
+                "_w1_team": b["w1_team"],
+                "_w2_team": b["w2_team"],
+                "_is_early": b["is_early"],
+                "_row_style": "early" if b["is_early"] else "normal",
             })
-        full_df = pd.DataFrame(rows)
-        display_df = full_df.drop(columns=["bout_num", "w1_team", "w2_team", "is_early"]).copy()
+        df = pd.DataFrame(rows)
 
-        # === STYLED HTML TABLE ===
-        html_rows = []
-        for idx, row in display_df.iterrows():
-            is_early = full_df.loc[idx, "is_early"]
-            w1_team = full_df.loc[idx, "w1_team"]
-            w2_team = full_df.loc[idx, "w2_team"]
-            bg_color = "#FFFF99" if is_early else "white"
-            w1_color = TEAM_COLORS.get(w1_team, "#000000")
-            w2_color = TEAM_COLORS.get(w2_team, "#000000")
+        # Apply team colors
+        def color_cell(team, text):
+            if not team: return text
+            color = TEAM_COLORS.get(team, "#000000")
+            return f'<span style="color:{color};font-weight:bold;">{text}</span>'
 
-            html_row = f"""
-            <tr style="background-color: {bg_color};">
-                <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">{row["Slot"]}</td>
-                <td style="color: {w1_color}; font-weight: bold; padding: 8px; border-bottom: 1px solid #ddd;">{row["Wrestler 1"]}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{row["G/L/W"]}</td>
-                <td style="color: {w2_color}; font-weight: bold; padding: 8px; border-bottom: 1px solid #ddd;">{row["Wrestler 2"]}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{row["G/L/W 2"]}</td>
-                <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">{row["Score"]}</td>
-            </tr>
-            """
-            html_rows.append(html_row)
+        df_display = df.copy()
+        df_display["Wrestler 1"] = df_display.apply(lambda r: color_cell(r["_w1_team"], r["Wrestler 1"]), axis=1)
+        df_display["Wrestler 2"] = df_display.apply(lambda r: color_cell(r["_w2_team"], r["Wrestler 2"]), axis=1)
 
-        html_table = f"""
-        <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; margin-bottom: 10px;">
-            <thead>
-                <tr style="background-color: #f0f0f0;">
-                    <th style="padding: 10px; border: 1px solid #ccc; text-align: center;">Slot</th>
-                    <th style="padding: 10px; border: 1px solid #ccc;">Wrestler 1</th>
-                    <th style="padding: 10px; border: 1px solid #ccc;">G/L/W</th>
-                    <th style="padding: 10px; border: 1px solid #ccc;">Wrestler 2</th>
-                    <th style="padding: 10px; border: 1px solid #ccc;">G/L/W 2</th>
-                    <th style="padding: 10px; border: 1px solid #ccc; text-align: center;">Score</th>
-                </tr>
-            </thead>
-            <tbody>
-                {''.join(html_rows)}
-            </tbody>
-        </table>
-        """
-
-        # Editable editor
-        edit_df = full_df[["Remove", "Slot", "Wrestler 1", "G/L/W", "Wrestler 2", "G/L/W 2", "Score"]].copy()
-        edit_df["Slot"] = edit_df["Slot"].astype(int)
+        column_config = {
+            "Remove": st.column_config.CheckboxColumn("Remove", width="small"),
+            "Slot": st.column_config.NumberColumn("Slot", disabled=True, width="small"),
+            "Wrestler 1": st.column_config.TextColumn("Wrestler 1", disabled=True),
+            "G/L/W 1": st.column_config.TextColumn("G/L/W 1", disabled=True),
+            "Wrestler 2": st.column_config.TextColumn("Wrestler 2", disabled=True),
+            "G/L/W 2": st.column_config.TextColumn("G/L/W 2", disabled=True),
+            "Score": st.column_config.NumberColumn("Score", disabled=True, width="small"),
+            "_bout_num": None, "_w1_team": None, "_w2_team": None, "_is_early": None, "_row_style": None,
+        }
 
         with st.expander(f"Mat {mat}", expanded=True):
-            st.markdown(html_table, unsafe_allow_html=True)
-            st.caption("_Styled preview above — use table below to remove matches_")
-
             edited = st.data_editor(
-                edit_df,
-                column_config={
-                    "Remove": st.column_config.CheckboxColumn("Remove"),
-                    "Slot": st.column_config.NumberColumn("Slot", disabled=True),
-                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1", disabled=True),
-                    "G/L/W": st.column_config.TextColumn("G/L/W", disabled=True),
-                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2", disabled=True),
-                    "G/L/W 2": st.column_config.TextColumn("G/L/W 2", disabled=True),
-                    "Score": st.column_config.NumberColumn("Score", disabled=True),
-                },
+                df_display,
+                column_config=column_config,
                 use_container_width=True,
                 hide_index=True,
-                key=f"mat_editor_{mat}"
+                key=f"mat_editor_{mat}",
             )
 
-            if st.button(f"Apply Removals on Mat {mat}", key=f"apply_mat_{mat}"):
-                to_remove = [full_df.iloc[i]["bout_num"] for i in edited[edited["Remove"]].index]
+            if st.button(f"Apply Removals – Mat {mat}", key=f"apply_mat_{mat}"):
+                to_remove = [df.iloc[i]["_bout_num"] for i in edited[edited["Remove"]].index]
                 if to_remove:
                     for num in to_remove:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == num)
@@ -575,7 +553,7 @@ if st.session_state.initialized:
         with col1:
             st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with col2:
+        with SAY col2:
             st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
