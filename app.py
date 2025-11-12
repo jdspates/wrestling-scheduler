@@ -1,4 +1,4 @@
-# app.py – FINAL: NO EMPTY ROWS + BUTTONS IN CARD + FULL UNDO
+# app.py – FINAL: TIGHT CARDS + BUTTONS INSIDE + NO GAPS + FULL UNDO
 import streamlit as st
 import pandas as pd
 import io
@@ -73,12 +73,15 @@ if "undo_stack" not in st.session_state:
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# HIDE HIDDEN FORMS (NO EMPTY ROWS)
+# HIDE FORMS + REMOVE ALL GAPS
 st.markdown("""
 <style>
-    div[data-testid="stForm"] {
-        display: none !important;
-    }
+    div[data-testid="stForm"] { display: none !important; }
+    div[data-testid="stExpander"] > div > div { padding-top: 0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
+    /* Remove Streamlit default spacing */
+    .block-container { padding-top: 1rem !important; }
+    .css-1d391kg { padding: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -411,7 +414,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS: CARDS WITH BUTTONS (NO EMPTY ROWS) ---
+    # --- MAT PREVIEWS: TIGHT CARDS WITH BUTTONS ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -451,11 +454,11 @@ if st.session_state.initialized:
                 remove_js = f"document.getElementById('{remove_submit}').click();"
 
                 html_content = f"""
-                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:12px;
-                            display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
+                            display:flex;justify-content:space-between;align-items:center;
                             box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     <div style="flex:1;">
-                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
                                 <div style="font-weight:600;font-size:1rem;">{r['Wrestler 1']}</div>
@@ -488,9 +491,9 @@ if st.session_state.initialized:
                     </div>
                 </div>
                 """
-                components.html(html_content, height=100, scrolling=False)
+                components.html(html_content, height=90, scrolling=False)
 
-                # Hidden forms — completely invisible
+                # Hidden forms (invisible)
                 with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
                     st.form_submit_button(label="", key=up_submit)
                 with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
