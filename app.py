@@ -219,7 +219,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
-    # Save open state before rerun
+    # Save open state BEFORE rerun
     open_mats = st.session_state.mat_open.copy()
 
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
@@ -233,7 +233,7 @@ def remove_match(bout_num):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
 
-    # Restore open state after rerun
+    # Restore open state AFTER rerun
     st.session_state.mat_open = open_mats
     st.rerun()
 
@@ -460,11 +460,13 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        key = f"mat_{mat}_open"
-        is_open = st.session_state.mat_open.get(key, False)
+        # Unique key for expander
+        expander_key = f"expander_mat_{mat}"
+        is_open = st.session_state.mat_open.get(expander_key, False)
 
-        with st.expander(f"Mat {mat}", expanded=is_open):
-            st.session_state.mat_open[key] = True  # Mark as open
+        with st.expander(f"Mat {mat}", expanded=is_open, key=expander_key):
+            # Mark as open after rendering
+            st.session_state.mat_open[expander_key] = True
 
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
