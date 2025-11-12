@@ -1,4 +1,4 @@
-# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO ERRORS
+# app.py – COLLAPSED MATS + CTRL+Z UNDO + RED X (TIGHT, CENTERED)
 import streamlit as st
 import pandas as pd
 import io
@@ -54,9 +54,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_signal"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_trigger"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else 0
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -250,26 +250,34 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 # ---- GLOBAL CTRL+Z LISTENER (ONE TIME) ----
 if not hasattr(st.session_state, "undo_listener"):
-    undo_html = """
-    <input type="hidden" id="undo-input" value="">
+    undo_js = """
     <script>
-      document.addEventListener('keydown', function(e) {
+      let lastUndo = 0;
+      document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
-          const input = document.getElementById('undo-input');
-          input.value = 'undo';
-          input.dispatchEvent(new Event('input', { bubbles: true }));
+          const now = Date.now();
+          if (now - lastUndo > 100) {  // debounce
+            lastUndo = now;
+            const url = new URL(window.location);
+            url.searchParams.set('undo', now);
+            window.history.pushState({}, '', url);
+            window.dispatchEvent(new Event('popstate'));
+          }
         }
       });
     </script>
     """
-    st.markdown(undo_html, unsafe_allow_html=True)
+    st.markdown(undo_js, unsafe_allow_html=True)
     st.session_state.undo_listener = True
 
-# Handle Ctrl+Z
-if st.session_state.undo_signal == "undo":
+# Handle Ctrl+Z via URL param
+query_params = st.experimental_get_query_params()
+if "undo" in query_params:
     undo_last()
-    st.session_state.undo_signal = None
+    # Clear param
+    new_params = {k: v for k, v in query_params.items() if k != "undo"}
+    st.experimental_set_query_params(**new_params)
     st.rerun()
 
 st.markdown("""
@@ -460,7 +468,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED X (CENTERED, TIGHT) + CTRL+Z ----
+    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + RED X ----
     st.subheader("Mat Previews")
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -469,7 +477,7 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        with st.expander(f"Mat {mat}", expanded=True):
+        with st.expander(f"Mat {mat}", expanded=False):  # COLLAPSED
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
