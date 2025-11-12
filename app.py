@@ -1,4 +1,4 @@
-# app.py – COLOR BOXES + COLLAPSED MATS + CTRL+Z UNDO + RED X + NO ERRORS
+# app.py – ONLY ACTIVE MAT STAYS OPEN + CTRL+Z + COLOR BOXES + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -52,7 +52,7 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# SESSION STATE (UNCONDITIONAL INIT)
+# SESSION STATE
 # ----------------------------------------------------------------------
 for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_hidden", "mat_open"]:
     if key not in st.session_state:
@@ -220,6 +220,9 @@ def generate_mat_schedule(bout_list, gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
+    # Save open state before rerun
+    open_mats = st.session_state.mat_open.copy()
+
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
@@ -231,7 +234,14 @@ def remove_match(bout_num):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
 
+    # Restore open state after rerun
+    st.session_state.mat_open = open_mats
+    st.rerun()
+
 def undo_last():
+    # Save open state
+    open_mats = st.session_state.mat_open.copy()
+
     if st.session_state.undo_stack:
         bout_num = st.session_state.undo_stack.pop()
         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
@@ -243,6 +253,10 @@ def undo_last():
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
+
+    # Restore open state
+    st.session_state.mat_open = open_mats
+    st.rerun()
 
 # ----------------------------------------------------------------------
 # STREAMLIT APP
@@ -272,8 +286,6 @@ if not hasattr(st.session_state, "undo_setup"):
 # Handle undo from checkbox or Ctrl+Z
 if st.session_state.undo_hidden:
     undo_last()
-    st.session_state.undo_hidden = False
-    st.rerun()
 
 st.markdown("""
 <style>
@@ -464,7 +476,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – COLLAPSED BY DEFAULT + PERSIST OPEN STATE + RED X + COLOR BOXES ----
+    # ---- MAT PREVIEWS – ONLY ACTIVE MAT STAYS OPEN ----
     st.subheader("Mat Previews")
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -473,13 +485,11 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
-        # Use session state to remember open/closed
         key = f"mat_{mat}_open"
         is_open = st.session_state.mat_open.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
-            # Update open state
-            st.session_state.mat_open[key] = True
+            st.session_state.mat_open[key] = True  # Mark as open
 
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -487,15 +497,12 @@ if st.session_state.initialized:
                 w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                # Unique key for trash button
                 trash_key = f"trash_{b['bout_num']}"
 
-                # Layout: X + Card in flex row
                 col_trash, col_card = st.columns([0.08, 1], gap="small")
                 with col_trash:
                     if st.button("X", key=trash_key):
                         remove_match(b["bout_num"])
-                        st.rerun()
                 with col_card:
                     st.markdown(f"""
                     <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
@@ -525,7 +532,6 @@ if st.session_state.initialized:
         with col_undo:
             if st.button("Undo (Ctrl+Z)"):
                 undo_last()
-                st.rerun()
 
     # ---- GENERATE MEET (unchanged) ----
     if st.button("Generate Meet", type="primary"):
