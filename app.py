@@ -1,4 +1,4 @@
-# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO ERRORS
+# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO SPACING
 import streamlit as st
 import pandas as pd
 import io
@@ -23,9 +23,7 @@ COLOR_MAP = {
     "green": ("#008000", "green circle"),
     "yellow": ("#FFD700", "yellow circle"),
     "black": ("#000000", "black circle"),
-    "white": ("#FFFFFF", "white circle"),
-    "purple": ("#800080", "purple circle"),
-    "orange": ("#FFA500", "orange circle")
+    "...
 }
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
@@ -54,7 +52,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_key"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_signal"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
 
@@ -218,23 +216,6 @@ def generate_mat_schedule(bout_list, gap=4):
 # ----------------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------------
-def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
-    entries = [e for e in mat_schedules if e["mat"] == mat_num]
-    entries.sort(key=lambda x: x["slot"])
-    if not (0 <= idx1 < len(entries) and 0 <= idx2 < len(entries)):
-        return mat_schedules
-    e1, e2 = entries[idx1], entries[idx2]
-    gi1 = next(i for i, e in enumerate(mat_schedules)
-               if e["mat"] == mat_num and e["slot"] == e1["slot"] and e["bout_num"] == e1["bout_num"])
-    gi2 = next(i for i, e in enumerate(mat_schedules)
-               if e["mat"] == mat_num and e["slot"] == e2["slot"] and e["bout_num"] == e2["bout_num"])
-    mat_schedules[gi1], mat_schedules[gi2] = mat_schedules[gi2], mat_schedules[gi1]
-    mat_entries = [m for m in mat_schedules if m["mat"] == mat_num]
-    mat_entries.sort(key=lambda x: x["slot"])
-    for idx, entry in enumerate(mat_entries, 1):
-        entry["mat_bout_num"] = idx
-    return mat_schedules
-
 def remove_match(bout_num):
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
@@ -266,31 +247,27 @@ def undo_last():
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 # ---- GLOBAL CTRL+Z LISTENER (ONE TIME) ----
-if not hasattr(st.session_state, "hotkey_installed"):
-    hotkey_js = """
+if not hasattr(st.session_state, "undo_listener"):
+    undo_js = """
+    <input type="hidden" id="undo-input" value="">
     <script>
       document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z') {
           e.preventDefault();
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.style.position = 'absolute';
-          input.style.left = '-1000px';
-          document.body.appendChild(input);
+          const input = document.getElementById('undo-input');
           input.value = 'undo';
           input.dispatchEvent(new Event('input', { bubbles: true }));
-          setTimeout(() => document.body.removeChild(input), 100);
         }
       });
     </script>
     """
-    st.markdown(hotkey_js, unsafe_allow_html=True)
-    st.session_state.hotkey_installed = True
+    st.markdown(undo_js, unsafe_allow_html=True)
+    st.session_state.undo_listener = True
 
 # Handle Ctrl+Z
-if st.session_state.undo_key == "undo":
+if st.session_state.undo_signal == "undo":
     undo_last()
-    st.session_state.undo_key = None
+    st.session_state.undo_signal = None
     st.rerun()
 
 st.markdown("""
@@ -300,8 +277,19 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .card-row { display: flex; align-items: stretch; gap: 4px; margin-bottom: 6px; }
-    .trash-col { flex: 0 0 28px; display: flex; align-items: center; justify-content: center; }
+    .card-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 100%;
+        margin-bottom: 6px;
+    }
+    .trash-col {
+        flex: 0 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .card-col { flex: 1; }
     .trash-btn {
         background: #ff4444 !important;
@@ -493,7 +481,7 @@ if st.session_state.initialized:
                 # Layout: X + Card in flex row
                 col_trash, col_card = st.columns([0.08, 1], gap="small")
                 with col_trash:
-                    if st.button("X", key=trash_key, help="Delete match"):
+                    if st.button("X", key=trash_key):
                         remove_match(b["bout_num"])
                         st.rerun()
                 with col_card:
@@ -523,7 +511,7 @@ if st.session_state.initialized:
         st.markdown("---")
         col_undo, _ = st.columns([0.2, 0.8])
         with col_undo:
-            if st.button("Undo (Ctrl+Z)", type="primary"):
+            if st.button("Undo (Ctrl+Z)"):
                 undo_last()
                 st.rerun()
 
