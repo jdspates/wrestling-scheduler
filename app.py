@@ -55,9 +55,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "delete_signal"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -264,7 +264,7 @@ st.markdown("""
     .drag-card:active { opacity:0.7; }
 
     /* CONTEXT MENU */
-    #global-context-menu {
+    #context-menu {
         position: fixed;
         background: white;
         border: 1px solid #ccc;
@@ -275,7 +275,7 @@ st.markdown("""
         display: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    #global-context-menu button {
+    #context-menu button {
         width: 100%;
         text-align: left;
         padding: 8px 16px;
@@ -284,11 +284,55 @@ st.markdown("""
         cursor: pointer;
         font-size: 0.9rem;
     }
-    #global-context-menu button:hover {
+    #context-menu button:hover {
         background: #f0f0f0;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
+if not hasattr(st.session_state, "delete_component_rendered"):
+    delete_global_js = """
+    <input type="hidden" id="delete-signal" value="">
+    <div id="context-menu">
+      <button id="delete-btn">Delete Match</button>
+    </div>
+    <script>
+      let targetBout = null;
+      const menu = document.getElementById('context-menu');
+      const input = document.getElementById('delete-signal');
+      const btn = document.getElementById('delete-btn');
+
+      document.addEventListener('contextmenu', e => {
+        const card = e.target.closest('[data-bout]');
+        if (card) {
+          e.preventDefault();
+          targetBout = card.getAttribute('data-bout');
+          menu.style.display = 'block';
+          menu.style.left = e.pageX + 'px';
+          menu.style.top = e.pageY + 'px';
+        }
+      });
+
+      btn.addEventListener('click', () => {
+        if (targetBout) {
+          input.value = targetBout;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        menu.style.display = 'none';
+      });
+
+      document.addEventListener('click', () => menu.style.display = 'none');
+    </script>
+    """
+    st.session_state.delete_signal = components.html(delete_global_js, height=0)
+    st.session_state.delete_component_rendered = True
+
+# Handle delete
+if st.session_state.delete_signal and isinstance(st.session_state.delete_signal, str) and st.session_state.delete_signal.isdigit():
+    remove_match(int(st.session_state.delete_signal))
+    st.session_state.delete_signal = None
+    st.rerun()
 
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
@@ -438,46 +482,6 @@ if st.session_state.initialized:
             st.rerun()
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
-
-    # ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
-    if not hasattr(st.session_state, "delete_component_rendered"):
-        delete_global_js = """
-        <div id="global-delete-comp">
-          <div id="global-context-menu">
-            <button id="delete-match-btn">Delete Match</button>
-          </div>
-          <script>
-            let targetBout = null;
-            const menu = document.getElementById('global-context-menu');
-            const btn = document.getElementById('delete-match-btn');
-            document.addEventListener('contextmenu', e => {
-              const card = e.target.closest('[data-bout]');
-              if (card) {
-                e.preventDefault();
-                targetBout = card.getAttribute('data-bout');
-                menu.style.display = 'block';
-                menu.style.left = e.pageX + 'px';
-                menu.style.top = e.pageY + 'px';
-              }
-            });
-            btn.addEventListener('click', () => {
-              if (targetBout) {
-                Streamlit.setComponentValue(targetBout);
-              }
-              menu.style.display = 'none';
-            });
-            document.addEventListener('click', () => menu.style.display = 'none');
-          </script>
-        </div>
-        """
-        delete_result = components.html(delete_global_js, height=0)
-        st.session_state.delete_component_rendered = True
-    else:
-        delete_result = None
-
-    if delete_result and isinstance(delete_result, str) and delete_result.isdigit():
-        remove_match(int(delete_result))
-        st.rerun()
 
     # ---- MAT PREVIEWS – DRAG ONLY ----
     st.subheader("Mat Previews")
