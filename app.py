@@ -244,7 +244,7 @@ def generate_mat_schedule(bout_list, gap=4):
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
             l2 = last_slot.get(b["w2_id"], -100)
-            if l 1 < 0 and l2 < 0:
+            if l1 < 0 and l2 < 0:
                 first_early = b
                 break
         if first_early:
@@ -533,3 +533,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
