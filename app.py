@@ -1,4 +1,4 @@
-# app.py – FINAL: NO ERRORS + SUGGESTIONS + RED TRASH ON RIGHT
+# app.py – FINAL: RED TRASH ON RIGHT + SUGGESTIONS + DRAG + SCROLL
 import streamlit as st
 import pandas as pd
 import io
@@ -53,7 +53,7 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# SESSION STATE – FIXED LINE
+# SESSION STATE
 # ----------------------------------------------------------------------
 for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
     if key not in st.session_state:
@@ -123,7 +123,7 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
-    valid = [b for b in bout_list if b["manual"] != "Removed"]
+    valid = [b and b["manual"] != "Removed" for b in bout_list]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
     per_mat = len(valid) // CONFIG["NUM_MATS"]
     extra = len(valid) % CONFIG["NUM_MATS"]
@@ -249,6 +249,7 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
+# ---- FIXED CSS: RED TRASH ON RIGHT ----
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -273,10 +274,10 @@ st.markdown("""
     .remove-btn {
         background:none; border:none; cursor:pointer; padding:0;
         width:36px; height:36px; display:flex; align-items:center; justify-content:center;
-        color:#ff4d4f;
+        color:#ff4d4f !important;
     }
-    .remove-btn:hover { color:#d4380d; }
-    .remove-btn svg { width:20px; height:20px; fill:currentColor; }
+    .remove-btn:hover { color:#d4380d !important; }
+    .remove-btn svg { width:20px; height:20px; fill:currentColor !important; }
 </style>
 """, unsafe_allow_html=True)
 
