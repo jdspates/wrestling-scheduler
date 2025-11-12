@@ -1,4 +1,4 @@
-# app.py – FINAL: CARDS ONLY + FULL UNDO + NO HTML ESCAPING + SCORE AFTER BOTH
+# app.py – FINAL: NO HTML ESCAPING + FULL UNDO + CARDS ONLY
 import streamlit as st
 import pandas as pd
 import io
@@ -12,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
+import streamlit.components.v1 as components  # THIS IS THE KEY
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -104,7 +105,7 @@ for i in range(5):
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
-    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
+    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFFERENCE"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
     CONFIG.update({
         "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
@@ -420,72 +421,60 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
 
-            # --- RENDER CARDS (HTML ONLY) ---
-            card_container = st.container()
-            with card_container:
-                for r in rows:
-                    bg = "#fff3cd" if r["Early?"] else "#ffffff"
-                    left_html = f"""
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                            <div style="font-weight:600;">{r['Wrestler 1']}</div>
-                            <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
-                        </div>
-                    """
-                    right_html = f"""
-                        <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                            <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                            <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
-                            <div style="font-weight:600;">{r['Wrestler 2']}</div>
-                        </div>
-                    """
-                    st.markdown(
-                        f"""
-                        <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
-                                    display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <div style="display:flex;flex-direction:column;">
-                                <div style="display:flex;align-items:center;gap:12px;">
-                                    {left_html}
-                                    <div style="font-weight:700;margin-left:12px;color:#333;">vs</div>
-                                    {right_html}
-                                </div>
-                                <div style="font-size:0.85rem;color:#555;margin-top:6px;">
-                                    Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
-                                </div>
+            # --- RENDER CARDS USING components.html() ---
+            for r in rows:
+                bg = "#fff3cd" if r["Early?"] else "#ffffff"
+                html_content = f"""
+                <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
+                            display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <div style="display:flex;flex-direction:column;">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                                <div style="font-weight:600;">{r['Wrestler 1']}</div>
+                                <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
+                            </div>
+                            <div style="font-weight:700;margin-left:12px;color:#333;">vs</div>
+                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                                <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                                <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
+                                <div style="font-weight:600;">{r['Wrestler 2']}</div>
                             </div>
                         </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                        <div style="font-size:0.85rem;color:#555;margin-top:6px;">
+                            Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
+                        </div>
+                    </div>
+                </div>
+                """
+                components.html(html_content, height=80, scrolling=False)
 
-            # --- RENDER BUTTONS BELOW (SEPARATE CONTAINER) ---
-            button_container = st.container()
-            with button_container:
-                for idx, r in enumerate(rows):
-                    cols = st.columns([1,1,1,8])
-                    if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
-                        if idx > 0:
-                            st.session_state.mat_schedules = swap_schedule_positions(
-                                st.session_state.mat_schedules, mat, idx, idx-1)
-                            st.rerun()
-                    if cols[1].button("Down", key=f"down_mat{mat}_idx{idx}"):
-                        if idx < len(rows)-1:
-                            st.session_state.mat_schedules = swap_schedule_positions(
-                                st.session_state.mat_schedules, mat, idx, idx+1)
-                            st.rerun()
-                    if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
-                        bout_num = r["bout_num"]
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
-                        b["manual"] = "Removed"
-                        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-                        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-                        if w2 in w1["matches"]: w1["matches"].remove(w2)
-                        if w1 in w2["matches"]: w2["matches"].remove(w1)
-                        st.session_state.undo_stack.append(bout_num)
-                        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-                        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                        st.success("Match removed.")
+            # --- RENDER BUTTONS BELOW ---
+            for idx, r in enumerate(rows):
+                cols = st.columns([1,1,1,8])
+                if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
+                    if idx > 0:
+                        st.session_state.mat_schedules = swap_schedule_positions(
+                            st.session_state.mat_schedules, mat, idx, idx-1)
                         st.rerun()
+                if cols[1].button("Down", key=f"down_mat{mat}_idx{idx}"):
+                    if idx < len(rows)-1:
+                        st.session_state.mat_schedules = swap_schedule_positions(
+                            st.session_state.mat_schedules, mat, idx, idx+1)
+                        st.rerun()
+                if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
+                    bout_num = r["bout_num"]
+                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
+                    b["manual"] = "Removed"
+                    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+                    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+                    if w2 in w1["matches"]: w1["matches"].remove(w2)
+                    if w1 in w2["matches"]: w2["matches"].remove(w1)
+                    st.session_state.undo_stack.append(bout_num)
+                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                    st.success("Match removed.")
+                    st.rerun()
 
     # --- UNDO ---
     if st.session_state.undo_stack:
