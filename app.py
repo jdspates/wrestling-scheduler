@@ -1,4 +1,4 @@
-# app.py – FINAL: TIGHT CARDS + WORKING BUTTONS + FULL UNDO + NO ERRORS
+# app.py – FINAL: TIGHT CARDS + WORKING BUTTONS + FULL UNDO + NORMAL PAGE PADDING
 import streamlit as st
 import pandas as pd
 import io
@@ -76,7 +76,8 @@ def is_compatible(w1, w2):
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
 
-def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+def max_weight_diff(w): 
+    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
@@ -263,15 +264,39 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# HIDE FORMS + REMOVE ALL GAPS
+# === BALANCED CSS: TIGHT CARDS + NORMAL PAGE PADDING ===
 st.markdown("""
 <style>
-    div[data-testid="stForm"] { display: none !important; }
-    div[data-testid="stExpander"] > div > div { padding: 0 !important; margin: 0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0 !important; padding: 0 !important; }
-    .block-container { padding: 1rem 0 !important; }
-    .css-1d391kg { padding: 0 !important; margin: 0 !important; }
-    [data-testid="stVerticalBlock"] { gap: 0 !important; }
+    /* Hide form submit buttons */
+    div[data-testid="stForm"] { 
+        display: none !important; 
+    }
+
+    /* Tight expanders and card spacing */
+    div[data-testid="stExpander"] > div > div { 
+        padding: 0 !important; 
+        margin: 0 !important; 
+    }
+    div[data-testid="stVerticalBlock"] > div { 
+        gap: 0.5rem !important; 
+    }
+
+    /* Restore normal page padding */
+    .block-container {
+        padding: 2rem 1rem !important;
+        max-width: 1200px !important;
+        margin: 0 auto !important;
+    }
+    .main .block-container {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+
+    /* Fix title clipping */
+    h1 { 
+        margin-top: 0 !important; 
+        padding-top: 0 !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -341,7 +366,6 @@ for i in range(5):
     )
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
-
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
@@ -351,7 +375,6 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
         "MIN_WEIGHT_DIFF": new_min_weight
     })
     changed = True
-
 st.sidebar.markdown("---")
 if st.sidebar.button("Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
@@ -364,7 +387,6 @@ if changed:
         json.dump(CONFIG, f, indent=4)
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
-
 TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS}
 
@@ -410,7 +432,7 @@ if st.session_state.initialized:
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
-                w, o = s["_w"], s["_o"]
+                w, o = s["w"], s["_o"]
                 if o not in w["matches"]: w["matches"].append(o)
                 if w not in o["matches"]: o["matches"].append(w)
                 st.session_state.bout_list.append({
@@ -436,7 +458,6 @@ if st.session_state.initialized:
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
-
         with st.expander(f"Mat {mat}", expanded=True):
             rows = []
             for m in bouts:
@@ -453,21 +474,17 @@ if st.session_state.initialized:
                     "Score": f"{b['score']:.1f}",
                     "bout_num": b["bout_num"]
                 })
-
             for idx, r in enumerate(rows):
                 bg = "#fff3cd" if r["Early?"] else "#ffffff"
                 up_key = f"up_mat{mat}_idx{idx}"
                 down_key = f"down_mat{mat}_idx{idx}"
                 remove_key = f"remove_mat{mat}_idx{idx}"
-
                 up_submit = f"submit_up_{up_key}"
                 down_submit = f"submit_down_{down_key}"
                 remove_submit = f"submit_remove_{remove_key}"
-
                 up_js = f"document.getElementById('{up_submit}').click();"
                 down_js = f"document.getElementById('{down_submit}').click();"
                 remove_js = f"document.getElementById('{remove_submit}').click();"
-
                 html_content = f"""
                 <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
                             display:flex;justify-content:space-between;align-items:center;
@@ -480,7 +497,7 @@ if st.session_state.initialized:
                                 <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
                             </div>
                             <div style="font-weight:700;color:#333;">vs</div>
-                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                            <div style="display:flex:flex-direction:row-reverse;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
                                 <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
                                 <div style="font-weight:600;font-size:1rem;">{r['Wrestler 2']}</div>
@@ -491,15 +508,15 @@ if st.session_state.initialized:
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;">
-                        <button onclick="{up_js}" 
+                        <button onclick="{up_js}"
                                 style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
                             Up
                         </button>
-                        <button onclick="{down_js}" 
+                        <button onclick="{down_js}"
                                 style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#f0f2f6;cursor:pointer;">
                             Down
                         </button>
-                        <button onclick="{remove_js}" 
+                        <button onclick="{remove_js}"
                                 style="padding:6px 10px;font-size:0.8rem;border:1px solid #ccc;border-radius:4px;background:#ffd6cc;cursor:pointer;">
                             Remove
                         </button>
@@ -507,7 +524,6 @@ if st.session_state.initialized:
                 </div>
                 """
                 components.html(html_content, height=90, scrolling=False)
-
                 # Hidden forms with on_click
                 with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
                     st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i-1) if i > 0 else None, key=up_submit)
@@ -515,7 +531,6 @@ if st.session_state.initialized:
                     st.form_submit_button(label="", on_click=lambda i=idx, m=mat: swap_schedule_positions(st.session_state.mat_schedules, m, i, i+1) if i < len(rows)-1 else None, key=down_submit)
                 with st.form(key=f"form_remove_{remove_key}", clear_on_submit=True):
                     st.form_submit_button(label="", on_click=lambda bn=r["bout_num"]: remove_match(bn), key=remove_submit)
-
                 # Trigger rerun on any action
                 if st.session_state.get(up_submit, False) or \
                    st.session_state.get(down_submit, False) or \
