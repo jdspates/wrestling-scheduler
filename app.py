@@ -1,4 +1,4 @@
-# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + ALL FEATURES
+# app.py – FINAL: RIGHT-CLICK DELETE + UNDO + NO CRASH ON IMPORT
 import streamlit as st
 import pandas as pd
 import io
@@ -81,24 +81,25 @@ def generate_initial_matchups(active):
             added = False
             random.shuffle(group)
             for w in group:
-                if len(w["matches"]) >= CONFIG["MAX_MATCHES"]: continue
+                if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]: continue
                 opps = [o for o in active
-                        if o != w and o not in w["matches"]
-                        and len(o["matches"]) < CONFIG["MAX_MATCHES"]
+                        if o["id"] not in w["match_ids"]
+                        and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
                         and abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                         and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
-                w["matches"].append(best)
-                best["matches"].append(w)
+                w["match_ids"].append(best["id"])
+                best["match_ids"].append(w["id"])
                 bouts.add(frozenset({w["id"], best["id"]}))
                 added = True
                 break
             if not added: break
     bout_list = []
     for idx, b in enumerate(bouts, 1):
-        w1, w2 = (next(w for w in active if w["id"] == i) for i in b)
+        w1 = next(w for w in active if w["id"] == list(b)[0])
+        w2 = next(w for w in active if w["id"] == list(b)[1])
         bout_list.append({
             "bout_num": idx, "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
             "w1_level": w1["level"], "w1_weight": w1["weight"], "w1_grade": w1["grade"], "w1_early": w1["early"],
@@ -110,18 +111,18 @@ def generate_initial_matchups(active):
     return bout_list
 
 def build_suggestions(active, bout_list):
-    under = [w for w in active if len(w["matches"]) < CONFIG["MIN_MATCHES"]]
+    under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
     for w in under:
-        opps = [o for o in active if o != w and o not in w["matches"]]
-        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o) <= CONFIG["MAX_LEVEL_DIFF"]]
-        if not opps: opps = [o for o in active if o != w and o not in w["matches"]]
+        opps = [o for o in active if o["id"] not in w["match_ids"]]
+        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
+        if not opps: opps = [o for o in active if o["id"] not in w["match_ids"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
                 "wrestler": w["name"], "team": w["team"], "level": w["level"], "weight": w["weight"],
-                "current": len(w["matches"]), "vs": o["name"], "vs_team": o["team"],
+                "current": len(w["match_ids"]), "vs": o["name"], "vs_team": o["team"],
                 "vs_level": o["level"], "vs_weight": o["weight"], "score": matchup_score(w, o),
-                "_w": w, "_o": o
+                "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
 
@@ -149,7 +150,7 @@ def generate_mat_schedule(bout_list, gap=4):
         first_early = None
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
-            l2 = last_slot.get(b["w2_id"], - 100)
+            l2 = last_slot.get(b["w2_id"], -100)
             if l1 < 0 and l2 < 0:
                 first_early = b
                 break
@@ -240,8 +241,8 @@ def remove_match(bout_num):
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
     w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-    if w2 in w1["matches"]: w1["matches"].remove(w2)
-    if w1 in w2["matches"]: w2["matches"].remove(w1)
+    if b["w2_id"] in w1["match_ids"]: w1["match_ids"].remove(b["w2_id"])
+    if b["w1_id"] in w2["match_ids"]: w2["match_ids"].remove(b["w1_id"])
     st.session_state.undo_stack.append(bout_num)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -284,7 +285,7 @@ if uploaded and not st.session_state.initialized:
             w["weight"] = float(w["weight"])
             w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
             w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
-            w["matches"] = []
+            w["match_ids"] = []  # Store only IDs
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -358,14 +359,16 @@ if st.session_state.initialized:
     if st.session_state.suggestions:
         sugg_data = []
         for i, s in enumerate(st.session_state.suggestions):
+            w = next(w for w in st.session_state.active if w["id"] == s["_w_id"])
+            o = next(o for o in st.session_state.active if o["id"] == s["_o_id"])
             sugg_data.append({
                 "Add": False,
-                "Wrestler": f"{s['wrestler']} ({s['team']})",
-                "Lvl": f"{s['level']:.1f}",
-                "Wt": f"{s['weight']:.0f}",
-                "vs": f"{s['vs']} ({s['vs_team']})",
-                "vs_Lvl": f"{s['vs_level']:.1f}",
-                "vs_Wt": f"{s['vs_weight']:.0f}",
+                "Wrestler": f"{w['name']} ({w['team']})",
+                "Lvl": f"{w['level']:.1f}",
+                "Wt": f"{w['weight']:.0f}",
+                "vs": f"{o['name']} ({o['team']})",
+                "vs_Lvl": f"{o['level']:.1f}",
+                "vs_Wt": f"{o['weight']:.0f}",
                 "Score": f"{s['score']:.1f}",
                 "idx": i
             })
@@ -391,9 +394,10 @@ if st.session_state.initialized:
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
-                w, o = s["_w"], s["_o"]
-                if o not in w["matches"]: w["matches"].append(o)
-                if w not in o["matches"]: o["matches"].append(w)
+                w = next(w for w in st.session_state.active if w["id"] == s["_w_id"])
+                o = next(o for o in st.session_state.active if o["id"] == s["_o_id"])
+                if o["id"] not in w["match_ids"]: w["match_ids"].append(o["id"])
+                if w["id"] not in o["match_ids"]: o["match_ids"].append(w["id"])
                 st.session_state.bout_list.append({
                     "bout_num": len(st.session_state.bout_list)+1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
@@ -454,11 +458,10 @@ if st.session_state.initialized:
             delete_js = f"""
             <div id="delete-comp-{mat}">
               <script>
-                let target = null;
                 document.querySelectorAll('[data-bout]').forEach(el => {{
                   el.oncontextmenu = e => {{
                     e.preventDefault();
-                    target = el.getAttribute('data-bout');
+                    const bout = el.getAttribute('data-bout');
                     const menu = document.createElement('div');
                     menu.style.position = 'fixed';
                     menu.style.left = e.pageX + 'px';
@@ -471,7 +474,7 @@ if st.session_state.initialized:
                     menu.style.zIndex = '9999';
                     menu.innerHTML = '<button style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:0.9rem;">Delete Match</button>';
                     menu.onclick = () => {{
-                      Streamlit.setComponentValue(target);
+                      Streamlit.setComponentValue(bout);
                       document.body.removeChild(menu);
                     }};
                     document.body.appendChild(menu);
@@ -546,8 +549,8 @@ if st.session_state.initialized:
             b["manual"] = ""
             w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
             w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-            if w2 not in w1["matches"]: w1["matches"].append(w2)
-            if w1 not in w2["matches"]: w2["matches"].append(w1)
+            if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
+            if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.success("Undo successful!")
