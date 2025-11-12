@@ -1,4 +1,4 @@
-# app.py - FINAL: MAT SORTING + HIDDEN bout_num + PDF UNDER EXCEL + ALL FIXES
+# app.py - FINAL: MAT SORTING FIXED + PDF UNDER EXCEL + ALL FIXES
 import streamlit as st
 import pandas as pd
 import io
@@ -181,7 +181,7 @@ def generate_initial_matchups(active):
             "w1_level": w1["level"], "w1_weight": w1["weight"], "w1_grade": w1["grade"], "w1_early": w1["early"],
             "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
             "w2_level": w2["level"], "w2_weight": w2["weight"], "w2_grade": w2["grade"], "w2_early": w2["early"],
-            "score": matchup_score(w1, w2), "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+            "score": matchup_score(w and w1, w2), "avg_weight": (w1["weight"] + w2["weight"]) / 2,
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
@@ -203,16 +203,23 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
+    # STEP 1: Get only non-removed bouts
     valid = [b for b in bout_list if b["manual"] != "Removed"]
-    sorted_b = sorted(valid, key=lambda x: x["avg_weight"])  # Sort by avg_weight
-    per_mat = len(sorted_b) // CONFIG["NUM_MATS"]
-    extra = len(sorted_b) % CONFIG["NUM_MATS"]
+    
+    # STEP 2: SORT ALL valid bouts by avg_weight (lightest first)
+    valid = sorted(valid, key=lambda x: x["avg_weight"])
+    
+    # STEP 3: Divide into mats (Mat 1 = lightest, Mat 4 = heaviest)
+    per_mat = len(valid) // CONFIG["NUM_MATS"]
+    extra = len(valid) % CONFIG["NUM_MATS"]
     mats = []
     start = 0
     for i in range(CONFIG["NUM_MATS"]):
         end = start + per_mat + (1 if i < extra else 0)
-        mats.append(sorted_b[start:end])
+        mats.append(valid[start:end])
         start = end
+
+    # STEP 4: Schedule within each mat (early matches first half, gap logic)
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
@@ -223,6 +230,8 @@ def generate_mat_schedule(bout_list, gap=4):
         slot = 1
         scheduled = []
         first_half_wrestlers = set()
+
+        # Place first early match if possible
         first_early = None
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
@@ -237,6 +246,8 @@ def generate_mat_schedule(bout_list, gap=4):
             last_slot[first_early["w2_id"]] = 1
             first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
             slot = 2
+
+        # Fill first half with early bouts
         while early_bouts and len(scheduled) < first_half_end:
             best = None
             best_score = -float("inf")
@@ -257,6 +268,8 @@ def generate_mat_schedule(bout_list, gap=4):
             last_slot[best["w2_id"]] = slot
             first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
             slot += 1
+
+        # Fill remaining slots
         remaining = non_early_bouts + early_bouts
         while remaining:
             best = None
@@ -269,24 +282,34 @@ def generate_mat_schedule(bout_list, gap=4):
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
-            if best is None: best = remaining[0]
+            if best is None:
+                best = remaining[0]
             remaining.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
             last_slot[best["w2_id"]] = slot
             slot += 1
+
+        # Add to schedule
         for s, b in scheduled:
             schedules.append({
-                "mat": mat_num, "slot": s, "bout_num": b["bout_num"],
+                "mat": mat_num,
+                "slot": s,
+                "bout_num": b["bout_num"],
                 "w1": f"{b['w1_name']} ({b['w1_team']})",
                 "w2": f"{b['w2_name']} ({b['w2_team']})",
-                "w1_team": b["w1_team"], "w2_team": b["w2_team"], "is_early": b["is_early"]
+                "w1_team": b["w1_team"],
+                "w2_team": b["w2_team"],
+                "is_early": b["is_early"]
             })
+
+    # Assign mat_bout_num
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [m for m in schedules if m["mat"] == mat_num]
         mat_entries.sort(key=lambda x: x["slot"])
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
+
     return schedules
 
 # ----------------------------------------------------------------------
@@ -381,7 +404,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS (bout_num hidden but preserved) -----
+    # ----- MAT PREVIEWS (bout_num hidden) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -400,10 +423,10 @@ if st.session_state.initialized:
                 "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
-                "bout_num": b["bout_num"]  # Keep for sorting
+                "bout_num": b["bout_num"]
             })
         full_df = pd.DataFrame(rows)
-        display_df = full_df.drop(columns=["bout_num"])  # Remove from display
+        display_df = full_df.drop(columns=["bout_num"])
 
         with st.expander(f"Mat {mat}", expanded=True):
             column_config = {
