@@ -1,4 +1,4 @@
-# app.py - FINAL: SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS + fire + COLORED DOTS
+# app.py - FINAL: FIXED SYNTAX + SIDE-BY-SIDE DOWNLOAD + NO EMOJI + MEET SETTINGS + HIDDEN COLS
 import streamlit as st
 import pandas as pd
 import io
@@ -284,15 +284,27 @@ if st.session_state.initialized:
             to_add = [st.session_state.suggestions[full_df.iloc[r.name]["idx"]] for _, r in edited.iterrows() if r["Add"]]
             for s in to_add:
                 w, o = s["_w"], s["_o"]
-                for p in [(w,o), (o,w)]: if p[1] not in p[0]["matches"]: p[0]["matches"].append(p[1])
-                st.session_state.bout_list.append({**{k: w[k] for k in ["id","name","team","level","weight","grade","early"]},
-                                                   "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
-                                                   "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
-                                                   "bout_num": len(st.session_state.bout_list)+1, "score": s["score"],
-                                                   "avg_weight": (w["weight"]+o["weight"])/2, "is_early": w["early"] or o["early"], "manual": "Yes"})
+                # FIXED: Add both directions safely
+                if o not in w["matches"]:
+                    w["matches"].append(o)
+                if w not in o["matches"]:
+                    o["matches"].append(w)
+                # Add bout
+                st.session_state.bout_list.append({
+                    "bout_num": len(st.session_state.bout_list) + 1,
+                    "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
+                    "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
+                    "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
+                    "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
+                    "score": s["score"],
+                    "avg_weight": (w["weight"] + o["weight"]) / 2,
+                    "is_early": w["early"] or o["early"],
+                    "manual": "Yes"
+                })
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-            st.success("Added!"); st.rerun()
+            st.success("Matches added!")
+            st.rerun()
     else:
         st.info("All wrestlers have enough matches.")
 
@@ -391,8 +403,8 @@ if st.session_state.initialized:
         doc.build(elements)
         pdf_bytes = buf.getvalue()
 
-        # **SIDE-BY-SIDE DOWNLOAD BUTTONS**
-        st.markdown("<br>", unsafe_allow_html=True)  # force new line
+        # SIDE-BY-SIDE DOWNLOAD BUTTONS
+        st.markdown("<br>", unsafe_allow_html=True)
         col1, col2 = st.columns([1, 1])
         with col1:
             st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
