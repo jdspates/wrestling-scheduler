@@ -60,13 +60,16 @@ for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active"
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
-def max_weight_diff(w): return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
+def max_weight_diff(w): 
+    return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
@@ -78,21 +81,24 @@ def generate_initial_matchups(active):
             added = False
             random.shuffle(group)
             for w in group:
-                if len(w["matches"]) >= CONFIG["MAX_MATCHES"]: continue
+                if len(w["matches"]) >= CONFIG["MAX_MATCHES"]: 
+                    continue
                 opps = [o for o in active
                         if o != w and o not in w["matches"]
                         and len(o["matches"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
                         and abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                         and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
-                if not opps: continue
+                if not opps: 
+                    continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
                 w["matches"].append(best)
                 best["matches"].append(w)
                 bouts.add(frozenset({w["id"], best["id"]}))
                 added = True
                 break
-            if not added: break
+            if not added: 
+                break
     bout_list = []
     for idx, b in enumerate(bouts, 1):
         w1, w2 = (next(w for w in active if w["id"] == i) for i in b)
@@ -112,7 +118,8 @@ def build_suggestions(active, bout_list):
     for w in under:
         opps = [o for o in active if o != w and o not in w["matches"]]
         opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
-        if not opps: opps = [o for o in active if o != w and o not in w["matches"]]
+        if not opps: 
+            opps = [o for o in active if o != w and o not in w["matches"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
                 "wrestler": w["name"], "team": w["team"], "level": w["level"], "weight": w["weight"],
@@ -162,15 +169,18 @@ def generate_mat_schedule(bout_list, gap=4):
             best = None
             best_score = -float("inf")
             for b in early_bouts:
-                if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
+                if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: 
+                    continue
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - 1 or l2 >= slot - 1: continue
+                if l1 >= slot - 1 or l2 >= slot - 1: 
+                    continue
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
                     best = b
-            if best is None: break
+            if best is None: 
+                break
             early_bouts.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
@@ -184,12 +194,14 @@ def generate_mat_schedule(bout_list, gap=4):
             for b in remaining:
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - gap or l2 >= slot - gap: continue
+                if l1 >= slot - gap or l2 >= slot - gap: 
+                    continue
                 gap_val = min(slot - l1 - 1, slot - l2 - 1)
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
-            if best is None: best = remaining[0]
+            if best is None: 
+                best = remaining[0]
             remaining.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
@@ -238,8 +250,10 @@ def remove_match(bout_num):
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
     w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-    if w2 in w1["matches"]: w1["matches"].remove(w2)
-    if w1 in w2["matches"]: w2["matches"].remove(w1)
+    if w2 in w1["matches"]: 
+        w1["matches"].remove(w2)
+    if w1 in w2["matches"]: 
+        w2["matches"].remove(w1)
     st.session_state.undo_stack.append(bout_num)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -250,7 +264,7 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- CLEAN CSS: RED TRASH ON RIGHT + CARD LOOK ----
+# ---- FINAL CSS: RED TRASH ON RIGHT + CLEAN CARDS ----
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -261,28 +275,50 @@ st.markdown("""
 
     /* CARD + TRASH ON SAME LINE */
     .drag-card {
-        margin: 0 !important; cursor: move; user-select: none;
-        display: flex; align-items: center; gap: 8px; padding: 4px 0;
+        margin: 0 !important;
+        cursor: move;
+        user-select: none;
+        display: flex !important;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 0;
+        background: transparent;
     }
     .drag-card:active { opacity: 0.7; }
 
     .card-content {
         flex: 1;
-        background: #fff;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 14px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* RED TRASH ICON */
+    /* RED TRASH ICON — ALWAYS VISIBLE */
     .remove-btn {
-        background: none; border: none; cursor: pointer; padding: 0;
-        width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+        background: none !important;
+        border: none !important;
+        cursor: pointer;
+        padding: 0 !important;
+        width: 40px;
+        height: 40px;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
         color: #ff4d4f !important;
+        flex-shrink: 0;
     }
-    .remove-btn:hover { color: #d4380d !important; }
-    .remove-btn svg { width: 20px; height: 20px; fill: currentColor !important; }
+    .remove-btn:hover {
+        color: #d4380d !important;
+        transform: scale(1.1);
+    }
+    .remove-btn svg {
+        width: 22px;
+        height: 22px;
+        fill: currentColor !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -316,7 +352,7 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error: {e}")
 
-# ---- SETTINGS (unchanged) ----
+# ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
@@ -375,7 +411,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]][0] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS – FULLY RESTORED ----
+    # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -432,7 +468,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ON RIGHT + CLEAN CARDS ----
+    # ---- MAT PREVIEWS – RED TRASH ON RIGHT ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -443,7 +479,6 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # ---- Build cards with RED TRASH on right ----
             cards_html = ""
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -453,20 +488,20 @@ if st.session_state.initialized:
                 cards_html += f'''
                 <div class="drag-card" id="card-{idx}" draggable="true">
                     <div class="card-content" style="background:{bg};">
-                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-                            <div style="display:flex;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
-                                <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div style="width:12px; height:12px; background:{w1_color}; border-radius:3px; border:1px solid #ccc;"></div>
+                                <div style="font-weight:600; font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
+                                <div style="font-size:0.85rem; color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
                             </div>
-                            <div style="font-weight:700;color:#333;">vs</div>
-                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                                <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
-                                <div style="font-size:0.85rem;color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
-                                <div style="font-weight:600;font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
+                            <div style="font-weight:700; color:#333;">vs</div>
+                            <div style="display:flex; flex-direction:row-reverse; align-items:center; gap:10px;">
+                                <div style="width:12px; height:12px; background:{w2_color}; border-radius:3px; border:1px solid #ccc;"></div>
+                                <div style="font-size:0.85rem; color:#444;">{b["w2_grade"]} / {b["w2_level"]:.1f} / {b["w2_weight"]:.0f}</div>
+                                <div style="font-weight:600; font-size:1rem;">{b["w2_name"]} ({b["w2_team"]})</div>
                             </div>
                         </div>
-                        <div style="font-size:0.8rem;color:#555;">
+                        <div style="font-size:0.8rem; color:#555;">
                             Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
                         </div>
                     </div>
@@ -479,7 +514,6 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- Drag + Remove component ----
             drag_js = f"""
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
@@ -530,7 +564,6 @@ if st.session_state.initialized:
 
             result = components.html(drag_js, height=520)
 
-            # ---- Handle REMOVE or REORDER ----
             if result and isinstance(result, dict):
                 if "remove" in result:
                     remove_match(result["remove"])
@@ -546,8 +579,71 @@ if st.session_state.initialized:
     if rerun_needed:
         st.rerun()
 
-    # ---- UNDO, GENERATE MEET (unchanged) ----
-    # ... (same as before) ...
+    # ---- UNDO ----
+    if st.session_state.undo_stack:
+        st.markdown("---")
+        label = f"Undo ({len(st.session_state.undo_stack)})" if len(st.session_state.undo_stack) > 1 else "Undo Last Removal"
+        if st.button(label, type="primary"):
+            bout_num = st.session_state.undo_stack.pop()
+            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
+            b["manual"] = ""
+            w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+            w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+            if w2 not in w1["matches"]: w1["matches"].append(w2)
+            if w1 not in w2["matches"]: w2["matches"].append(w1)
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.success("Undo successful!")
+            st.rerun()
+
+    # ---- GENERATE MEET ----
+    if st.button("Generate Meet", type="primary"):
+        out = io.BytesIO()
+        with pd.ExcelWriter(out, engine="openpyxl") as writer:
+            pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
+            for m in range(1, CONFIG["NUM_MATS"]+1):
+                data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
+                if not data:
+                    pd.DataFrame([["", "", ""]], columns=["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]).to_excel(writer, f"Mat {m}", index=False)
+                    continue
+                df = pd.DataFrame(data)[["mat_bout_num","w1","w2"]]
+                df.columns = ["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]
+                df.to_excel(writer, f"Mat {m}", index=False)
+                ws = writer.book[f"Mat {m}"]
+                fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                for i, _ in df.iterrows():
+                    if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
+                        for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
+        excel_bytes = out.getvalue()
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=letter); elements = []; styles = getSampleStyleSheet()
+        for m in range(1, CONFIG["NUM_MATS"]+1):
+            data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
+            if not data:
+                elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"])); elements.append(PageBreak()); continue
+            table = [["#","Wrestler 1","Wrestler 2"]]
+            for e in data:
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+                table.append([e["mat_bout_num"],
+                              Paragraph(f'<font color="{TEAM_COLORS.get(b["w1_team"],"#000")}"><b>{b["w1_name"]}</b></font> ({b["w1_team"]})', styles["Normal"]),
+                              Paragraph(f'<font color="{TEAM_COLORS.get(b["w2_team"],"#000")}"><b>{b["w2_name"]}</b></font> ({b["w2_team"]})', styles["Normal"])])
+            t = Table(table, colWidths=[0.5*inch, 3*inch, 3*inch])
+            s = TableStyle([("GRID",(0,0),(-1,-1),0.5,rl_colors.black),
+                            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+                            ("BACKGROUND",(0,0),(-1,0),rl_colors.lightgrey),
+                            ("ALIGN",(0,0),(-1,-1),"LEFT"),
+                            ("VALIGN",(0,0),(-1,-1),"MIDDLE")])
+            for r, _ in enumerate(table[1:], 1):
+                if next(b for b in st.session_state.bout_list if b["bout_num"] == data[r-1]["bout_num"])["is_early"]:
+                    s.add("BACKGROUND",(0,r),(-1,r),HexColor("#FFFF99"))
+            t.setStyle(s)
+            elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1,12), t]
+            if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
+        doc.build(elements)
+        pdf_bytes = buf.getvalue()
+        st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
