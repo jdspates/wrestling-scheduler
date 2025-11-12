@@ -1,4 +1,4 @@
-# app.py - FINAL: SETTINGS MENU + REAL EMOJIS + PDF COLORS + YELLOW EARLY
+# app.py - FINAL: 5 DYNAMIC TEAMS + EMOJI-ONLY DROPDOWNS + REAL EMOJIS IN TABLES
 import streamlit as st
 import pandas as pd
 import io
@@ -15,11 +15,22 @@ import os
 from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# CONFIG & SETTINGS
+# CONFIG & EMOJI MAP (real Unicode)
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 
-# Default configuration (used when config.json does not exist)
+EMOJI_MAP = {
+    "red circle": "red circle",
+    "blue circle": "blue circle",
+    "green circle": "green circle",
+    "yellow circle": "yellow circle",
+    "black circle": "black circle",
+    "white circle": "white circle",
+    "purple circle": "purple circle",
+    "orange circle": "orange circle"
+}
+
+# Default config if file missing
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
     "MAX_MATCHES": 4,
@@ -27,24 +38,16 @@ DEFAULT_CONFIG = {
     "MAX_LEVEL_DIFF": 1,
     "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
-    "TEAM_COLORS": {
-        "Stillwater": "#FF0000",
-        "Woodbury": "#0000FF",
-        "St. Thomas Academy": "#008000",
-        "Forest Lake": "#FFD700",
-        "Black Bears": "#000000"
-    },
-    # REAL UNICODE EMOJIS – copy-paste these exact characters
-    "TEAM_EMOJIS": {
-        "Stillwater": "red circle",           # red circle
-        "Woodbury": "blue circle",            # blue circle
-        "St. Thomas Academy": "green circle", # green circle
-        "Forest Lake": "yellow circle",       # yellow circle
-        "Black Bears": "black circle"         # black circle
-    }
+    "TEAMS": [
+        {"name": "", "color": "#FF0000", "emoji": "red circle"},
+        {"name": "", "color": "#0000FF", "emoji": "blue circle"},
+        {"name": "", "color": "#008000", "emoji": "green circle"},
+        {"name": "", "color": "#FFD700", "emoji": "yellow circle"},
+        {"name": "", "color": "#000000", "emoji": "black circle"}
+    ]
 }
 
-# Load existing config or create a new one
+# Load or create config
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "r") as f:
         CONFIG = json.load(f)
@@ -53,37 +56,56 @@ else:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 
+TEAMS = CONFIG["TEAMS"]
+
 # ----------------------------------------------------------------------
-# SETTINGS MENU (top of the page)
+# SETTINGS MENU – 5 DYNAMIC TEAM FIELDS + EMOJI-ONLY DROPDOWN
 # ----------------------------------------------------------------------
-st.sidebar.header("Team Emoji Settings")
-team_list = list(CONFIG["TEAM_COLORS"].keys())
-emoji_options = ["red circle", "blue circle", "green circle", "yellow circle", "black circle", "white circle", "purple circle", "orange circle"]
+st.sidebar.header("Team Settings")
 
 changed = False
-for team in team_list:
-    current = CONFIG["TEAM_EMOJIS"].get(team, "white circle")
-    col1, col2 = st.sidebar.columns([1, 3])
+for i in range(5):
+    team = TEAMS[i]
+    col1, col2 = st.sidebar.columns([1, 4])
+    
     with col1:
-        st.write(current)                     # show current emoji
+        current_emoji = EMOJI_MAP[team["emoji"]]
+        st.write(current_emoji)  # Show real emoji
+    
     with col2:
-        new_emoji = st.selectbox(
-            f"{team} emoji",
-            options=emoji_options,
-            index=emoji_options.index(current),
-            key=f"emoji_{team}"
+        new_name = st.text_input(
+            f"Team {i+1} Name",
+            value=team["name"],
+            key=f"name_{i}"
         )
-    if new_emoji != current:
-        CONFIG["TEAM_EMOJIS"][team] = new_emoji
+        new_emoji_key = st.selectbox(
+            "Color",
+            options=list(EMOJI_MAP.keys()),
+            format_func=lambda x: EMOJI_MAP[x],  # SHOW ONLY EMOJI
+            index=list(EMOJI_MAP.keys()).index(team["emoji"]),
+            key=f"emoji_{i}"
+        )
+    
+    if new_name != team["name"]:
+        team["name"] = new_name
+        changed = True
+    if new_emoji_key != team["emoji"]:
+        team["emoji"] = new_emoji_key
         changed = True
 
 if changed:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Settings saved! Refresh the page to see the new emojis.")
+    st.sidebar.success("Settings saved! Refresh to see changes.")
+    st.rerun()
+
+# Rebuild lookup dicts
+TEAM_NAMES = [t["name"] for t in TEAMS if t["name"].strip()]
+TEAM_COLORS = {t["name"]: t["color"] for t in TEAMS}
+TEAM_EMOJIS = {t["name"]: t["emoji"] for t in TEAMS}
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (unchanged except using CONFIG)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     if w1["team"] == w2["team"]: return False
@@ -337,8 +359,8 @@ if st.session_state.initialized:
         rows = []
         for m in mat_bouts:
             bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
-            e1 = CONFIG["TEAM_EMOJIS"].get(bout["w1_team"], "white circle")
-            e2 = CONFIG["TEAM_EMOJIS"].get(bout["w2_team"], "white circle")
+            e1 = EMOJI_MAP.get(TEAM_EMOJIS.get(bout["w1_team"], "white circle"), "white circle")
+            e2 = EMOJI_MAP.get(TEAM_EMOJIS.get(bout["w2_team"], "white circle"), "white circle")
             w1_str = f"{e1} {bout['w1_name']} ({bout['w1_team']})"
             w2_str = f"{e2} {bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
@@ -420,7 +442,7 @@ if st.session_state.initialized:
 
     # ----- EXCEL + PDF -----
     if st.button("Generate Meet", type="primary"):
-        # ---- EXCEL (yellow early rows) ----
+        # ---- EXCEL ----
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name="Matchups", index=False)
@@ -442,7 +464,7 @@ if st.session_state.initialized:
                             ws.cell(row=idx+2, column=col).fill = yellow_fill
         excel_bytes = output.getvalue()
 
-        # ---- PDF (team colors + yellow early) ----
+        # ---- PDF ----
         pdf_buffer = io.BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
         elements = []
@@ -456,8 +478,8 @@ if st.session_state.initialized:
             table_data = [["#","Wrestler 1","Wrestler 2"]]
             for e in data:
                 bout = next(b for b in st.session_state.bout_list if b["bout_num"] == e["bout_num"])
-                c1 = CONFIG["TEAM_COLORS"].get(bout["w1_team"], "#000000")
-                c2 = CONFIG["TEAM_COLORS"].get(bout["w2_team"], "#000000")
+                c1 = TEAM_COLORS.get(bout["w1_team"], "#000000")
+                c2 = TEAM_COLORS.get(bout["w2_team"], "#000000")
                 w1 = Paragraph(f'<font color="{c1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
                 w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])
                 table_data.append([e["mat_bout_num"], w1, w2])
