@@ -1,4 +1,4 @@
-# app.py - FINAL: COLORED DOT ONLY + COLOR NAME DROPDOWN + NO ERRORS
+# app.py - FINAL: COLORED DOT + FIRE EMOJI + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -382,7 +382,7 @@ if st.session_state.initialized:
             w2_str = f"{dot2}{bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-            early_label = "fire Early" if bout["is_early"] else ""
+            early_label = "fire Early" if bout["is_early"] else ""  # fire emoji
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
@@ -405,7 +405,7 @@ if st.session_state.initialized:
             if df.empty:
                 st.write("No matches")
                 continue
-            # RENDER HTML IN TABLE
+            # RENDER HTML + fire emoji
             html_table = df.to_html(escape=False, index=False)
             st.markdown(html_table, unsafe_allow_html=True)
 
