@@ -1,4 +1,4 @@
-# app.py – COLLAPSED MATS + CTRL+Z UNDO (WORKS!) + RED X (TIGHT, CENTERED)
+# app.py – COLLAPSED MATS + CTRL+Z UNDO + RED X (TIGHT, CENTERED)
 import streamlit as st
 import pandas as pd
 import io
@@ -54,7 +54,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "ctrl_z_pressed"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
@@ -248,30 +248,33 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- HIDDEN UNDO BUTTON + CTRL+Z LISTENER (ONE TIME) ----
-if not hasattr(st.session_state, "undo_button_ready"):
-    # Hidden button
-    undo_trigger = st.button("UNDO_HIDDEN", key="undo_hidden", help=None)
-    
-    # JS: Ctrl+Z clicks the hidden button
+# ---- CTRL+Z LISTENER (ONE TIME SETUP) ----
+if not hasattr(st.session_state, "ctrl_z_setup"):
+    # JavaScript to detect Ctrl+Z and trigger a rerun
     ctrl_z_js = """
     <script>
-      document.addEventListener('keydown', e => {
+      window.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
-          const btn = document.querySelector('[data-testid="stButton"] button[kind="secondary"]:contains("UNDO_HIDDEN")');
-          if (btn) btn.click();
+          // Trigger a state change by updating query params
+          const url = new URL(window.location);
+          url.searchParams.set('ctrl_z', Date.now());
+          window.history.pushState({}, '', url);
+          // Dispatch a popstate event to force Streamlit to re-render
+          window.dispatchEvent(new Event('popstate'));
         }
       });
     </script>
     """
     st.markdown(ctrl_z_js, unsafe_allow_html=True)
-    st.session_state.undo_button_ready = True
+    st.session_state.ctrl_z_setup = True
 
-# Handle undo from button or Ctrl+Z
-if st.session_state.get("undo_hidden"):
-    undo_last()
-    st.session_state.undo_hidden = False
+# Handle Ctrl+Z via query parameters
+if "ctrl_z" in st.experimental_get_query_params():
+    if st.session_state.undo_stack:
+        undo_last()
+    # Clear the query parameter to avoid infinite loops
+    st.experimental_set_query_params()
     st.rerun()
 
 st.markdown("""
