@@ -263,7 +263,7 @@ st.markdown("""
     .drag-card:active { opacity:0.7; }
 
     /* CONTEXT MENU */
-    #context-menu {
+    [id^="context-menu-"] {
         position: fixed;
         background: white;
         border: 1px solid #ccc;
@@ -274,7 +274,7 @@ st.markdown("""
         display: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    #context-menu button {
+    [id^="context-menu-"] button {
         width: 100%;
         text-align: left;
         padding: 8px 16px;
@@ -283,7 +283,7 @@ st.markdown("""
         cursor: pointer;
         font-size: 0.9rem;
     }
-    #context-menu button:hover {
+    [id^="context-menu-"] button:hover {
         background: #f0f0f0;
     }
 </style>
@@ -475,7 +475,7 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # ---- FIXED: RIGHT-CLICK DELETE WITH HIDDEN INPUT ----
+            # ---- RIGHT-CLICK DELETE (NO KEY) ----
             drag_js = f"""
             <!-- HIDDEN INPUT FOR DELETE -->
             <input type="hidden" id="delete-input-{mat}" value="">
@@ -551,7 +551,7 @@ if st.session_state.initialized:
             </script>
             """
 
-            result = components.html(drag_js, height=520, key=f"mat_{mat}")
+            result = components.html(drag_js, height=520)
 
             # Handle delete from hidden input
             if result and isinstance(result, str) and result.isdigit():
