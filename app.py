@@ -1,4 +1,4 @@
-# app.py – DRAG-TO-REORDER + NO BLANK SPACE + ALL FEATURES
+# app.py – DRAG-TO-REORDER + ZERO SPACING + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -249,15 +249,39 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
+# ---- CSS: ZERO SPACING EVERYWHERE ----
 st.markdown("""
 <style>
-    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap:0.5rem !important; }
-    .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
-    .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
-    h1 { margin-top:0 !important; }
-    .drag-card { margin:8px 0; cursor:move; user-select:none; }
-    .drag-card:active { opacity:0.7; }
+    /* Remove all expander padding */
+    div[data-testid="stExpander"] > div > div { 
+        padding: 0 !important; 
+        margin: 0 !important; 
+    }
+    /* Remove vertical gaps */
+    div[data-testid="stVerticalBlock"] > div { 
+        gap: 0 !important; 
+    }
+    /* Page padding */
+    .block-container { 
+        padding: 2rem 1rem !important; 
+        max-width: 1200px !important; 
+        margin: 0 auto !important; 
+    }
+    .main .block-container { 
+        padding-left: 2rem !important; 
+        padding-right: 2rem !important; 
+    }
+    h1 { margin-top: 0 !important; }
+
+    /* DRAG CARDS: NO MARGIN, TIGHT FIT */
+    .drag-card { 
+        margin: 0 !important; 
+        cursor: move; 
+        user-select: none; 
+    }
+    .drag-card:active { 
+        opacity: 0.7; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -357,7 +381,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG-TO-REORDER + NO BLANK SPACE ----
+    # ---- MAT PREVIEWS – DRAG-TO-REORDER + ZERO SPACING ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -382,7 +406,7 @@ if st.session_state.initialized:
                             <div style="display:flex;align-items:center;gap:10px;">
                                 <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
                                 <div style="font-weight:600;font-size:1rem;">{b["w1_name"]} ({b["w1_team"]})</div>
-                                <div style="font-size:0.85rem;color:#444;">{b["w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
+                                <div style="font-size:0.85rem;color:#444;">{b["_w1_grade"]} / {b["w1_level"]:.1f} / {b["w1_weight"]:.0f}</div>
                             </div>
                             <div style="font-weight:700;color:#333;">vs</div>
                             <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
@@ -398,11 +422,7 @@ if st.session_state.initialized:
                 </div>
                 '''
 
-            # FIXED: Calculate exact height
-            card_height = 95  # ~95px per card (measured)
-            height = len(bouts) * card_height + 20  # +20px buffer
-
-            # Drag component
+            # FIXED: NO HEIGHT, NO MARGIN
             drag_js = f"""
             <div id="mat-{mat}-container">
                 {cards_html}
@@ -437,7 +457,8 @@ if st.session_state.initialized:
             </script>
             """
 
-            result = components.html(drag_js, height=height)
+            # NO HEIGHT → NO BLANK SPACE
+            result = components.html(drag_js)
 
             # Handle reorder
             if result and isinstance(result, dict) and "order" in result:
