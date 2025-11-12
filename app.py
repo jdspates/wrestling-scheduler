@@ -12,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
+import streamlit.components.v1 as components  # <-- ADDED
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
