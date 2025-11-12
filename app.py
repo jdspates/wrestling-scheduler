@@ -1,4 +1,4 @@
-# app.py - FINAL: TEAM COLORS + FULL ROW EARLY HIGHLIGHT + NO EMOJIS
+# app.py - FINAL: FULL ROW HIGHLIGHT + TEAM COLORS + NO EMOJIS + EDITABLE
 import streamlit as st
 import pandas as pd
 import io
@@ -387,7 +387,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS -----
+    # ----- MAT PREVIEWS (HTML + EDITABLE) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -395,6 +395,7 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
 
+        # Build full data
         rows = []
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -412,38 +413,67 @@ if st.session_state.initialized:
                 "is_early": b["is_early"]
             })
         full_df = pd.DataFrame(rows)
-        display_df = full_df.drop(columns=["bout_num", "w1_team", "w2_team", "is_early"])
+        display_df = full_df.drop(columns=["bout_num", "w1_team", "w2_team", "is_early"]).copy()
 
-        # Apply styling: team color + full row highlight for early
-        def style_row(row):
-            bg = "background-color: #FFFF99;" if full_df.loc[row.name, "is_early"] else ""
-            w1_color = TEAM_COLORS.get(full_df.loc[row.name, "w1_team"], "#000000")
-            w2_color = TEAM_COLORS.get(full_df.loc[row.name, "w2_team"], "#000000")
-            w1_idx = display_df.columns.get_loc("Wrestler 1")
-            w2_idx = display_df.columns.get_loc("Wrestler 2")
-            styles = [""] * len(row)
-            styles[w1_idx] = f"color: {w1_color}; font-weight: bold; {bg}"
-            styles[w2_idx] = f"color: {w2_color}; font-weight: bold; {bg}"
-            for i in range(len(styles)):
-                if not styles[i].startswith("color"):
-                    styles[i] = bg
-            return styles
+        # === STYLED HTML TABLE ===
+        html_rows = []
+        for idx, row in display_df.iterrows():
+            is_early = full_df.loc[idx, "is_early"]
+            w1_team = full_df.loc[idx, "w1_team"]
+            w2_team = full_df.loc[idx, "w2_team"]
+            bg_color = "#FFFF99" if is_early else "white"
+            w1_color = TEAM_COLORS.get(w1_team, "#000000")
+            w2_color = TEAM_COLORS.get(w2_team, "#000000")
 
-        styled_df = display_df.style.apply(style_row, axis=1)
+            html_row = f"""
+            <tr style="background-color: {bg_color};">
+                <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">{row["Slot"]}</td>
+                <td style="color: {w1_color}; font-weight: bold; padding: 8px; border-bottom: 1px solid #ddd;">{row["Wrestler 1"]}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{row["G/L/W"]}</td>
+                <td style="color: {w2_color}; font-weight: bold; padding: 8px; border-bottom: 1px solid #ddd;">{row["Wrestler 2"]}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{row["G/L/W 2"]}</td>
+                <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">{row["Score"]}</td>
+            </tr>
+            """
+            html_rows.append(html_row)
+
+        html_table = f"""
+        <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; margin-bottom: 10px;">
+            <thead>
+                <tr style="background-color: #f0f0f0;">
+                    <th style="padding: 10px; border: 1px solid #ccc; text-align: center;">Slot</th>
+                    <th style="padding: 10px; border: 1px solid #ccc;">Wrestler 1</th>
+                    <th style="padding: 10px; border: 1px solid #ccc;">G/L/W</th>
+                    <th style="padding: 10px; border: 1px solid #ccc;">Wrestler 2</th>
+                    <th style="padding: 10px; border: 1px solid #ccc;">G/L/W 2</th>
+                    <th style="padding: 10px; border: 1px solid #ccc; text-align: center;">Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(html_rows)}
+            </tbody>
+        </table>
+        """
+
+        # Editable editor
+        edit_df = full_df[["Remove", "Slot", "Wrestler 1", "G/L/W", "Wrestler 2", "G/L/W 2", "Score"]].copy()
+        edit_df["Slot"] = edit_df["Slot"].astype(int)
 
         with st.expander(f"Mat {mat}", expanded=True):
-            column_config = {
-                "Remove": st.column_config.CheckboxColumn("Remove"),
-                "Slot": st.column_config.NumberColumn("Slot", disabled=True),
-                "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
-                "G/L/W": st.column_config.TextColumn("G/L/W"),
-                "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
-                "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
-                "Score": st.column_config.NumberColumn("Score", disabled=True),
-            }
+            st.markdown(html_table, unsafe_allow_html=True)
+            st.caption("_Styled preview above — use table below to remove matches_")
+
             edited = st.data_editor(
-                styled_df,
-                column_config=column_config,
+                edit_df,
+                column_config={
+                    "Remove": st.column_config.CheckboxColumn("Remove"),
+                    "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1", disabled=True),
+                    "G/L/W": st.column_config.TextColumn("G/L/W", disabled=True),
+                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2", disabled=True),
+                    "G/L/W 2": st.column_config.TextColumn("G/L/W 2", disabled=True),
+                    "Score": st.column_config.NumberColumn("Score", disabled=True),
+                },
                 use_container_width=True,
                 hide_index=True,
                 key=f"mat_editor_{mat}"
@@ -497,8 +527,7 @@ if st.session_state.initialized:
                 df.to_excel(writer, f"Mat {m}", index=False)
                 ws = writer.book[f"Mat {m}"]
                 fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-                # Highlight ENTIRE row for early bouts
-                for i, entry in enumerate(data, start=2):  # row 2 = first data row
+                for i, entry in enumerate(data, start=2):
                     bout = next(b for b in st.session_state.bout_list if b["bout_num"] == entry["bout_num"])
                     if bout["is_early"]:
                         for col in range(1, ws.max_column + 1):
