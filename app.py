@@ -12,7 +12,6 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -55,7 +54,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "delete_signal"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "delete_bout"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
 
@@ -253,24 +252,22 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- GLOBAL DELETE COMPONENT (ONE TIME) ----
-if not hasattr(st.session_state, "delete_component_rendered"):
-    delete_global_js = """
-    <input type="hidden" id="delete-signal" value="">
-    <div id="context-menu">
-      <button id="delete-btn">Delete Match</button>
+# ---- GLOBAL RIGHT-CLICK MENU (ONE TIME) ----
+if not hasattr(st.session_state, "menu_rendered"):
+    menu_js = """
+    <div id="context-menu" style="position:fixed;background:white;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:8px 0;z-index:9999;display:none;font-family:sans-serif;">
+      <button id="delete-btn" style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:0.9rem;">Delete Match</button>
     </div>
     <script>
-      let targetBout = null;
       const menu = document.getElementById('context-menu');
-      const input = document.getElementById('delete-signal');
       const btn = document.getElementById('delete-btn');
+      let targetBout = null;
 
-      // Block browser menu on cards only
       document.addEventListener('contextmenu', e => {
-        if (e.target.closest('.drag-card')) {
+        const card = e.target.closest('.drag-card');
+        if (card) {
           e.preventDefault();
-          targetBout = e.target.closest('.drag-card').getAttribute('data-bout');
+          targetBout = card.getAttribute('data-bout');
           menu.style.display = 'block';
           menu.style.left = e.pageX + 'px';
           menu.style.top = e.pageY + 'px';
@@ -279,6 +276,14 @@ if not hasattr(st.session_state, "delete_component_rendered"):
 
       btn.addEventListener('click', () => {
         if (targetBout) {
+          // Use a hidden input to trigger Streamlit rerun
+          let input = document.getElementById('delete-signal');
+          if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.id = 'delete-signal';
+            document.body.appendChild(input);
+          }
           input.value = targetBout;
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }
@@ -288,13 +293,14 @@ if not hasattr(st.session_state, "delete_component_rendered"):
       document.addEventListener('click', () => menu.style.display = 'none');
     </script>
     """
-    st.session_state.delete_signal = components.html(delete_global_js, height=0)
-    st.session_state.delete_component_rendered = True
+    st.markdown(menu_js, unsafe_allow_html=True)
+    st.session_state.menu_rendered = True
 
-# Handle delete
-if st.session_state.delete_signal and isinstance(st.session_state.delete_signal, str) and st.session_state.delete_signal.isdigit():
-    remove_match(int(st.session_state.delete_signal))
-    st.session_state.delete_signal = None
+# Handle delete signal
+if st.session_state.delete_bout is not None:
+    remove_match(st.session_state.delete_bout)
+    st.session_state.delete_bed_bout = st.session_state.delete_bout
+    st.session_state.delete_bout = None
     st.rerun()
 
 st.markdown("""
@@ -306,31 +312,6 @@ st.markdown("""
     h1 { margin-top:0 !important; }
     .drag-card { margin:0 !important; cursor:move; user-select:none; }
     .drag-card:active { opacity:0.7; }
-
-    /* CONTEXT MENU */
-    #context-menu {
-        position: fixed;
-        background: white;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        padding: 8px 0;
-        z-index: 9999;
-        display: none;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    #context-menu button {
-        width: 100%;
-        text-align: left;
-        padding: 8px 16px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 0.9rem;
-    }
-    #context-menu button:hover {
-        background: #f0f0f0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -354,7 +335,7 @@ if uploaded and not st.session_state.initialized:
             w["weight"] = float(w["weight"])
             w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
             w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
-            w["match_ids"] = []  # Store only IDs
+            w["match_ids"] = []
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -406,7 +387,7 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     })
     changed = True
 st.sidebar.markdown("---")
-if st.sidebar.button("Reset to Default", type="secondary"):
+if st.sidebar.button "Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
