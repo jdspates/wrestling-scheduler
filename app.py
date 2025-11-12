@@ -1,4 +1,4 @@
-# app.py – FINAL: SUGGESTIONS + RED TRASH ON RIGHT + DRAG + SCROLL
+# app.py – FINAL: NO ERRORS + SUGGESTIONS + RED TRASH ON RIGHT
 import streamlit as st
 import pandas as pd
 import io
@@ -53,11 +53,10 @@ else:
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# SESSION STATE
+# SESSION STATE – FIXED LINE
 # ----------------------------------------------------------------------
 for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
-    if key not in `
-        st.session_state:
+    if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
 
 # ----------------------------------------------------------------------
