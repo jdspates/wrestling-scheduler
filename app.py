@@ -1,4 +1,4 @@
-# app.py - FINAL: COLORED DOT + fire EMOJI + FULLY WORKING
+# app.py - FINAL: fire EMOJI + COLORED DOT + FULLY WORKING (NO HTML)
 import streamlit as st
 import pandas as pd
 import io
@@ -371,71 +371,55 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat_num}: No matches**")
             continue
 
+        rows = []
+        for m in mat_bouts:
+            bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
+            c1 = TEAM_COLORS.get(bout["w1_team"], "#CCCCCC")
+            c2 = TEAM_COLORS.get(bout["w2_team"], "#CCCCCC")
+            dot1 = f"•"  # Use bullet as dot
+            w1_str = f"{dot1} {bout['w1_name']} ({bout['w1_team']})"
+            w2_str = f"{dot1} {bout['w2_name']} ({bout['w2_team']})"
+            w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
+            w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
+            early = "fire" if bout["is_early"] else ""
+
+            rows.append({
+                "Remove": False,
+                "Slot": m["mat_bout_num"],
+                "Early?": early,
+                "Wrestler 1": w1_str,
+                "G/L/W": w1_glw,
+                "Wrestler 2": w2_str,
+                "G/L/W 2": w2_glw,
+                "Score": f"{bout['score']:.1f}",
+                "bout_num": bout["bout_num"]
+            })
+
+        df = pd.DataFrame(rows)
+
         with st.expander(f"Mat {mat_num}", expanded=True):
-            # Build full HTML table
-            html = """
-            <table style="width:100%; border-collapse:collapse; font-family:Arial; margin-top:10px;">
-                <thead>
-                    <tr style="background:#f0f0f0; text-align:center;">
-                        <th style="padding:8px; border:1px solid #ccc;">Remove</th>
-                        <th style="padding:8px; border:1px solid #ccc;">Slot</th>
-                        <th style="padding:8px; border:1px solid #ccc;">Early?</th>
-                        <th style="padding:8px; border:1px solid #ccc;">Wrestler 1</th>
-                        <th style="padding:8px; border:1px solid #ccc;">G/L/W</th>
-                        <th style="padding:8px; border:1px solid #ccc;">Wrestler 2</th>
-                        <th style="padding:8px; border:1px solid #ccc;">G/L/W</th>
-                        <th style="padding:8px; border:1px solid #ccc;">Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-
-            for m in mat_bouts:
-                bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
-                c1 = TEAM_COLORS.get(bout["w1_team"], "#CCCCCC")
-                c2 = TEAM_COLORS.get(bout["w2_team"], "#CCCCCC")
-                dot1 = f'<div style="display:inline-block;width:14px;height:14px;background:{c1};border-radius:50%;margin-right:6px;vertical-align:middle;"></div>'
-                dot2 = f'<div style="display:inline-block;width:14px;height:14px;background:{c2};border-radius:50%;margin-right:6px;vertical-align:middle;"></div>'
-                w1_str = f"{dot1}{bout['w1_name']} ({bout['w1_team']})"
-                w2_str = f"{dot2}{bout['w2_name']} ({bout['w2_team']})"
-                w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
-                w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-                early_emoji = "fire" if bout["is_early"] else ""
-
-                bout_key = f"remove_{bout['bout_num']}"
-                remove_checkbox = f'<input type="checkbox" id="{bout_key}" name="{bout_key}">'
-
-                html += f"""
-                <tr style="text-align:center; vertical-align:middle;">
-                    <td style="padding:6px; border:1px solid #ddd;">{remove_checkbox}</td>
-                    <td style="padding:6px; border:1px solid #ddd;">{m["mat_bout_num"]}</td>
-                    <td style="padding:6px; border:1px solid #ddd; font-size:20px;">{early_emoji}</td>
-                    <td style="padding:6px; border:1px solid #ddd; text-align:left;">{w1_str}</td>
-                    <td style="padding:6px; border:1px solid #ddd;">{w1_glw}</td>
-                    <td style="padding:6px; border:1px solid #ddd; text-align:left;">{w2_str}</td>
-                    <td style="padding:6px; border:1px solid #ddd;">{w2_glw}</td>
-                    <td style="padding:6px; border:1px solid #ddd;">{bout['score']:.1f}</td>
-                </tr>
-                """
-            html += """
-                </tbody>
-            </table>
-            """
-
-            # THIS LINE IS CRITICAL — DO NOT REMOVE
-            st.markdown(html, unsafe_allow_html=True)
-
-            # Handle removals
-            removed = []
-            for m in mat_bouts:
-                bout = next(b for b in st.session_state.bout_list if b["bout_num"] == m["bout_num"])
-                key = f"remove_{bout['bout_num']}"
-                if st.checkbox("", key=key, value=False):
-                    removed.append(bout["bout_num"])
+            edited = st.data_editor(
+                df,
+                column_config={
+                    "Remove": st.column_config.CheckboxColumn("Remove"),
+                    "Slot": st.column_config.NumberColumn("Slot", disabled=True),
+                    "Early?": st.column_config.TextColumn("Early?"),
+                    "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                    "G/L/W": st.column_config.TextColumn("G/L/W"),
+                    "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                    "G/L/W 2": st.column_config.TextColumn("G/L/W"),
+                    "Score": st.column_config.NumberColumn("Score", disabled=True),
+                    "bout_num": st.column_config.NumberColumn("bout_num", hide=True),
+                },
+                use_container_width=True,
+                hide_index=True,
+                key=f"mat_editor_{mat_num}"
+            )
 
             if st.button(f"Apply Removals on Mat {mat_num}", key=f"apply_mat_{mat_num}"):
-                if removed:
-                    for num in removed:
+                to_remove = edited[edited["Remove"]]["bout_num"].dropna().astype(int).tolist()
+                if to_remove:
+                    for num in to_remove:
                         for b in st.session_state.bout_list:
                             if b["bout_num"] == num:
                                 b["manual"] = "Removed"
@@ -445,7 +429,7 @@ if st.session_state.initialized:
                                 if w1 in w2["matches"]: w2["matches"].remove(w1)
                     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.success(f"Removed {len(removed)} match(es) from Mat {mat_num}!")
+                    st.success(f"Removed {len(to_remove)} match(es)!")
                     st.rerun()
 
     # ----- UNDO -----
