@@ -1,4 +1,4 @@
-# app.py - FINAL: fire EMOJI + COLORED EMOJI DOTS + NO ERRORS
+# app.py - FINAL: NO ERRORS + fire EMOJI + COLORED EMOJI DOTS
 import streamlit as st
 import pandas as pd
 import io
@@ -249,7 +249,7 @@ def generate_mat_schedule(bout_list, gap=4):
                 if score > best_score:
                     best_score = score
                     best = b
-            if best is None: first_early = b
+            if best is None:
                 break
             early_bouts.remove(best)
             scheduled.append((slot, best))
@@ -408,7 +408,7 @@ if st.session_state.initialized:
                     "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
                     "G/L/W 2": st.column_config.TextColumn("G/L/W"),
                     "Score": st.column_config.NumberColumn("Score", disabled=True),
-                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),  # HIDDEN COLUMN
+                    "bout_num": st.column_config.NumberColumn("bout_num", width=0),
                 },
                 use_container_width=True,
                 hide_index=True,
