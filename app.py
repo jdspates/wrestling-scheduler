@@ -1,4 +1,4 @@
-# app.py – CARD-ONLY + FULL UNDO + SCORE AFTER BOTH + ALL HTML FIXED
+# app.py – FINAL: CARDS ONLY + FULL UNDO + NO HTML ESCAPING + SCORE AFTER BOTH
 import streamlit as st
 import pandas as pd
 import io
@@ -395,7 +395,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS (CARD ONLY) ---
+    # --- MAT PREVIEWS (CARDS ONLY) ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -418,41 +418,47 @@ if st.session_state.initialized:
                     "Score": f"{b['score']:.1f}",
                     "bout_num": b["bout_num"]
                 })
-            st.markdown("<div style='display:flex;flex-direction:column;gap:8px;'>", unsafe_allow_html=True)
-            for idx, r in enumerate(rows):
-                bg = "#fff3cd" if r["Early?"] else "#ffffff"
-                left_html = f"""
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                        <div style="font-weight:600;">{r['Wrestler 1']}</div>
-                        <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
-                    </div>
-                """
-                right_html = f"""
-                    <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
-                        <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
-                        <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
-                        <div style="font-weight:600;">{r['Wrestler 2']}</div>
-                    </div>
-                """
-                st.markdown(
-                    f"""
-                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
-                                display:flex;justify-content:space-between;align-items:center;">
-                        <div style="display:flex;flex-direction:column;">
-                            <div style="display:flex;align-items:center;gap:12px;">
-                                {left_html}
-                                <div style="font-weight:700;margin-left:12px;color:#333;">vs</div>
-                                {right_html}
-                            </div>
-                            <div style="font-size:0.85rem;color:#555;margin-top:6px;">
-                                Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
+
+            # --- RENDER ALL CARDS FIRST (NO BUTTONS YET) ---
+            card_container = st.container()
+            with card_container:
+                for r in rows:
+                    bg = "#fff3cd" if r["Early?"] else "#ffffff"
+                    left_html = f"""
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <div style="width:12px;height:12px;background:{r['W1 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                            <div style="font-weight:600;">{r['Wrestler 1']}</div>
+                            <div style="font-size:0.85rem;color:#444;">{r['G/L/W']}</div>
+                        </div>
+                    """
+                    right_html = f"""
+                        <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:10px;">
+                            <div style="width:12px;height:12px;background:{r['W2 Color']};border-radius:3px;border:1px solid #ccc;"></div>
+                            <div style="font-size:0.85rem;color:#444;">{r['G/L/W 2']}</div>
+                            <div style="font-weight:600;">{r['Wrestler 2']}</div>
+                        </div>
+                    """
+                    st.markdown(
+                        f"""
+                        <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;
+                                    display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <div style="display:flex;flex-direction:column;">
+                                <div style="display:flex;align-items:center;gap:12px;">
+                                    {left_html}
+                                    <div style="font-weight:700;margin-left:12px;color:#333;">vs</div>
+                                    {right_html}
+                                </div>
+                                <div style="font-size:0.85rem;color:#555;margin-top:6px;">
+                                    Slot: {r['Slot']} | {r['Early?']} | Score: {r['Score']}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+            # --- RENDER BUTTONS BELOW ALL CARDS ---
+            for idx, r in enumerate(rows):
                 cols = st.columns([1,1,1,8])
                 if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
                     if idx > 0:
@@ -477,7 +483,6 @@ if st.session_state.initialized:
                     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
                     st.success("Match removed.")
                     st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
 
     # --- UNDO ---
     if st.session_state.undo_stack:
