@@ -1,4 +1,4 @@
-# app.py – FINAL: RED TRASH ON RIGHT + SUGGESTIONS + DRAG + SCROLL
+# app.py – FINAL: RED TRASH ON RIGHT + CLEAN CARDS + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -123,6 +123,7 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
+    # FIXED: Keep full bout dicts
     valid = [b for b in bout_list if b["manual"] != "Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
     per_mat = len(valid) // CONFIG["NUM_MATS"]
@@ -249,7 +250,7 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- FIXED CSS: RED TRASH ON RIGHT ----
+# ---- CLEAN CSS: RED TRASH ON RIGHT + CARD LOOK ----
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -260,24 +261,28 @@ st.markdown("""
 
     /* CARD + TRASH ON SAME LINE */
     .drag-card {
-        margin:0 !important; cursor:move; user-select:none;
-        display:flex; align-items:center; gap:12px; padding:6px 0;
+        margin: 0 !important; cursor: move; user-select: none;
+        display: flex; align-items: center; gap: 8px; padding: 4px 0;
     }
-    .drag-card:active { opacity:0.7; }
+    .drag-card:active { opacity: 0.7; }
 
     .card-content {
-        flex:1; background:#fff; border:1px solid #e6e6e6; border-radius:8px;
-        padding:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1);
+        flex: 1;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     /* RED TRASH ICON */
     .remove-btn {
-        background:none; border:none; cursor:pointer; padding:0;
-        width:36px; height:36px; display:flex; align-items:center; justify-content:center;
-        color:#ff4d4f !important;
+        background: none; border: none; cursor: pointer; padding: 0;
+        width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+        color: #ff4d4f !important;
     }
-    .remove-btn:hover { color:#d4380d !important; }
-    .remove-btn svg { width:20px; height:20px; fill:currentColor !important; }
+    .remove-btn:hover { color: #d4380d !important; }
+    .remove-btn svg { width: 20px; height: 20px; fill: currentColor !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -427,7 +432,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ON RIGHT ----
+    # ---- MAT PREVIEWS – RED TRASH ON RIGHT + CLEAN CARDS ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -546,4 +551,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
