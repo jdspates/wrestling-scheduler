@@ -319,6 +319,24 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
+# Helper: swap two entries in mat_schedules by index within the same mat
+def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
+    entries = [e for e in mat_schedules if e["mat"] == mat_num]
+    entries.sort(key=lambda x: x["slot"])
+    if idx1 < 0 or idx2 < 0 or idx1 >= len(entries) or idx2 >= len(entries): 
+        return mat_schedules
+    # get global indices in mat_schedules list (first occurrence)
+    e1 = entries[idx1]; e2 = entries[idx2]
+    gi1 = next(i for i,e in enumerate(mat_schedules) if e["mat"]==mat_num and e["slot"]==e1["slot"] and e["bout_num"]==e1["bout_num"])
+    gi2 = next(i for i,e in enumerate(mat_schedules) if e["mat"]==mat_num and e["slot"]==e2["slot"] and e["bout_num"]==e2["bout_num"])
+    mat_schedules[gi1], mat_schedules[gi2] = mat_schedules[gi2], mat_schedules[gi1]
+    # reassign mat_bout_num for that mat
+    mat_entries = [m for m in mat_schedules if m["mat"] == mat_num]
+    mat_entries.sort(key=lambda x: x["slot"])
+    for idx, entry in enumerate(mat_entries, 1):
+        entry["mat_bout_num"] = idx
+    return mat_schedules
+
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
     try:
@@ -404,38 +422,126 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- MAT PREVIEWS (bout_num hidden) -----
+    # ----- MAT PREVIEWS (CARD-BASED) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
-        if not bouts: 
+        if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
-        rows = []
-        for m in bouts:
-            b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
-            rows.append({
-                "Remove": False,
-                "Slot": m["mat_bout_num"],
-                "Early?": "fire" if b["is_early"] else "",
-                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
-                "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
-                "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
-                "Score": f"{b['score']:.1f}",
-                "bout_num": b["bout_num"]
-            })
-        full_df = pd.DataFrame(rows)
-        display_df = full_df.drop(columns=["bout_num"])
 
+        # Use an expander for each mat
         with st.expander(f"Mat {mat}", expanded=True):
+            # Build a rows list (for data_editor and export) similar to before, but we'll display cards above
+            rows = []
+            for m in bouts:
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
+                rows.append({
+                    "Remove": False,
+                    "Slot": m["mat_bout_num"],
+                    "Early?": "🔥 Early" if b["is_early"] else "",
+                    "Wrestler 1": f"{b['w1_name']} ({b['w1_team']})",
+                    "W1 Color": TEAM_COLORS.get(b["w1_team"], ""),
+                    "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
+                    "Wrestler 2": f"{b['w2_name']} ({b['w2_team']})",
+                    "W2 Color": TEAM_COLORS.get(b["w2_team"], ""),
+                    "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
+                    "Score": f"{b['score']:.1f}",
+                    "bout_num": b["bout_num"]
+                })
+
+            # ---------- CARD VIEW ----------
+            st.markdown("<div style='display:flex;flex-direction:column;gap:8px;margin-bottom:8px;'>", unsafe_allow_html=True)
+            for idx, r in enumerate(rows):
+                w1_color = r["W1 Color"] if r["W1 Color"] else "#999999"
+                w2_color = r["W2 Color"] if r["W2 Color"] else "#999999"
+                is_early = bool(r["Early?"])
+                bg = "#fff3cd" if is_early else "#ffffff"
+                fire = "🔥" if is_early else ""
+
+                # Each card has Up, Down, Remove buttons. Buttons change session_state.mat_schedules and/or bout_list.
+                left_col_html = f"""
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
+                        <div style="font-weight:600;">{r['Wrestler 1']}</div>
+                        <div style="font-size:0.85rem;color:#444;margin-left:8px;">{r['G/L/W']}</div>
+                    </div>
+                """
+                right_col_html = f"""
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="font-size:0.95rem;color:#444;margin-right:8px;">Score: {r['Score']}</div>
+                        <div style="font-weight:600;">{r['Wrestler 2']}</div>
+                        <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;margin-left:8px;"></div>
+                    </div>
+                """
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:{bg};
+                        border:1px solid #e6e6e6;
+                        border-radius:8px;
+                        padding:10px;
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;">
+                        <div style="display:flex;flex-direction:column;">
+                            <div style="display:flex;align-items:center;gap:12px;">{left_col_html}<div style="font-weight:700;margin-left:12px;color:#333;">vs</div>{right_col_html}</div>
+                            <div style="font-size:0.85rem;color:#555;margin-top:6px;">
+                                Slot: {r['Slot']} &nbsp;|&nbsp; {r['Early?']} {fire}
+                            </div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+                            <form action="#" method="post">
+                                <!-- Buttons below are Streamlit buttons rendered next to each card -->
+                            </form>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # Buttons for card operations (unique keys)
+                cols = st.columns([1,1,1,8])
+                if cols[0].button("▲", key=f"up_mat{mat}_idx{idx}"):
+                    # swap with previous in this mat
+                    if idx > 0:
+                        st.session_state.mat_schedules = swap_schedule_positions(st.session_state.mat_schedules, mat, idx, idx-1)
+                        st.experimental_rerun()
+                if cols[1].button("▼", key=f"down_mat{mat}_idx{idx}"):
+                    if idx < len(rows)-1:
+                        st.session_state.mat_schedules = swap_schedule_positions(st.session_state.mat_schedules, mat, idx, idx+1)
+                        st.experimental_rerun()
+                if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
+                    # Mark the bout as removed in bout_list, update matches of wrestlers
+                    bout_num_to_remove = r["bout_num"]
+                    bobj = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num_to_remove)
+                    bobj["manual"] = "Removed"
+                    w1 = next(w for w in st.session_state.active if w["id"] == bobj["w1_id"])
+                    w2 = next(w for w in st.session_state.active if w["id"] == bobj["w2_id"])
+                    if w2 in w1["matches"]: w1["matches"].remove(w2)
+                    if w1 in w2["matches"]: w2["matches"].remove(w1)
+                    st.session_state.last_removed = bout_num_to_remove
+                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                    st.success("Removed match.")
+                    st.experimental_rerun()
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # --- data_editor for removals / editing (keeps original functionality) ---
+            # Build DataFrame for the editor so coaches can still use that workflow
+            full_df = pd.DataFrame(rows)
+            display_df = full_df.drop(columns=["bout_num"])
             column_config = {
                 "Remove": st.column_config.CheckboxColumn("Remove"),
                 "Slot": st.column_config.NumberColumn("Slot", disabled=True),
                 "Early?": st.column_config.TextColumn("Early?"),
                 "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
+                "W1 Color": st.column_config.TextColumn("W1 Color"),
                 "G/L/W": st.column_config.TextColumn("G/L/W"),
                 "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
+                "W2 Color": st.column_config.TextColumn("W2 Color"),
                 "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
                 "Score": st.column_config.NumberColumn("Score", disabled=True),
             }
