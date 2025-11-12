@@ -1,4 +1,4 @@
-# app.py – FINAL: CARDS WITH BUTTONS + NO DUPLICATES + FULL UNDO
+# app.py – FINAL: NO EMPTY ROWS + BUTTONS IN CARD + FULL UNDO
 import streamlit as st
 import pandas as pd
 import io
@@ -67,6 +67,50 @@ if "active" not in st.session_state:
     st.session_state.active = []
 if "undo_stack" not in st.session_state:
     st.session_state.undo_stack = []
+
+# ----------------------------------------------------------------------
+# STREAMLIT APP
+# ----------------------------------------------------------------------
+st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
+
+# HIDE HIDDEN FORMS (NO EMPTY ROWS)
+st.markdown("""
+<style>
+    div[data-testid="stForm"] {
+        display: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("Wrestling Meet Scheduler")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
+
+# --- UPLOAD ---
+uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
+if uploaded and not st.session_state.initialized:
+    try:
+        df = pd.read_csv(uploaded)
+        required = ["id","name","team","grade","level","weight","early_matches","scratch"]
+        if not all(c in df.columns for c in required):
+            st.error("Missing columns. Need: " + ", ".join(required))
+            st.stop()
+        wrestlers = df.to_dict("records")
+        for w in wrestlers:
+            w["id"] = int(w["id"])
+            w["grade"] = int(w["grade"])
+            w["level"] = float(w["level"])
+            w["weight"] = float(w["weight"])
+            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
+            w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
+            w["matches"] = []
+        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
+        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
+        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+        st.session_state.initialized = True
+        st.success("Roster loaded and matchups generated!")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 # ----------------------------------------------------------------------
 # MEET SETTINGS
@@ -307,39 +351,8 @@ def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     return mat_schedules
 
 # ----------------------------------------------------------------------
-# STREAMLIT APP
+# MAIN APP (continued)
 # ----------------------------------------------------------------------
-st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
-st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
-
-# --- UPLOAD ---
-uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
-if uploaded and not st.session_state.initialized:
-    try:
-        df = pd.read_csv(uploaded)
-        required = ["id","name","team","grade","level","weight","early_matches","scratch"]
-        if not all(c in df.columns for c in required):
-            st.error("Missing columns. Need: " + ", ".join(required))
-            st.stop()
-        wrestlers = df.to_dict("records")
-        for w in wrestlers:
-            w["id"] = int(w["id"])
-            w["grade"] = int(w["grade"])
-            w["level"] = float(w["level"])
-            w["weight"] = float(w["weight"])
-            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
-            w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
-            w["matches"] = []
-        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
-        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
-        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-        st.session_state.initialized = True
-        st.success("Roster loaded and matchups generated!")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
 if st.session_state.initialized:
     # --- SUGGESTIONS ---
     st.subheader("Suggested Matches")
@@ -398,7 +411,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS: CARDS WITH BUTTONS (NO DUPLICATES) ---
+    # --- MAT PREVIEWS: CARDS WITH BUTTONS (NO EMPTY ROWS) ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -423,7 +436,6 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
 
-            # --- RENDER EACH CARD WITH BUTTONS (NO DUPLICATES) ---
             for idx, r in enumerate(rows):
                 bg = "#fff3cd" if r["Early?"] else "#ffffff"
                 up_key = f"up_mat{mat}_idx{idx}"
@@ -478,7 +490,7 @@ if st.session_state.initialized:
                 """
                 components.html(html_content, height=100, scrolling=False)
 
-                # Hidden form submit buttons (invisible)
+                # Hidden forms — completely invisible
                 with st.form(key=f"form_up_{up_key}", clear_on_submit=True):
                     st.form_submit_button(label="", key=up_submit)
                 with st.form(key=f"form_down_{down_key}", clear_on_submit=True):
