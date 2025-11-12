@@ -1,4 +1,4 @@
-# app.py – FINAL: RED TRASH ON RIGHT + CLEAN CARDS + ALL FEATURES
+# app.py – FINAL: RIGHT-CLICK DELETE + CLEAN CARDS + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -249,7 +249,7 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- FINAL CSS: RED TRASH ON RIGHT + CLEAN CARDS ----
+# ---- CLEAN CSS: CARDS ONLY + RIGHT-CLICK MENU ----
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -258,21 +258,15 @@ st.markdown("""
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
 
-    /* CARD + TRASH ON SAME LINE */
+    /* CLEAN CARDS */
     .drag-card {
-        margin: 0 !important;
+        margin: 8px 0 !important;
         cursor: move;
         user-select: none;
-        display: flex !important;
-        align-items: center;
-        gap: 12px;
-        padding: 6px 0;
-        background: transparent;
     }
     .drag-card:active { opacity: 0.7; }
 
     .card-content {
-        flex: 1;
         background: #ffffff;
         border: 1px solid #e0e0e0;
         border-radius: 10px;
@@ -281,28 +275,28 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* RED TRASH ICON — ALWAYS VISIBLE */
-    .remove-btn {
-        background: none !important;
-        border: none !important;
+    /* CONTEXT MENU */
+    #context-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 8px 0;
+        z-index: 1000;
+        display: none;
+    }
+    #context-menu button {
+        width: 100%;
+        text-align: left;
+        padding: 8px 16px;
+        background: none;
+        border: none;
         cursor: pointer;
-        padding: 0 !important;
-        width: 40px;
-        height: 40px;
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        color: #ff4d4f !important;
-        flex-shrink: 0;
+        font-size: 0.9rem;
     }
-    .remove-btn:hover {
-        color: #d4380d !important;
-        transform: scale(1.1);
-    }
-    .remove-btn svg {
-        width: 22px;
-        height: 22px;
-        fill: currentColor !important;
+    #context-menu button:hover {
+        background: #f0f0f0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -337,7 +331,7 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error: {e}")
 
-# ---- SETTINGS ----
+# ---- SETTINGS (unchanged) ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
@@ -453,7 +447,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED TRASH ON RIGHT ----
+    # ---- MAT PREVIEWS – RIGHT-CLICK DELETE + CLEAN CARDS ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -471,7 +465,7 @@ if st.session_state.initialized:
                 w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
                 cards_html += f'''
-                <div class="drag-card" id="card-{idx}" draggable="true">
+                <div class="drag-card" id="card-{idx}" draggable="true" data-bout="{b['bout_num']}">
                     <div class="card-content" style="background:{bg};">
                         <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
                             <div style="display:flex; align-items:center; gap:10px;">
@@ -490,16 +484,14 @@ if st.session_state.initialized:
                             Slot: {m["mat_bout_num"]} | {"Early" if b["is_early"] else ""} | Score: {b["score"]:.1f}
                         </div>
                     </div>
-                    <button class="remove-btn" data-bout="{b['bout_num']}">
-                        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                        </svg>
-                    </button>
                 </div>
                 '''
 
+            # ---- Context menu + Drag ----
             drag_js = f"""
+            <div id="context-menu">
+                <button id="delete-match">Delete Match</button>
+            </div>
             <div style="height:500px; overflow-y:auto; border:1px solid #ddd; padding:4px; background:#fafafa;">
                 <div id="mat-{mat}-container">
                     {cards_html}
@@ -507,7 +499,9 @@ if st.session_state.initialized:
             </div>
             <script>
               const container = document.getElementById('mat-{mat}-container');
+              const menu = document.getElementById('context-menu');
               let dragged = null;
+              let targetBout = null;
 
               // DRAG
               container.querySelectorAll('.drag-card').forEach(card => {{
@@ -520,15 +514,27 @@ if st.session_state.initialized:
                   if (after == null) container.appendChild(dragged);
                   else container.insertBefore(dragged, after);
                 }});
-              }});
 
-              // REMOVE
-              container.querySelectorAll('.remove-btn').forEach(btn => {{
-                btn.addEventListener('click', () => {{
-                  const bout = btn.getAttribute('data-bout');
-                  Streamlit.setComponentValue({{remove: parseInt(bout)}});
+                // RIGHT-CLICK
+                card.addEventListener('contextmenu', e => {{
+                  e.preventDefault();
+                  targetBout = card.getAttribute('data-bout');
+                  menu.style.display = 'block';
+                  menu.style.left = e.pageX + 'px';
+                  menu.style.top = e.pageY + 'px';
                 }});
               }});
+
+              // DELETE FROM MENU
+              document.getElementById('delete-match').addEventListener('click', () => {{
+                if (targetBout) {{
+                  Streamlit.setComponentValue({{remove: parseInt(targetBout)}});
+                }}
+                menu.style.display = 'none';
+              }});
+
+              // HIDE MENU ON CLICK ELSEWHERE
+              document.addEventListener('click', () => menu.style.display = 'none');
 
               function getDragAfter(c, y) {{
                 const els = [...c.querySelectorAll('.drag-card:not([style*="opacity: 0.5"])')];
