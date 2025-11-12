@@ -65,7 +65,7 @@ if "suggestions" not in st.session_state:
 if "active" not in st.session_state:
     st.session_state.active = []
 if "undo_stack" not in st.session_state:
-    st.session_state.undo_stack = []  # Stores bout_num of removed matches
+    st.session_state.undo_stack = []
 
 # ----------------------------------------------------------------------
 # MEET SETTINGS
@@ -284,7 +284,7 @@ def generate_mat_schedule(bout_list, gap=4):
     return schedules
 
 # ----------------------------------------------------------------------
-# HELPER: Swap positions in mat
+# HELPER: Swap positions
 # ----------------------------------------------------------------------
 def swap_schedule_positions(mat_schedules, mat_num, idx1, idx2):
     entries = [e for e in mat_schedules if e["mat"] == mat_num]
@@ -395,13 +395,14 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # --- MAT PREVIEWS (CARDS ONLY) ---
+    # --- MAT PREVIEWS (CARDS ONLY - FINAL FIX) ---
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
+
         with st.expander(f"Mat {mat}", expanded=True):
             rows = []
             for m in bouts:
@@ -419,7 +420,7 @@ if st.session_state.initialized:
                     "bout_num": b["bout_num"]
                 })
 
-            # --- RENDER ALL CARDS FIRST (NO BUTTONS YET) ---
+            # --- RENDER CARDS (HTML ONLY) ---
             card_container = st.container()
             with card_container:
                 for r in rows:
@@ -457,32 +458,34 @@ if st.session_state.initialized:
                         unsafe_allow_html=True
                     )
 
-            # --- RENDER BUTTONS BELOW ALL CARDS ---
-            for idx, r in enumerate(rows):
-                cols = st.columns([1,1,1,8])
-                if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
-                    if idx > 0:
-                        st.session_state.mat_schedules = swap_schedule_positions(
-                            st.session_state.mat_schedules, mat, idx, idx-1)
+            # --- RENDER BUTTONS BELOW (SEPARATE CONTAINER) ---
+            button_container = st.container()
+            with button_container:
+                for idx, r in enumerate(rows):
+                    cols = st.columns([1,1,1,8])
+                    if cols[0].button("Up", key=f"up_mat{mat}_idx{idx}"):
+                        if idx > 0:
+                            st.session_state.mat_schedules = swap_schedule_positions(
+                                st.session_state.mat_schedules, mat, idx, idx-1)
+                            st.rerun()
+                    if cols[1].button("Down", key=f"down_mat{mat}_idx{idx}"):
+                        if idx < len(rows)-1:
+                            st.session_state.mat_schedules = swap_schedule_positions(
+                                st.session_state.mat_schedules, mat, idx, idx+1)
+                            st.rerun()
+                    if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
+                        bout_num = r["bout_num"]
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
+                        b["manual"] = "Removed"
+                        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+                        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+                        if w2 in w1["matches"]: w1["matches"].remove(w2)
+                        if w1 in w2["matches"]: w2["matches"].remove(w1)
+                        st.session_state.undo_stack.append(bout_num)
+                        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+                        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+                        st.success("Match removed.")
                         st.rerun()
-                if cols[1].button("Down", key=f"down_mat{mat}_idx{idx}"):
-                    if idx < len(rows)-1:
-                        st.session_state.mat_schedules = swap_schedule_positions(
-                            st.session_state.mat_schedules, mat, idx, idx+1)
-                        st.rerun()
-                if cols[2].button("Remove", key=f"remove_mat{mat}_idx{idx}"):
-                    bout_num = r["bout_num"]
-                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
-                    b["manual"] = "Removed"
-                    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-                    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-                    if w2 in w1["matches"]: w1["matches"].remove(w2)
-                    if w1 in w2["matches"]: w2["matches"].remove(w1)
-                    st.session_state.undo_stack.append(bout_num)
-                    st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-                    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                    st.success("Match removed.")
-                    st.rerun()
 
     # --- UNDO ---
     if st.session_state.undo_stack:
