@@ -6,10 +6,10 @@
     "WEIGHT_DIFF_FACTOR": 0.10,
     "MIN_WEIGHT_DIFF": 5.0,
     "TEAMS": [
-        {"name": "", "color": "#FF0000", "emoji": "red circle"},
-        {"name": "", "color": "#0000FF", "emoji": "blue circle"},
-        {"name": "", "color": "#008000", "emoji": "green circle"},
-        {"name": "", "color": "#FFD700", "emoji": "yellow circle"},
-        {"name": "", "color": "#000000", "emoji": "black circle"}
+        {"name": "", "color": "#FF0000", "emoji": "red"},
+        {"name": "", "color": "#0000FF", "emoji": "blue"},
+        {"name": "", "color": "#008000", "emoji": "green"},
+        {"name": "", "color": "#FFD700", "emoji": "yellow"},
+        {"name": "", "color": "#000000", "emoji": "black"}
     ]
 }
