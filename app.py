@@ -250,11 +250,11 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 # ---- GLOBAL CTRL+Z LISTENER (ONE TIME) ----
 if not hasattr(st.session_state, "undo_listener"):
-    undo_js = """
+    undo_html = """
     <input type="hidden" id="undo-input" value="">
     <script>
-      document.addEventListener('keydown', e => {
-        if (e.ctrlKey && e.key === 'z') {
+      document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
           const input = document.getElementById('undo-input');
           input.value = 'undo';
@@ -263,7 +263,7 @@ if not hasattr(st.session_state, "undo_listener"):
       });
     </script>
     """
-    st.markdown(undo_js, unsafe_allow_html=True)
+    st.markdown(undo_html, unsafe_allow_html=True)
     st.session_state.undo_listener = True
 
 # Handle Ctrl+Z
