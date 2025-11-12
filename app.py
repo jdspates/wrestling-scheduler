@@ -1,4 +1,4 @@
-# app.py - Wrestling Scheduler | Drag-to-Reorder + Remove + PDF/Excel
+# app.py - Wrestling Scheduler | Drag-to-Reorder (Pre-1.38 Compatible)
 # Compatible with: streamlit, pandas, openpyxl, reportlab==4.0.9
 
 import streamlit as st
@@ -325,7 +325,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have enough matches.")
 
-    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER -----
+    # ----- MAT PREVIEWS WITH DRAG-TO-REORDER (PRE-1.38: Checkbox Selection) -----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -350,11 +350,16 @@ if st.session_state.initialized:
         full_df = pd.DataFrame(rows)
         disp_df = full_df.drop(columns=["bout_num"])
 
+        # === WORKAROUND: Add Temporary "Select" Column for Drag ===
+        select_df = disp_df.copy()
+        select_df.insert(0, "Select", False)  # Temporary column for selections
+
         editor_key = f"mat_editor_{mat}"
-        with st.expander(f"Mat {mat} – Drag rows to reorder", expanded=True):
+        with st.expander(f"Mat {mat} – Check rows, then drag to reorder", expanded=True):
             edited = st.data_editor(
-                disp_df,
+                select_df,
                 column_config={
+                    "Select": st.column_config.CheckboxColumn("Select", default=False, required=False),
                     "Remove": st.column_config.CheckboxColumn("Remove", default=False),
                     "Slot": st.column_config.NumberColumn("Slot", disabled=True),
                     "Early?": st.column_config.TextColumn("Early?"),
@@ -367,15 +372,14 @@ if st.session_state.initialized:
                 use_container_width=True,
                 hide_index=True,
                 key=editor_key,
-                selection_mode="multi-row",
-                on_select="rerun",
+                # No selection_mode/on_select – uses checkbox workaround
             )
 
-        # Drag Reorder
-        sel_state = st.session_state.get(editor_key, {})
-        sel_rows = sel_state.get("selection", {}).get("rows", [])
-        if sel_rows:
-            reordered_full = _reorder_rows_by_selection(full_df, sel_rows)
+        # === DRAG REORDER LOGIC (From Checkbox Selections) ===
+        selected_indices = edited[edited["Select"]].index.tolist()
+        if selected_indices:
+            # Reorder based on selected rows (move to top)
+            reordered_full = _reorder_rows_by_selection(full_df, selected_indices)
             new_schedule = []
             for idx, row in reordered_full.iterrows():
                 sched_entry = next(e for e in st.session_state.mat_schedules
@@ -383,11 +387,12 @@ if st.session_state.initialized:
                 sched_entry["mat_bout_num"] = idx + 1
                 new_schedule.append(sched_entry)
             st.session_state.mat_schedules = [e for e in st.session_state.mat_schedules if e["mat"] != mat] + new_schedule
-            st.success(f"Mat {mat} order updated!")
+            st.success(f"Mat {mat} order updated! (Clear 'Select' checkboxes to reset.)")
             st.rerun()
 
-        # Remove Button
+        # === REMOVE BUTTON ===
         if st.button(f"Apply Removals – Mat {mat}", key=f"rem_mat_{mat}"):
+            # Use edited["Remove"] (ignores "Select" column)
             rem_indices = edited[edited["Remove"]].index.tolist()
             rem_bouts = [full_df.iloc[i]["bout_num"] for i in rem_indices]
             if rem_bouts:
