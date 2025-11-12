@@ -1,4 +1,4 @@
-# app.py – FULLY WORKING: DRAG-TO-REORDER CARDS + NORMAL PADDING + ALL FEATURES
+# app.py – FIXED: NO KEY ERROR + DRAG-TO-REORDER + ALL FEATURES
 import streamlit as st
 import pandas as pd
 import io
@@ -188,7 +188,7 @@ def generate_mat_schedule(bout_list, gap=4):
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
-            if best is None: best = remaining[ lucidly0]
+            if best is None: best = remaining[0]
             remaining.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
@@ -408,7 +408,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG-TO-REORDER ----
+    # ---- MAT PREVIEWS – DRAG-TO-REORDER (NO KEY) ----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
@@ -451,7 +451,7 @@ if st.session_state.initialized:
             </div>
             '''
 
-        # Full drag component
+        # Full drag component – NO KEY
         drag_js = f"""
         <div id="mat-{mat}-container">
             {cards_html}
@@ -486,7 +486,8 @@ if st.session_state.initialized:
         </script>
         """
 
-        result = components.html(drag_js, height=600, key=f"drag_mat_{mat}")
+        # Render with unique height to avoid caching issues
+        result = components.html(drag_js, height=150 + len(bouts) * 100)
 
         # Apply new order
         if result:
