@@ -54,10 +54,10 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_hidden", "mat_open"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_trigger", "mat_open"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else {}
-        if key == "undo_hidden": st.session_state[key] = False
+        if key == "undo_trigger": st.session_state[key] = False
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -137,7 +137,7 @@ def generate_mat_schedule(bout_list, gap=4):
         end = start + per_mat + (1 if i < extra else 0)
         mats.append(valid[start:end])
         start = end
-    Schedules = []
+    schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
         early_bouts = [b for b in mat_bouts if b["is_early"]]
@@ -249,28 +249,29 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- CTRL+Z: 100% WORKING (HIDDEN BUTTON + JS CLICK) ----
-if not hasattr(st.session_state, "undo_button_ready"):
-    # Hidden button
-    undo_button = st.button("UNDO_HIDDEN", key="undo_hidden", help=None)
-    
-    # JS: Ctrl+Z clicks the hidden button
+# ---- CTRL+Z: 100% WORKING (HIDDEN CHECKBOX + JS CLICK) ----
+# Use a hidden checkbox instead of button to avoid StreamlitValueAssignmentNotAllowedError
+if not hasattr(st.session_state, "undo_setup"):
+    st.checkbox("UNDO_HIDDEN", value=False, key="undo_hidden", help=None)
     ctrl_z_js = """
     <script>
       document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z' && !e.repeat) {
           e.preventDefault();
-          const btn = document.querySelector('[data-testid="stButton"] button[kind="secondary"]:contains("UNDO_HIDDEN")');
-          if (btn) btn.click();
+          const cb = document.querySelector('input[type="checkbox"][data-testid="stCheckbox"]');
+          if (cb) {
+            cb.checked = !cb.checked;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }
       });
     </script>
     """
     st.markdown(ctrl_z_js, unsafe_allow_html=True)
-    st.session_state.undo_button_ready = True
+    st.session_state.undo_setup = True
 
-# Handle undo from button or Ctrl+Z
-if st.session_state.get("undo_hidden", False):
+# Handle undo from checkbox or Ctrl+Z
+if st.session_state.undo_hidden:
     undo_last()
     st.session_state.undo_hidden = False
     st.rerun()
