@@ -1,4 +1,4 @@
-# app.py – FINAL: REMOVE ON RIGHT + TRASH ICON + DRAG + SCROLL
+# app.py – FINAL: TRASH ICON ON RIGHT + RED + DRAG + SCROLL
 import streamlit as st
 import pandas as pd
 import io
@@ -256,20 +256,27 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .drag-card { 
-        margin:0 !important; cursor:move; user-select:none; 
-        display:flex; align-items:center; gap:8px; padding:4px 0;
+
+    /* CARD + BUTTON LAYOUT */
+    .drag-card {
+        margin:0 !important; cursor:move; user-select:none;
+        display:flex; align-items:center; gap:12px; padding:6px 0;
     }
     .drag-card:active { opacity:0.7; }
+
     .card-content {
-        flex:1; background:#fff; border:1px solid #e6e6e6; border-radius:8px; 
+        flex:1; background:#fff; border:1px solid #e6e6e6; border-radius:8px;
         padding:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1);
     }
+
+    /* RED TRASH ICON */
     .remove-btn {
-        background:#ff4d4f; color:white; border:none; border-radius:6px;
-        width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+        background:none; border:none; cursor:pointer; padding:0;
+        width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+        color:#ff4d4f;
     }
-    .remove-btn:hover { background:#d4380d; }
+    .remove-btn:hover { color:#d4380d; }
+    .remove-btn svg { width:20px; height:20px; fill:currentColor; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -369,7 +376,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – REMOVE ON RIGHT + TRASH ICON ----
+    # ---- MAT PREVIEWS – RED TRASH ICON ON RIGHT ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -380,7 +387,7 @@ if st.session_state.initialized:
             continue
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # ---- Build cards with REMOVE on right ----
+            # ---- Build cards with RED TRASH ICON on right ----
             cards_html = ""
             for idx, m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
@@ -408,7 +415,7 @@ if st.session_state.initialized:
                         </div>
                     </div>
                     <button class="remove-btn" data-bout="{b['bout_num']}">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="white" xmlns="http://www.w3.org/2000/svg">
+                        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                             <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                             <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
                         </svg>
