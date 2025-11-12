@@ -412,20 +412,15 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
         rows = []
-        # Build rows: NOTE - removed emoji from wrestler text; added color columns and clearer early flag
         for m in bouts:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
             rows.append({
                 "Remove": False,
                 "Slot": m["mat_bout_num"],
-                # set a clear early indicator text (we'll also visually mark early matches in the preview)
-                "Early?": "🔥 Early" if b["is_early"] else "",
-                # NO EMOJI in wrestler text — just name and team
-                "Wrestler 1": f"{b['w1_name']} ({b['w1_team']})",
-                "W1 Color": TEAM_COLORS.get(b["w1_team"], ""),  # color hex for W1
+                "Early?": "fire" if b["is_early"] else "",
+                "Wrestler 1": f"{TEAM_EMOJIS.get(b['w1_team'], 'circle')} {b['w1_name']} ({b['w1_team']})",
                 "G/L/W": f"{b['w1_grade']} / {b['w1_level']:.1f} / {b['w1_weight']:.0f}",
-                "Wrestler 2": f"{b['w2_name']} ({b['w2_team']})",
-                "W2 Color": TEAM_COLORS.get(b["w2_team"], ""),  # color hex for W2
+                "Wrestler 2": f"{TEAM_EMOJIS.get(b['w2_team'], 'circle')} {b['w2_name']} ({b['w2_team']})",
                 "G/L/W 2": f"{b['w2_grade']} / {b['w2_level']:.1f} / {b['w2_weight']:.0f}",
                 "Score": f"{b['score']:.1f}",
                 "bout_num": b["bout_num"]
@@ -434,54 +429,13 @@ if st.session_state.initialized:
         display_df = full_df.drop(columns=["bout_num"])
 
         with st.expander(f"Mat {mat}", expanded=True):
-            # --- Compact visual preview above the data_editor so coaches see colored badges and early flags ---
-            st.markdown("<div style='display:flex;flex-direction:column;gap:6px;margin-bottom:8px;'>", unsafe_allow_html=True)
-            for r in rows:
-                # Visual badge colors and early background
-                w1_color = r["W1 Color"] if r["W1 Color"] else "#999999"
-                w2_color = r["W2 Color"] if r["W2 Color"] else "#999999"
-                is_early = bool(r["Early?"])
-                bg = "#fff3cd" if is_early else "#ffffff"
-                fire = "🔥" if is_early else ""
-                st.markdown(
-                    f"""
-                    <div style="
-                        background:{bg};
-                        border:1px solid #e6e6e6;
-                        border-radius:8px;
-                        padding:8px;
-                        display:flex;
-                        justify-content:space-between;
-                        align-items:center;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <div style="display:flex;flex-direction:column;">
-                                <div style="font-weight:600;">Slot {r['Slot']} {fire}</div>
-                                <div style="font-size:0.85rem;color:#444;">Score: {r['Score']}</div>
-                            </div>
-                            <div style="width:12px;height:12px;background:{w1_color};border-radius:3px;border:1px solid #ccc;"></div>
-                            <div style="font-weight:500;">{r['Wrestler 1']}</div>
-                        </div>
-                        <div style="font-weight:700;color:#333;">vs</div>
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <div style="font-weight:500;">{r['Wrestler 2']}</div>
-                            <div style="width:12px;height:12px;background:{w2_color};border-radius:3px;border:1px solid #ccc;"></div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # --- data_editor for removals / editing (keeps original functionality) ---
             column_config = {
                 "Remove": st.column_config.CheckboxColumn("Remove"),
                 "Slot": st.column_config.NumberColumn("Slot", disabled=True),
                 "Early?": st.column_config.TextColumn("Early?"),
                 "Wrestler 1": st.column_config.TextColumn("Wrestler 1"),
-                "W1 Color": st.column_config.TextColumn("W1 Color"),
                 "G/L/W": st.column_config.TextColumn("G/L/W"),
                 "Wrestler 2": st.column_config.TextColumn("Wrestler 2"),
-                "W2 Color": st.column_config.TextColumn("W2 Color"),
                 "G/L/W 2": st.column_config.TextColumn("G/L/W 2"),
                 "Score": st.column_config.NumberColumn("Score", disabled=True),
             }
