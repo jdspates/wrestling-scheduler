@@ -1,4 +1,4 @@
-# app.py – RIGHT-CLICK DELETE + UNDO + CLEAN CARDS + NO ERRORS
+# app.py – TRASH ICON DELETE + UNDO + CLEAN CARDS + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,6 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-import streamlit.components.v1 as components  # <-- ADDED
 
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
@@ -253,55 +252,6 @@ def remove_match(bout_num):
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# ---- GLOBAL RIGHT-CLICK MENU (ONE TIME) ----
-if not hasattr(st.session_state, "menu_rendered"):
-    menu_js = """
-    <div id="context-menu" style="position:fixed;background:white;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:8px 0;z-index:9999;display:none;font-family:sans-serif;">
-      <button id="delete-btn" style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:0.9rem;">Delete Match</button>
-    </div>
-    <script>
-      const menu = document.getElementById('context-menu');
-      const btn = document.getElementById('delete-btn');
-      let targetBout = null;
-
-      document.addEventListener('contextmenu', e => {
-        const card = e.target.closest('.drag-card');
-        if (card) {
-          e.preventDefault();
-          targetBout = card.getAttribute('data-bout');
-          menu.style.display = 'block';
-          menu.style.left = e.pageX + 'px';
-          menu.style.top = e.pageY + 'px';
-        }
-      });
-
-      btn.addEventListener('click', () => {
-        if (targetBout) {
-          let input = document.getElementById('delete-signal');
-          if (!input) {
-            input = document.createElement('input');
-            input.type = 'hidden';
-            input.id = 'delete-signal';
-            document.body.appendChild(input);
-          }
-          input.value = targetBout;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        menu.style.display = 'none';
-      });
-
-      document.addEventListener('click', () => menu.style.display = 'none');
-    </script>
-    """
-    st.markdown(menu_js, unsafe_allow_html=True)
-    st.session_state.menu_rendered = True
-
-# Handle delete signal
-if st.session_state.delete_bout is not None:
-    remove_match(st.session_state.delete_bout)
-    st.session_state.delete_bout = None
-    st.rerun()
-
 st.markdown("""
 <style>
     div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
@@ -309,8 +259,10 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .drag-card { margin:0 !important; cursor:move; user-select:none; }
+    .drag-card { margin:0 !important; cursor:move; user-select:none; position:relative; }
     .drag-card:active { opacity:0.7; }
+    .trash-btn { position:absolute; top:4px; right:4px; background:#ff4444; color:white; border:none; border-radius:4px; width:20px; height:20px; font-size:12px; cursor:pointer; }
+    .trash-btn:hover { background:#cc0000; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -463,7 +415,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG ONLY ----
+    # ---- MAT PREVIEWS – TRASH ICON DELETE ----
     st.subheader("Mat Previews")
     rerun_needed = False
 
@@ -480,8 +432,16 @@ if st.session_state.initialized:
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1_color = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2_color = TEAM_COLORS.get(b["w2_team"], "#999")
+                # Trash button
+                trash_id = f"trash_{b['bout_num']}"
+                if st.session_state.get(trash_id):
+                    remove_match(b["bout_num"])
+                    del st.session_state[trash_id]
+                    st.rerun()
+
                 cards_html += f'''
-                <div class="drag-card" id="card-{idx}" draggable="true" data-bout="{b['bout_num']}">
+                <div class="drag-card" id="card-{idx}" draggable="true">
+                    <button class="trash-btn" onclick="document.getElementById('{trash_id}').click()">X</button>
                     <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:10px;">
@@ -501,6 +461,7 @@ if st.session_state.initialized:
                         </div>
                     </div>
                 </div>
+                <input type="hidden" id="{trash_id}" value="">
                 '''
 
             drag_js = f"""
