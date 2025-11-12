@@ -1,4 +1,4 @@
-# app.py – ONLY ACTIVE MAT STAYS OPEN + CTRL+Z + COLOR BOXES + NO ERRORS
+# app.py – ONLY ACTIVE MAT STAYS OPEN + NO CTRL+Z + COLOR BOXES + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -54,10 +54,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_hidden", "mat_open"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "mat_open"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else {}
-        if key == "undo_hidden": st.session_state[key] = False
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -262,30 +261,6 @@ def undo_last():
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
-
-# ---- CTRL+Z: 100% WORKING (HIDDEN CHECKBOX + JS CLICK) ----
-if not hasattr(st.session_state, "undo_setup"):
-    st.checkbox("UNDO_HIDDEN", value=False, key="undo_hidden", help=None)
-    ctrl_z_js = """
-    <script>
-      document.addEventListener('keydown', e => {
-        if (e.ctrlKey && e.key === 'z' && !e.repeat) {
-          e.preventDefault();
-          const cb = document.querySelector('input[type="checkbox"][data-testid="stCheckbox"]');
-          if (cb) {
-            cb.checked = !cb.checked;
-            cb.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }
-      });
-    </script>
-    """
-    st.markdown(ctrl_z_js, unsafe_allow_html=True)
-    st.session_state.undo_setup = True
-
-# Handle undo from checkbox or Ctrl+Z
-if st.session_state.undo_hidden:
-    undo_last()
 
 st.markdown("""
 <style>
@@ -525,12 +500,12 @@ if st.session_state.initialized:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # ---- UNDO BUTTON + CTRL+Z ----
+    # ---- UNDO BUTTON (NO CTRL+Z) ----
     if st.session_state.undo_stack:
         st.markdown("---")
         col_undo, _ = st.columns([0.2, 0.8])
         with col_undo:
-            if st.button("Undo (Ctrl+Z)"):
+            if st.button("Undo"):
                 undo_last()
 
     # ---- GENERATE MEET (unchanged) ----
