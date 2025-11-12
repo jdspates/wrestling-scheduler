@@ -1,4 +1,4 @@
-# app.py - FINAL: COLORED DOT + FIRE EMOJI + SUGGESTIONS + MAT PREVIEWS
+# app.py - FINAL: COLORED DOT + REAL fire EMOJI + NO TEXT
 import streamlit as st
 import pandas as pd
 import io
@@ -382,7 +382,7 @@ if st.session_state.initialized:
             w2_str = f"{dot2}{bout['w2_name']} ({bout['w2_team']})"
             w1_glw = f"{bout['w1_grade']} / {bout['w1_level']:.1f} / {bout['w1_weight']:.0f}"
             w2_glw = f"{bout['w2_grade']} / {bout['w2_level']:.1f} / {bout['w2_weight']:.0f}"
-            # FIRE EMOJI ONLY
+            # REAL fire EMOJI
             early_label = "fire" if bout["is_early"] else ""
             rows.append({
                 "Remove": False,
