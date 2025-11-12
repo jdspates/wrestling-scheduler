@@ -1,4 +1,4 @@
-# app.py – RED X (CENTERED, TIGHT) + UNDO + CLEAN CARDS
+# app.py – RED X (CENTERED, TIGHT) + CTRL+Z UNDO + NO SPACING
 import streamlit as st
 import pandas as pd
 import io
@@ -54,9 +54,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
+for key in ["initialized", "bout_list", "mat_schedules", "suggestions", "active", "undo_stack", "undo_key"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else False
+        st.session_state[key] = [] if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"] else None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -247,10 +247,51 @@ def remove_match(bout_num):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
 
+def undo_last():
+    if st.session_state.undo_stack:
+        bout_num = st.session_state.undo_stack.pop()
+        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
+        b["manual"] = ""
+        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+        if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
+        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
+        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+        st.success("Undo successful!")
+
 # ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
+
+# ---- GLOBAL CTRL+Z LISTENER (ONE TIME) ----
+if not hasattr(st.session_state, "hotkey_installed"):
+    hotkey_js = """
+    <script>
+      document.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key === 'z') {
+          e.preventDefault();
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.style.position = 'absolute';
+          input.style.left = '-1000px';
+          document.body.appendChild(input);
+          input.value = 'undo';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          setTimeout(() => document.body.removeChild(input), 100);
+        }
+      });
+    </script>
+    """
+    st.markdown(hotkey_js, unsafe_allow_html=True)
+    st.session_state.hotkey_installed = True
+
+# Handle Ctrl+Z
+if st.session_state.undo_key == "undo":
+    undo_last()
+    st.session_state.undo_key = None
+    st.rerun()
 
 st.markdown("""
 <style>
@@ -259,8 +300,8 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .card-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-    .trash-col { flex: 0 0 28px; }  /* Tight width */
+    .card-row { display: flex; align-items: stretch; gap: 4px; margin-bottom: 6px; }
+    .trash-col { flex: 0 0 28px; display: flex; align-items: center; justify-content: center; }
     .card-col { flex: 1; }
     .trash-btn {
         background: #ff4444 !important;
@@ -299,7 +340,7 @@ if uploaded and not st.session_state.initialized:
             w["grade"] = int(w["grade"])
             w["level"] = float(w["level"])
             w["weight"] = float(w["weight"])
-            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1,True])
+            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["w2_early"] in [1,True])
             w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1,True])
             w["match_ids"] = []
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
@@ -417,7 +458,7 @@ if st.session_state.initialized:
                 st.session_state.bout_list.append({
                     "bout_num": len(st.session_state.bout_list)+1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
-                    "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
+                    "w1_level": w["level W1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
                     "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
                     "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
                     "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
@@ -430,7 +471,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – RED X (CENTERED, TIGHT) ----
+    # ---- MAT PREVIEWS – RED X (CENTERED, TIGHT) + CTRL+Z ----
     st.subheader("Mat Previews")
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -477,22 +518,14 @@ if st.session_state.initialized:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # ---- UNDO ----
+    # ---- UNDO BUTTON + CTRL+Z ----
     if st.session_state.undo_stack:
         st.markdown("---")
-        label = f"Undo ({len(st.session_state.undo_stack)})" if len(st.session_state.undo_stack) > 1 else "Undo Last Removal"
-        if st.button(label, type="primary"):
-            bout_num = st.session_state.undo_stack.pop()
-            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
-            b["manual"] = ""
-            w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-            w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-            if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
-            if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
-            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
-            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-            st.success("Undo successful!")
-            st.rerun()
+        col_undo, _ = st.columns([0.2, 0.8])
+        with col_undo:
+            if st.button("Undo (Ctrl+Z)", type="primary"):
+                undo_last()
+                st.rerun()
 
     # ---- GENERATE MEET (unchanged) ----
     if st.button("Generate Meet", type="primary"):
