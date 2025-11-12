@@ -15,11 +15,11 @@ import os
 from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# CONFIG & EMOJI MAP (real Unicode)
+# CONFIG & EMOJI MAP (REAL UNICODE)
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 
-# Real emojis (copy-paste these)
+# REAL EMOJIS — copy-paste these exact characters
 EMOJI_MAP = {
     "red": "red circle",
     "blue": "blue circle",
@@ -70,8 +70,9 @@ for i in range(5):
     col1, col2 = st.sidebar.columns([1, 4])
     
     with col1:
+        # SHOW REAL EMOJI (DOT ONLY)
         current_emoji = EMOJI_MAP[team["emoji"]]
-        st.write(current_emoji)  # Show real emoji
+        st.markdown(f"<div style='font-size:32px; text-align:center;'>{current_emoji}</div>", unsafe_allow_html=True)
     
     with col2:
         new_name = st.text_input(
@@ -312,7 +313,47 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error: {e}")
 
 if st.session_state.initialized:
-    # ----- MAT PREVIEWS (REAL EMOJIS) -----
+    # ----- SUGGESTIONS -----
+    st.subheader("Suggested Matches")
+    if st.session_state.suggestions:
+        sugg_data = []
+        for i, s in enumerate(st.session_state.suggestions):
+            sugg_data.append({
+                "Add": False,
+                "Wrestler": f"{s['wrestler']} ({s['team']})",
+                "Lvl": f"{s['level']:.1f}",
+                "Wt": f"{s['weight']:.0f}",
+                "vs": f"{s['vs']} ({s['vs_team']})",
+                "vs_Lvl": f"{s['vs_level']:.1f}",
+                "vs_Wt": f"{s['vs_weight']:.0f}",
+                "Score": f"{s['score']:.1f}",
+                "idx": i
+            })
+        sugg_df = pd.DataFrame(sugg_data)
+        edited = st.data_editor(sugg_df, use_container_width=True, hide_index=True, key="sugg_editor")
+        if st.button("Add Selected"):
+            to_add = [st.session_state.suggestions[row["idx"]] for _, row in edited.iterrows() if row["Add"]]
+            for s in to_add:
+                w, o = s["_w"], s["_o"]
+                if o not in w["matches"]: w["matches"].append(o)
+                if w not in o["matches"]: o["matches"].append(w)
+                st.session_state.bout_list.append({
+                    "bout_num": len(st.session_state.bout_list)+1,
+                    "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
+                    "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
+                    "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
+                    "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
+                    "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
+                    "is_early": w["early"] or o["early"], "manual": "Yes"
+                })
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.success("Matches added!")
+            st.rerun()
+    else:
+        st.info("All wrestlers have 2+ matches. No suggestions needed.")
+
+    # ----- MAT PREVIEWS -----
     st.subheader("Mat Previews")
     mat_dfs = {}
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
@@ -386,8 +427,94 @@ if st.session_state.initialized:
                     st.success(f"Removed {len(to_remove)} match(es)!")
                     st.rerun()
 
-    # ----- UNDO, EXCEL, PDF (unchanged) -----
-    # ... [same as before] ...
+    # ----- UNDO -----
+    if st.session_state.last_removed:
+        st.markdown("---")
+        if st.button("Undo Last Removal", type="primary"):
+            for b in st.session_state.bout_list:
+                if b["bout_num"] == st.session_state.last_removed and b["manual"] == "Removed":
+                    b["manual"] = ""
+                    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+                    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+                    if w2 not in w1["matches"]: w1["matches"].append(w2)
+                    if w1 not in w2["matches"]: w2["matches"].append(w1)
+                    break
+            st.session_state.last_removed = None
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.success("Undo successful!")
+            st.rerun()
+
+    # ----- EXCEL + PDF -----
+    if st.button("Generate Meet", type="primary"):
+        # ---- EXCEL ----
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name="Matchups", index=False)
+            for m in range(1, CONFIG["NUM_MATS"]+1):
+                data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
+                if not data:
+                    pd.DataFrame([["", "", ""]], columns=["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]).to_excel(writer, sheet_name=f"Mat {m}", index=False)
+                    continue
+                df = pd.DataFrame(data)[["mat_bout_num","w1","w2"]]
+                df.columns = ["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]
+                df.to_excel(writer, sheet_name=f"Mat {m}", index=False)
+                wb = writer.book
+                ws = wb[f"Mat {m}"]
+                yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                for idx, _ in df.iterrows():
+                    bout = next(b for b in st.session_state.bout_list if b["bout_num"] == data[idx]["bout_num"])
+                    if bout["is_early"]:
+                        for col in range(1,4):
+                            ws.cell(row=idx+2, column=col).fill = yellow_fill
+        excel_bytes = output.getvalue()
+
+        # ---- PDF ----
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        for m in range(1, CONFIG["NUM_MATS"]+1):
+            data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
+            if not data:
+                elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
+                elements.append(PageBreak())
+                continue
+            table_data = [["#","Wrestler 1","Wrestler 2"]]
+            for e in data:
+                bout = next(b for b in st.session_state.bout_list if b["bout_num"] == e["bout_num"])
+                c1 = TEAM_COLORS.get(bout["w1_team"], "#000000")
+                c2 = TEAM_COLORS.get(bout["w2_team"], "#000000")
+                w1 = Paragraph(f'<font color="{c1}"><b>{bout["w1_name"]}</b></font> ({bout["w1_team"]})', styles["Normal"])
+                w2 = Paragraph(f'<font color="{c2}"><b>{bout["w2_name"]}</b></font> ({bout["w2_team"]})', styles["Normal"])
+                table_data.append([e["mat_bout_num"], w1, w2])
+            table = Table(table_data, colWidths=[0.5*inch, 3*inch, 3*inch])
+            style = TableStyle([
+                ("GRID", (0,0), (-1,-1), 0.5, rl_colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("BACKGROUND", (0,0), (-1,0), rl_colors.lightgrey),
+                ("ALIGN", (0,0), (-1,-1), "LEFT"),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ])
+            for r_idx, _ in enumerate(table_data[1:], 1):
+                bout = next(b for b in st.session_state.bout_list if b["bout_num"] == data[r_idx-1]["bout_num"])
+                if bout["is_early"]:
+                    style.add("BACKGROUND", (0, r_idx), (-1, r_idx), HexColor("#FFFF99"))
+            table.setStyle(style)
+            elements.append(Paragraph(f"Mat {m}", styles["Title"]))
+            elements.append(Spacer(1, 12))
+            elements.append(table)
+            if m < CONFIG["NUM_MATS"]:
+                elements.append(PageBreak())
+        doc.build(elements)
+        pdf_bytes = pdf_buffer.getvalue()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col2:
+            st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
