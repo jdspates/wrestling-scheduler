@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – FINAL CLEAN VERSION
+# app.py – Wrestling Scheduler – SESSION-STATE CONFIG (NO FILE)
 import streamlit as st
 import pandas as pd
 import io
@@ -10,13 +10,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 import json
-import os
-from openpyxl.styles import PatternFill
 
 # ----------------------------------------------------------------------
-# CONFIG & COLOR MAP
+# CONFIG & COLOR MAP – SESSION-STATE ONLY
 # ----------------------------------------------------------------------
-CONFIG_FILE = "config.json"
 COLOR_MAP = {
     "red": "#FF0000", "blue": "#0000FF", "green": "#008000",
     "yellow": "#FFD700", "black": "#000000", "white": "#FFFFFF",
@@ -31,17 +28,16 @@ DEFAULT_CONFIG = {
         {"name": "", "color": "black"}
     ]
 }
-if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "r") as f:
-        CONFIG = json.load(f)
-else:
-    CONFIG = DEFAULT_CONFIG.copy()
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
+
+# Initialize config in session_state
+if "CONFIG" not in st.session_state:
+    st.session_state.CONFIG = DEFAULT_CONFIG.copy()
+
+CONFIG = st.session_state.CONFIG
 TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
-# SESSION STATE
+# SESSION STATE (ROSTER + UI)
 # ----------------------------------------------------------------------
 for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
     if key not in st.session_state:
@@ -263,7 +259,6 @@ st.markdown("""
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
 
-    /* Small buttons in main content */
     .main .stButton > button {
         min-width: 30px;
         height: 30px;
@@ -274,18 +269,15 @@ st.markdown("""
         justify-content: center;
     }
 
-    /* Normal sidebar buttons */
     .stSidebar .stButton > button {
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
     }
 
-    /* Search input polish */
     .stTextInput > div > div > input { border-radius: 6px !important; }
     .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
 
-    /* Center trash emoji */
     .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -362,6 +354,8 @@ for i in range(5):
     )
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
+
+# Apply changes to session_state.CONFIG
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
@@ -369,25 +363,23 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
                    "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
                    "MIN_WEIGHT_DIFF": new_min_weight})
     changed = True
+
 st.sidebar.markdown("---")
 if st.sidebar.button("Reset", type="secondary"):
-    CONFIG = DEFAULT_CONFIG.copy()
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Reset! Refresh to apply.")
+    st.session_state.CONFIG = DEFAULT_CONFIG.copy()
+    st.sidebar.success("Reset! Settings cleared for this session.")
     st.rerun()
+
 if changed:
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Settings saved! Refresh to apply.")
+    st.sidebar.success("Settings updated for this session.")
     st.rerun()
+
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
 # MAIN APP – SEARCH + CLEAN MATS
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # Build filtered active list
     raw_active = st.session_state.active
     if search_term.strip():
         term = search_term.strip().lower()
@@ -486,7 +478,6 @@ if st.session_state.initialized:
 
         with st.expander(f"Mat {mat}", expanded=True):
             if not mat_bouts:
-                # Empty – no content
                 pass
             else:
                 if mat not in st.session_state.mat_order:
@@ -503,11 +494,11 @@ if st.session_state.initialized:
                     w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                     col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                     with col_up:
-                        st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                        st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                     with col_down:
-                        st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                        st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                     with col_del:
-                        st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+                        st.button("Trash", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
                         st.markdown(f"""
                         <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
@@ -587,5 +578,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
