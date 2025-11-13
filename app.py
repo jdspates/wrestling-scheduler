@@ -1,4 +1,4 @@
-# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT
+# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + PERSIST OPEN STATE
 import streamlit as st
 import pandas as pd
 import io
@@ -200,7 +200,6 @@ def generate_mat_schedule(bout_list, gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
-    # Save open state BEFORE rerun
     open_mats = st.session_state.mat_open.copy()
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
@@ -215,6 +214,7 @@ def remove_match(bout_num):
     st.session_state.mat_open = open_mats
     st.success("Match removed.")
     st.rerun()
+
 def undo_last():
     open_mats = st.session_state.mat_open.copy()
     if st.session_state.undo_stack:
@@ -231,20 +231,29 @@ def undo_last():
         st.session_state.mat_open = open_mats
         st.success("Undo successful!")
     st.rerun()
+
 def move_up(mat, bout_num):
+    open_mats = st.session_state.mat_open.copy()
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
             idx = order.index(bout_num)
             if idx > 0:
                 order[idx-1], order[idx] = order[idx], order[idx-1]
+    st.session_state.mat_open = open_mats
+    st.rerun()
+
 def move_down(mat, bout_num):
+    open_mats = st.session_state.mat_open.copy()
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
             idx = order.index(bout_num)
             if idx < len(order) - 1:
                 order[idx], order[idx+1] = order[idx+1], order[idx]
+    st.session_state.mat_open = open_mats
+    st.rerun()
+
 # ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
@@ -261,6 +270,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
+
 # ---- UPLOAD (NO KEY) ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
@@ -284,10 +294,11 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.initialized = True
-        st.session_state.mat_open = {} # Reset open state
+        st.session_state.mat_open = {}  # All closed on first load
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
         st.error(f"Error: {e}")
+
 # ---- SETTINGS (unchanged) ----
 st.sidebar.header("Meet Settings")
 changed = False
@@ -340,11 +351,12 @@ if changed:
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
+
 # ----------------------------------------------------------------------
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS (WITH WRESTLER 2 CURRENT COLUMN) ----
+    # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -410,7 +422,8 @@ if st.session_state.initialized:
             st.rerun()
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
-    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE + YELLOW ----
+
+    # ---- MAT PREVIEWS ----
     st.subheader("Mat Previews")
     open_mats = st.session_state.mat_open.copy()
     for mat in range(1, CONFIG["NUM_MATS"]+1):
@@ -435,23 +448,23 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                    st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                 with col_down:
-                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                    st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                 with col_del:
                     st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                 with col_card:
                     st.markdown(f"""
-                    <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                    <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <div style="display:flex;align-items:center;gap:8px;">
-                                <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
+                                <div style="width:12px;height:12px;background:{w1c};border-radius:50%;"></div>
                                 <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
                                 <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
                             </div>
                             <div style="font-weight:700;">vs</div>
                             <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
-                                <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
+                                <div style="width:12px;height:12px;background:{w2c};border-radius:50%;"></div>
                                 <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
                                 <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
                             </div>
@@ -461,15 +474,17 @@ if st.session_state.initialized:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo", help="Restore last removed match"):
             undo_last()
+
     # ---- GENERATE MEET ----
     if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
-        with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        with pd activating pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
             for m in range(1, CONFIG["NUM_MATS"]+1):
                 data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
@@ -514,5 +529,6 @@ if st.session_state.initialized:
         st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
+
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
