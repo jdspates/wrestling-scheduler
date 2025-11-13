@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler with robust live search
+# app.py – Wrestling Scheduler – SEARCH FIXED
 import streamlit as st
 import pandas as pd
 import io
@@ -383,11 +383,11 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – WITH SEARCH
+# MAIN APP – SEARCH FIXED
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     # --------------------------------------------------------------
-    # 1. Build the filtered wrestler list (case‑insensitive)
+    # 1. Build filtered wrestler list (case‑insensitive)
     # --------------------------------------------------------------
     raw_active = st.session_state.active
     if search_term.strip():
@@ -402,12 +402,11 @@ if st.session_state.initialized:
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
     # --------------------------------------------------------------
-    # 2. SUGGESTED MATCHUPS (scoped to filtered wrestlers)
+    # 2. SUGGESTED MATCHUPS (includes 0‑match wrestlers)
     # --------------------------------------------------------------
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
 
-    # ---- accurate caption (never the old “all have 2+” message) ----
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
     st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
 
@@ -472,7 +471,7 @@ if st.session_state.initialized:
             st.success("Matches added!")
             st.rerun()
     else:
-        # Show an empty table – never the old misleading message
+        # Show empty table + accurate message
         empty_df = pd.DataFrame(columns=["Add","Current","Wrestler","Lvl","Wt","vs_Current","vs","vs_Lvl","vs_Wt","Score"])
         st.data_editor(
             empty_df,
@@ -496,32 +495,45 @@ if st.session_state.initialized:
             st.info("All **filtered** wrestlers already have 2+ matches.")
 
     # --------------------------------------------------------------
-    # 3. MAT PREVIEWS – show every bout that involves a filtered wrestler
+    # 3. MAT PREVIEWS – show every bout for filtered wrestlers
     # --------------------------------------------------------------
     st.subheader("Mat Previews")
-    # Gather *all* bouts that touch at least one filtered wrestler
+
+    # Build set of filtered wrestler IDs once
+    filtered_ids = {w["id"] for w in filtered_active}
+
+    # Collect all bouts that involve at least one filtered wrestler
     filtered_bout_list = [
         b for b in st.session_state.bout_list
-        if b["w1_id"] in {w["id"] for w in filtered_active}
-        or b["w2_id"] in {w["id"] for w in filtered_active}
+        if b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids
     ]
-    filtered_schedule = generate_mat_schedule(filtered_bout_list)
 
-    for mat in range(1, CONFIG["NUM_MATS"]+1):
-        bouts = [m for m in filtered_schedule if m["mat"]==mat]
-        if not bouts:
+    # Re‑schedule only the filtered bouts
+    filtered_schedule = generate_mat_schedule(filtered_bout_list) if filtered_bout_list else []
+
+    # Build a lookup: bout_num → mat for fast display
+    bout_to_mat = {entry["bout_num"]: entry["mat"] for entry in filtered_schedule}
+
+    for mat in range(1, CONFIG["NUM_MATS"] + 1):
+        # Get bouts scheduled for this mat
+        mat_bouts = [b for b in filtered_bout_list if bout_to_mat.get(b["bout_num"]) == mat]
+        if not mat_bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
+
         with st.expander(f"Mat {mat}", expanded=True):
+            # Initialize order if missing
             if mat not in st.session_state.mat_order:
-                st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
+                st.session_state.mat_order[mat] = [b["bout_num"] for b in mat_bouts]
+
             ordered_bouts = []
             for bout_num in st.session_state.mat_order[mat]:
-                entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
+                entry = next((e for e in filtered_schedule if e["bout_num"] == bout_num), None)
                 if entry:
                     ordered_bouts.append(entry)
+
             for idx, m in enumerate(ordered_bouts):
-                b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
