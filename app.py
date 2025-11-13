@@ -337,7 +337,7 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
                    "MIN_WEIGHT_DIFF": new_min_weight})
     changed = True
 st.sidebar.markdown("---")
-if st.sidebar.button("Reset to Default", type="secondary"):
+if st.sidebar.button("Reset", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
@@ -526,4 +526,5 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
