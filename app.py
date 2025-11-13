@@ -613,7 +613,7 @@ if st.session_state.initialized:
                                     ("VALIGN",(0,0),(-1,-1),"MIDDLE")])
                     for r, _ in enumerate(table[1:], 1):
                         if next(b for b in st.session_state.bout_list if b["bout_num"] == data[r-1]["bout_num"])["is_early"]:
-                            s.add("BACKGROUND",(0,r),-1,r),HexColor("#FFFF99"))
+                            s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
                     t.setStyle(s)
                     elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1,12), t]
                     if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
@@ -648,3 +648,4 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
