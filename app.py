@@ -1,4 +1,4 @@
-# app.py – FULL CARD DRAG + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
+# app.py – FULL CARD DRAG + REORDER + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
 import streamlit as st
 import pandas as pd
 import io
@@ -232,8 +232,14 @@ st.markdown("""
         cursor: grab;
         user-select: none;
         margin-bottom: 8px;
+        padding: 10px;
+        background: #fff;
+        border: 1px solid #e6e6e6;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .card-container:active { cursor: grabbing; }
+    .card-container.dragging { opacity: 0.5; }
     .trash-col {
         display: flex;
         align-items: center;
@@ -259,53 +265,24 @@ st.markdown("""
         margin:0!important;
     }
     .trash-btn:hover { background:#cc0000!important; }
-
-    div[data-testid="column"]:has(> div > button.trash-btn) {
-        height: 100%;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# DRAG & DROP JS
-st.markdown("""
-<script>
-let dragged = null;
-document.addEventListener('dragstart', e => {
-    if (e.target.classList.contains('card-container')) {
-        dragged = e.target;
-        e.dataTransfer.effectAllowed = 'move';
-    }
-});
-document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', e => {
-    e.preventDefault();
-    if (dragged && e.target.classList.contains('card-container')) {
-        const mat = e.target.closest('[data-mat]').dataset.mat;
-        const from = dragged.dataset.bout;
-        const to = e.target.dataset.bout;
-        if (from !== to) {
-            window.parent.postMessage({type: 'drag', mat, from, to}, '*');
-        }
-    }
-    dragged = null;
-});
-</script>
-""", unsafe_allow_html=True)
-
-# Listen for drag events
-if st.session_state.get("drag_event"):
-    event = st.session_state.drag_event
-    mat = event["mat"]
-    from_bout = event["from"]
-    to_bout = event["to"]
+# DRAG & DROP WITH QUERY PARAMS
+query_params = st.experimental_get_query_params()
+if "drag" in query_params:
+    drag_data = query_params["drag"][0].split("|")
+    mat = int(drag_data[0])
+    from_bout = int(drag_data[1])
+    to_bout = int(drag_data[2])
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if from_bout in order and to_bout in order:
             i = order.index(from_bout)
             j = order.index(to_bout)
             order.pop(i)
-            order.insert(j, from_bout)
-    st.session_state.drag_event = None
+            order.insert(j if i < j else j, from_bout)
+    st.experimental_set_query_params()  # Clear
     st.rerun()
 
 st.title("Wrestling Meet Scheduler")
@@ -444,7 +421,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG ENTIRE CARD + DELETE ----
+    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE ----
     st.subheader("Mat Previews")
 
     open_mats = st.session_state.mat_open.copy()
@@ -474,14 +451,17 @@ if st.session_state.initialized:
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                # DRAG + DELETE + CARD
                 col_del, col_card = st.columns([0.08, 1], gap="small")
                 with col_del:
                     if st.button("X", key=f"del_{b['bout_num']}", help="Remove match (Undo available)"):
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
-                    <div class="card-container" draggable="true" data-mat="{mat}" data-bout="{b['bout_num']}" style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;">
+                    <div class="card-container" 
+                         draggable="true" 
+                         ondragstart="event.dataTransfer.setData('text', '{mat}|{b['bout_num']}')"
+                         ondrop="event.preventDefault(); window.location.href = '?drag=' + '{mat}|{b['bout_num']}' + '|' + event.dataTransfer.getData('text').split('|')[1]"
+                         ondragover="event.preventDefault()">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
