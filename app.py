@@ -41,7 +41,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 # ----------------------------------------------------------------------
@@ -200,7 +200,6 @@ def generate_mat_schedule(bout_list, gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
-    open_mats = st.session_state.mat_open.copy()
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
@@ -211,12 +210,10 @@ def remove_match(bout_num):
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.mat_order = {}
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-    st.session_state.mat_open = open_mats
     st.success("Match removed.")
     st.rerun()
 
 def undo_last():
-    open_mats = st.session_state.mat_open.copy()
     if st.session_state.undo_stack:
         bout_num = st.session_state.undo_stack.pop()
         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
@@ -228,30 +225,25 @@ def undo_last():
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.session_state.mat_open = open_mats
         st.success("Undo successful!")
     st.rerun()
 
 def move_up(mat, bout_num):
-    open_mats = st.session_state.mat_open.copy()
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
             idx = order.index(bout_num)
             if idx > 0:
                 order[idx-1], order[idx] = order[idx], order[idx-1]
-    st.session_state.mat_open = open_mats
     st.rerun()
 
 def move_down(mat, bout_num):
-    open_mats = st.session_state.mat_open.copy()
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
             idx = order.index(bout_num)
             if idx < len(order) - 1:
                 order[idx], order[idx+1] = order[idx+1], order[idx]
-    st.session_state.mat_open = open_mats
     st.rerun()
 
 # ----------------------------------------------------------------------
@@ -294,7 +286,6 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.initialized = True
-        st.session_state.mat_open = {}  # All closed on first load
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
         st.error(f"Error: {e}")
@@ -397,7 +388,6 @@ if st.session_state.initialized:
             key="sugg_editor"
         )
         if st.button("Add Selected", help="Add checked suggested matches"):
-            open_mats = st.session_state.mat_open.copy()
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -417,7 +407,6 @@ if st.session_state.initialized:
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.mat_order = {}
-            st.session_state.mat_open = open_mats
             st.success("Matches added!")
             st.rerun()
     else:
@@ -425,15 +414,14 @@ if st.session_state.initialized:
 
     # ---- MAT PREVIEWS ----
     st.subheader("Mat Previews")
-    open_mats = st.session_state.mat_open.copy()
     for mat in range(1, CONFIG["NUM_MATS"]+1):
-        bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
-        if not bouts:
-            st.write(f"**Mat {mat}: No matches**")
-            continue
-        key = f"mat_{mat}"
-        is_open = open_mats.get(key, False)
-        with st.expander(f"Mat {mat}", expanded=is_open):
+        key = f"show_mat_{mat}"
+        st.checkbox(f"Mat {mat}", key=key)
+        if st.session_state[key]:
+            bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
+            if not bouts:
+                st.write("No matches")
+                continue
             if mat not in st.session_state.mat_order:
                 st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
             ordered_bouts = []
