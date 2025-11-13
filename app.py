@@ -66,14 +66,17 @@ for key in ["initialized","bout_list","mat_schedules","suggestions","active","un
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
-def is_compatible(w1,w2):
-    return w1["team"]!=w2["team"] and not (
-        (w1["['grade'] == 5 and w2['grade'] in [7,8]) or (w2['grade'] == 5 and w1['grade'] in [7,8])
+def is_compatible(w1, w2):
+    return w1["team"] != w2["team"] and not (
+        (w1["grade"] == 5 and w2["grade"] in [7, 8]) or (w2["grade"] == 5 and w1["grade"] in [7, 8])
     )
+
 def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
+
 def generate_initial_matchups(active):
     bouts = set()
     for level in sorted({w["level"] for w in active}, reverse=True):
@@ -88,8 +91,8 @@ def generate_initial_matchups(active):
                         and o["id"] != w["id"]
                         and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
-                        and abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
-                        and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]  # ← FIXED QUOTE
+                        and abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
+                        and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]  # ← FIXED QUOTE
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
                 w["match_ids"].append(best["id"])
@@ -502,7 +505,7 @@ if st.session_state.initialized:
                     w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                     col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                     with col_up:
-                        st.button("Up", key=f"up_{mat}_{  {b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                        st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                     with col_down:
                         st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                     with col_del:
@@ -582,7 +585,7 @@ if st.session_state.initialized:
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w1_team"],"#000")}"><b>{b["w1_name"]}</b></font> ({b["w1_team"]})', styles["Normal"]),
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w2_team"],"#000")}"><b>{b["w2_name"]}</b></font> ({b["w2_team"]})', styles["Normal"])])
                     t = Table(table, colWidths=[0.5*inch, 3*inch, 3*inch])
-                    s = TableStyle([("GRID",(0,0),(-1,-1),0.5,rl466_colors.black),
+                    s = TableStyle([("GRID",(0,0),(-1,-1),0.5,rl_colors.black),
                                     ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
                                     ("BACKGROUND",(0,0),(-1,0),rl_colors.lightgrey),
                                     ("ALIGN",(0,0),(-1,-1),"LEFT"),
