@@ -1,4 +1,4 @@
-# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + PERSIST OPEN STATE + ARROW ICONS
+# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + ALWAYS OPEN MATS
 import streamlit as st
 import pandas as pd
 import io
@@ -412,56 +412,54 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS ----
+    # ---- MAT PREVIEWS (ALWAYS EXPANDED) ----
     st.subheader("Mat Previews")
     for mat in range(1, CONFIG["NUM_MATS"]+1):
-        key = f"show_mat_{mat}"
-        st.checkbox(f"Mat {mat}", key=key)
-        if st.session_state[key]:
-            bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
-            if not bouts:
-                st.write("No matches")
-                continue
-            if mat not in st.session_state.mat_order:
-                st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
-            ordered_bouts = []
-            for bout_num in st.session_state.mat_order[mat]:
-                entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
-                if entry:
-                    ordered_bouts.append(entry)
-            for idx, m in enumerate(ordered_bouts):
-                b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
-                bg = "#fff3cd" if b["is_early"] else "#ffffff"
-                w1c = TEAM_COLORS.get(b["w1_team"], "#999")
-                w2c = TEAM_COLORS.get(b["w2_team"], "#999")
-                col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
-                with col_up:
-                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
-                with col_down:
-                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
-                with col_del:
-                    st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
-                with col_card:
-                    st.markdown(f"""
-                    <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
-                        <div style="display:flex;align-items:center;gap:12px;">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <div style="width:12px;height:12px;background:{w1c};border-radius:50%;"></div>
-                                <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
-                                <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
-                            </div>
-                            <div style="font-weight:700;">vs</div>
-                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
-                                <div style="width:12px;height:12px;background:{w2c};border-radius:50%;"></div>
-                                <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
-                                <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
-                            </div>
+        bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
+        if not bouts:
+            st.markdown(f"**Mat {mat}: No matches**")
+            continue
+        st.markdown(f"### Mat {mat}")
+        if mat not in st.session_state.mat_order:
+            st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
+        ordered_bouts = []
+        for bout_num in st.session_state.mat_order[mat]:
+            entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
+            if entry:
+                ordered_bouts.append(entry)
+        for idx, m in enumerate(ordered_bouts):
+            b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
+            bg = "#fff3cd" if b["is_early"] else "#ffffff"
+            w1c = TEAM_COLORS.get(b["w1_team"], "#999")
+            w2c = TEAM_COLORS.get(b["w2_team"], "#999")
+            col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
+            with col_up:
+                st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+            with col_down:
+                st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+            with col_del:
+                st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+            with col_card:
+                st.markdown(f"""
+                <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="width:12px;height:12px;background:{w1c};border-radius:50%;"></div>
+                            <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
+                            <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
                         </div>
-                        <div style="font-size:0.8rem;color:#555;margin-top:4px;">
-                            Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                        <div style="font-weight:700;">vs</div>
+                        <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
+                            <div style="width:12px;height:12px;background:{w2c};border-radius:50%;"></div>
+                            <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
+                            <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="font-size:0.8rem;color:#555;margin-top:4px;">
+                        Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
