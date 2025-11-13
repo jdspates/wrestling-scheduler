@@ -92,7 +92,7 @@ def generate_initial_matchups(active):
                         and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
                         and is_compatible(w, o)
                         and abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
-                        and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]  # ← FIXED QUOTE
+                        and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps: continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
                 w["match_ids"].append(best["id"])
@@ -134,48 +134,69 @@ def build_suggestions(active, bout_list):
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # PRIORITIZE EARLY MATCHES FIRST
-    early_bouts = [b for b in valid if b["is_early"]]
-    non_early_bouts = [b for b in valid if not b["is_early"]]
+    # SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
+    valid.sort(key=lambda x: x["avg_weight"])
     
-    # Sort early bouts by avg_weight (lightest first)
-    early_bouts.sort(key=lambda x: x["avg_weight"])
-    # Sort non-early by avg_weight
-    non_early_bouts.sort(key=lambda x: x["avg_weight"])
-    
-    # Recombine: early first, then non-early
-    sorted_bouts = early_bouts + non_early_bouts
-    
-    per_mat = len(sorted_bouts) // CONFIG["NUM_MATS"]
-    extra = len(sorted_bouts) % CONFIG["NUM_MATS"]
+    # DISTRIBUTE ACROSS MATS (lightest on Mat 1, heaviest on last mat)
+    per_mat = len(valid) // CONFIG["NUM_MATS"]
+    extra = len(valid) % CONFIG["NUM_MATS"]
     mats = []
     start = 0
     for i in range(CONFIG["NUM_MATS"]):
         end = start + per_mat + (1 if i < extra else 0)
-        mats.append(sorted_bouts[start:end])
+        mats.append(valid[start:end])
         start = end
 
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
+        early_bouts = [b for b in mat_bouts if b["is_early"]]
+        non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
         total_slots = len(mat_bouts)
         first_half_end = (total_slots + 1) // 2
         slot = 1
         scheduled = []
         first_half_wrestlers = set()
 
-        # Fill first half with early bouts (already sorted)
-        remaining_early = mat_bouts[:first_half_end]
-        remaining = mat_bouts[first_half_end:]
+        # Try to place first early match at slot 1
+        first_early = None
+        for b in early_bouts:
+            l1 = last_slot.get(b["w1_id"], -100)
+            l2 = last_slot.get(b["w2_id"], -100)
+            if l1 < 0 and l2 < 0:
+                first_early = b
+                break
+        if first_early:
+            early_bouts.remove(first_early)
+            scheduled.append((1, first_early))
+            last_slot[first_early["w1_id"]] = 1
+            last_slot[first_early["w2_id"]] = 1
+            first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
+            slot = 2
 
-        for b in remaining_early:
-            scheduled.append((slot, b))
-            last_slot[b["w1_id"]] = slot
-            last_slot[b["w2_id"]] = slot
-            first_half_wrestlers.update([b["w1_id"], b["w2_id"]])
+        # Fill first half with early matches
+        while early_bouts and len(scheduled) < first_half_end:
+            best = None
+            best_score = -float("inf")
+            for b in early_bouts:
+                if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
+                l1 = last_slot.get(b["w1_id"], -100)
+                l2 = last_slot.get(b["w2_id"], -100)
+                if l1 >= slot - 1 or l2 >= slot - 1: continue
+                score = min(slot - l1 - 1, slot - l2 - 1)
+                if score > best_score:
+                    best_score = score
+                    best = b
+            if best is None: break
+            early_bouts.remove(best)
+            scheduled.append((slot, best))
+            last_slot[best["w1_id"]] = slot
+            last_slot[best["w2_id"]] = slot
+            first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
             slot += 1
 
-        # Fill rest with gap logic
+        # Fill remaining with gap logic
+        remaining = non_early_bouts + early_bouts
         while remaining:
             best = None
             best_gap = -1
@@ -511,7 +532,7 @@ if st.session_state.initialized:
                     with col_del:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
-                        st.markdown(f"""
+                        st  st.markdown(f"""
                         <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:12px;">
                                 <div style="display:flex;align-items:center;gap:8px;">
