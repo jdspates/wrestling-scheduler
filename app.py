@@ -1,4 +1,5 @@
-# app.py – FINAL: Arrows Up Down + Reset button padded
+# app.py – Last good build 0751 111325
+# Mat previews now start OPEN and re-open on rerun (no auto-collapse)
 import streamlit as st
 import pandas as pd
 import io
@@ -48,7 +49,7 @@ for key in ["initialized","bout_list","mat_schedules","suggestions","active","un
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
 # ----------------------------------------------------------------------
-# CORE LOGIC (unchanged)
+# CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1,w2):
     return w1["team"]!=w2["team"] and not (
@@ -263,12 +264,6 @@ st.markdown("""
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
     .stButton > button { min-width: 30px; height: 30px; padding: 0; font-size: 14px; }
-
-    /* Reset to Default button – padding via aria-label */
-    button[aria-label="Reset to Default"] {
-        padding: 0.5rem 1rem !important;
-        min-height: 40px !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -342,7 +337,6 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
                    "MIN_WEIGHT_DIFF": new_min_weight})
     changed = True
 st.sidebar.markdown("---")
-# Reset to Default button – uses aria-label for CSS
 if st.sidebar.button("Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
@@ -432,6 +426,7 @@ if st.session_state.initialized:
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
+        key = f"mat_{mat}"
         with st.expander(f"Mat {mat}", expanded=True):
             if mat not in st.session_state.mat_order:
                 st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
@@ -447,9 +442,9 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                 with col_down:
-                    st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                 with col_del:
                     st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                 with col_card:
@@ -531,3 +526,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
