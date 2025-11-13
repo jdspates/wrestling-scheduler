@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler with Live Search
+# app.py – Wrestling Scheduler with robust live search
 import streamlit as st
 import pandas as pd
 import io
@@ -282,20 +282,11 @@ st.markdown("""
     }
 
     /* Search input polish */
-    .stTextInput > div > div > input {
-        border-radius: 6px !important;
-    }
-    .stTextInput > div > div > button {
-        background: transparent !important;
-        border: none !important;
-        color: #888 !important;
-    }
+    .stTextInput > div > div > input { border-radius: 6px !important; }
+    .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
 
     /* Center trash emoji */
-    .stButton > button[key^="del_"] {
-        line-height: 30px !important;
-        font-size: 18px !important;
-    }
+    .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -337,7 +328,7 @@ search_term = st.sidebar.text_input(
     value="",
     placeholder="e.g. Smith or Red",
     key="wrestler_search",
-    help="Live filter – clears automatically when empty"
+    help="Live filter – shows **all** matches for matching wrestlers"
 )
 
 changed = False
@@ -395,7 +386,9 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP – WITH SEARCH
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # Build filtered active list
+    # --------------------------------------------------------------
+    # 1. Build the filtered wrestler list (case‑insensitive)
+    # --------------------------------------------------------------
     raw_active = st.session_state.active
     if search_term.strip():
         term = search_term.strip().lower()
@@ -403,12 +396,21 @@ if st.session_state.initialized:
             w for w in raw_active
             if term in w["name"].lower() or term in w["team"].lower()
         ]
+        st.info(f"Showing **{len(filtered_active)}** wrestler(s) matching “{search_term}” (out of {len(raw_active)} total).")
     else:
         filtered_active = raw_active
+        st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
-    # ---- SUGGESTED MATCHUPS ----
+    # --------------------------------------------------------------
+    # 2. SUGGESTED MATCHUPS (scoped to filtered wrestlers)
+    # --------------------------------------------------------------
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
+
+    # ---- accurate caption (never the old “all have 2+” message) ----
+    under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
+    st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
+
     if current_suggestions:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
@@ -470,14 +472,38 @@ if st.session_state.initialized:
             st.success("Matches added!")
             st.rerun()
     else:
-        st.info("All wrestlers have 2+ matches. No suggestions needed.")
+        # Show an empty table – never the old misleading message
+        empty_df = pd.DataFrame(columns=["Add","Current","Wrestler","Lvl","Wt","vs_Current","vs","vs_Lvl","vs_Wt","Score"])
+        st.data_editor(
+            empty_df,
+            column_config={
+                "Add": st.column_config.CheckboxColumn("Add"),
+                "Current": st.column_config.NumberColumn("Current"),
+                "Wrestler": st.column_config.TextColumn("Wrestler"),
+                "Lvl": st.column_config.NumberColumn("Lvl"),
+                "Wt": st.column_config.NumberColumn("Wt"),
+                "vs_Current": st.column_config.NumberColumn("vs_Current"),
+                "vs": st.column_config.TextColumn("vs"),
+                "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
+                "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
+                "Score": st.column_config.NumberColumn("Score"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="sugg_editor_empty"
+        )
+        if under_count == 0:
+            st.info("All **filtered** wrestlers already have 2+ matches.")
 
-    # ---- MAT PREVIEWS ----
+    # --------------------------------------------------------------
+    # 3. MAT PREVIEWS – show every bout that involves a filtered wrestler
+    # --------------------------------------------------------------
     st.subheader("Mat Previews")
+    # Gather *all* bouts that touch at least one filtered wrestler
     filtered_bout_list = [
         b for b in st.session_state.bout_list
-        if (b["w1_id"] in {w["id"] for w in filtered_active} or
-            b["w2_id"] in {w["id"] for w in filtered_active})
+        if b["w1_id"] in {w["id"] for w in filtered_active}
+        or b["w2_id"] in {w["id"] for w in filtered_active}
     ]
     filtered_schedule = generate_mat_schedule(filtered_bout_list)
 
@@ -501,11 +527,11 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                    st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                 with col_down:
-                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                    st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                 with col_del:
-                    st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+                    st.button("Trash", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                 with col_card:
                     st.markdown(f"""
                     <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
@@ -528,13 +554,17 @@ if st.session_state.initialized:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # ---- UNDO BUTTON ----
+    # --------------------------------------------------------------
+    # 4. UNDO BUTTON
+    # --------------------------------------------------------------
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo", help="Restore last removed match"):
             undo_last()
 
-    # ---- GENERATE MEET ----
+    # --------------------------------------------------------------
+    # 5. GENERATE MEET (Excel + PDF)
+    # --------------------------------------------------------------
     if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
