@@ -1,5 +1,4 @@
-# app.py – Last good build 0751 111325
-# Mat previews now start OPEN and re-open on rerun (no auto-collapse)
+# app.py – Wrestling Scheduler with Live Search
 import streamlit as st
 import pandas as pd
 import io
@@ -13,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
+
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
@@ -39,12 +39,14 @@ else:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 TEAMS = CONFIG["TEAMS"]
+
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
 for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
+
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
@@ -56,6 +58,7 @@ def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
+
 def generate_initial_matchups(active):
     bouts = set()
     for level in sorted({w["level"] for w in active}, reverse=True):
@@ -93,6 +96,7 @@ def generate_initial_matchups(active):
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
+
 def build_suggestions(active, bout_list):
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
@@ -108,6 +112,7 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
+
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
@@ -197,6 +202,7 @@ def generate_mat_schedule(bout_list, gap=4):
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
     return schedules
+
 # ----------------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------------
@@ -213,6 +219,7 @@ def remove_match(bout_num):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
     st.rerun()
+
 def undo_last():
     if st.session_state.undo_stack:
         bout_num = st.session_state.undo_stack.pop()
@@ -227,6 +234,7 @@ def undo_last():
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
     st.rerun()
+
 def move_up(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
@@ -234,6 +242,7 @@ def move_up(mat, bout_num):
             idx = order.index(bout_num)
             if idx > 0:
                 order[idx-1], order[idx] = order[idx], order[idx-1]
+
 def move_down(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
@@ -241,6 +250,7 @@ def move_down(mat, bout_num):
             idx = order.index(bout_num)
             if idx < len(order) - 1:
                 order[idx], order[idx+1] = order[idx+1], order[idx]
+
 # ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
@@ -271,23 +281,28 @@ st.markdown("""
         min-width: auto !important;
     }
 
-    /* Center emoji/text in delete (trash) buttons - stronger targeting */
-    .stButton > button[key^="del_"],
-    .stButton > button[key^="del_"] > span {
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        text-align: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
+    /* Search input polish */
+    .stTextInput > div > div > input {
+        border-radius: 6px !important;
+    }
+    .stTextInput > div > div > button {
+        background: transparent !important;
+        border: none !important;
+        color: #888 !important;
+    }
+
+    /* Center trash emoji */
+    .stButton > button[key^="del_"] {
+        line-height: 30px !important;
+        font-size: 18px !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
-# ---- UPLOAD (NO KEY) ----
+
+# ---- UPLOAD ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
     try:
@@ -313,8 +328,18 @@ if uploaded and not st.session_state.initialized:
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
         st.error(f"Error: {e}")
-# ---- SETTINGS (unchanged) ----
+
+# ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
+st.sidebar.subheader("Search Wrestlers")
+search_term = st.sidebar.text_input(
+    "Filter by name or team",
+    value="",
+    placeholder="e.g. Smith or Red",
+    key="wrestler_search",
+    help="Live filter – clears automatically when empty"
+)
+
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
 c1, c2 = st.sidebar.columns(2)
@@ -365,17 +390,30 @@ if changed:
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
+
 # ----------------------------------------------------------------------
-# MAIN APP
+# MAIN APP – WITH SEARCH
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
+    # Build filtered active list
+    raw_active = st.session_state.active
+    if search_term.strip():
+        term = search_term.strip().lower()
+        filtered_active = [
+            w for w in raw_active
+            if term in w["name"].lower() or term in w["team"].lower()
+        ]
+    else:
+        filtered_active = raw_active
+
     # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
-    if st.session_state.suggestions:
+    current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
+    if current_suggestions:
         sugg_data = []
-        for i, s in enumerate(st.session_state.suggestions):
-            w = next(w for w in st.session_state.active if w["id"] == s["_w_id"])
-            o = next(o for o in st.session_state.active if o["id"] == s["_o_id"])
+        for i, s in enumerate(current_suggestions):
+            w = next(w for w in filtered_active if w["id"] == s["_w_id"])
+            o = next(o for o in filtered_active if o["id"] == s["_o_id"])
             sugg_data.append({
                 "Add": False,
                 "Current": f"{len(w['match_ids'])}",
@@ -410,11 +448,11 @@ if st.session_state.initialized:
             key="sugg_editor"
         )
         if st.button("Add Selected", help="Add checked suggested matches"):
-            to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
+            to_add = [current_suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
-                w = next(w for w in st.session_state.active if w["id"] == s["_w_id"])
-                o = next(o for o in st.session_state.active if o["id"] == s["_o_id"])
+                w = next(w for w in raw_active if w["id"] == s["_w_id"])
+                o = next(o for o in raw_active if o["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]: w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]: o["match_ids"].append(w["id"])
                 st.session_state.bout_list.append({
@@ -426,21 +464,28 @@ if st.session_state.initialized:
                     "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
                     "is_early": w["early"] or o["early"], "manual": "Yes"
                 })
-            st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+            st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.mat_order = {}
             st.success("Matches added!")
             st.rerun()
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
-    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE + YELLOW ----
+
+    # ---- MAT PREVIEWS ----
     st.subheader("Mat Previews")
+    filtered_bout_list = [
+        b for b in st.session_state.bout_list
+        if (b["w1_id"] in {w["id"] for w in filtered_active} or
+            b["w2_id"] in {w["id"] for w in filtered_active})
+    ]
+    filtered_schedule = generate_mat_schedule(filtered_bout_list)
+
     for mat in range(1, CONFIG["NUM_MATS"]+1):
-        bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
+        bouts = [m for m in filtered_schedule if m["mat"]==mat]
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
-        key = f"mat_{mat}"
         with st.expander(f"Mat {mat}", expanded=True):
             if mat not in st.session_state.mat_order:
                 st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
@@ -482,11 +527,13 @@ if st.session_state.initialized:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo", help="Restore last removed match"):
             undo_last()
+
     # ---- GENERATE MEET ----
     if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
@@ -535,10 +582,6 @@ if st.session_state.initialized:
         st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
+
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
