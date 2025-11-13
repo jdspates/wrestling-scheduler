@@ -430,7 +430,7 @@ if st.session_state.initialized:
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
     st.subheader("Suggested Matches")
-    current_suggestions = build_sSuggestions(filtered_active, st.session_state.bout_list)
+    current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
     st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
     if current_suggestions:
@@ -648,4 +648,5 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
