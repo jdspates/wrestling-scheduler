@@ -403,7 +403,7 @@ if st.session_state.initialized:
                 "Add": st.column_config.CheckboxColumn("Add"),
                 "Current": st.column_config.NumberColumn("Current"),
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
-                "Lvl": st.column_config	NumberColumn("Lvl"),
+                "Lvl": st.column_config.NumberColumn("Lvl"),
                 "Wt": st.column_config.NumberColumn("Wt"),
                 "vs_Current": st.column_config.NumberColumn("vs_Current"),
                 "vs": st.column_config.TextColumn("vs"),
