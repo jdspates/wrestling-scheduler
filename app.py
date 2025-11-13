@@ -59,9 +59,9 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order","excel_bytes","pdf_bytes"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
+        st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {} if key == "mat_order" else None if key in ["excel_bytes","pdf_bytes"] else None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -129,7 +129,7 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
-    valid = [b for b in bout_list if b["manual"] != "Removed"]
+    valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
     per_mat = len(valid) // CONFIG["NUM_MATS"]
     extra = len(valid) % CONFIG["NUM_MATS"]
@@ -223,7 +223,7 @@ def generate_mat_schedule(bout_list, gap=4):
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
-    b["manual"] = "Removed"
+    b["manual"] = "Manually Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
     w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
     if b["w2_id"] in w1["match_ids"]: w1["match_ids"].remove(b["w2_id"])
@@ -233,21 +233,25 @@ def remove_match(bout_num):
     st.session_state.mat_order = {}
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
     st.rerun()
 
 def undo_last():
     if st.session_state.undo_stack:
         bout_num = st.session_state.undo_stack.pop()
-        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
+        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Manually Removed")
         b["manual"] = ""
         w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
         if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
-        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(w["w1_id"])
+        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
+        st.session_state.excel_bytes = None
+        st.session_state.pdf_bytes = None
     st.rerun()
 
 def move_up(mat, bout_num):
@@ -277,6 +281,7 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
+    /* Small buttons in main content */
     .main .stButton > button {
         min-width: 30px;
         height: 30px;
@@ -286,13 +291,16 @@ st.markdown("""
         align-items: center;
         justify-content: center;
     }
+    /* Normal sidebar buttons */
     .stSidebar .stButton > button {
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
     }
+    /* Search input polish */
     .stTextInput > div > div > input { border-radius: 6px !important; }
     .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
+    /* Center trash emoji */
     .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -463,12 +471,14 @@ if st.session_state.initialized:
                     "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
                     "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
                     "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
-                    "is_early": w["early"] or o["early"], "manual": "Yes"
+                    "is_early": w["early"] or o["early"], "manual": "Manually Added"
                 })
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.mat_order = {}
             st.success("Matches added!")
+            st.session_state.excel_bytes = None
+            st.session_state.pdf_bytes = None
             st.rerun()
     else:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
@@ -534,12 +544,24 @@ if st.session_state.initialized:
             undo_last()
 
     # ---- GENERATE MEET ----
-    if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
+    if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
         with st.spinner("Generating files..."):
             try:
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
+                    # Roster sheet
+                    roster_df = pd.DataFrame(st.session_state.active)
+                    roster_df.to_excel(writer, sheet_name='Roster', index=False)
+
+                    # Matchups sheet
+                    matchups_df = pd.DataFrame(st.session_state.bout_list)
+                    matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
+
+                    # Remaining Suggestions sheet
+                    suggestions_df = pd.DataFrame(st.session_state.suggestions)
+                    suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
+
+                    # Mat sheets
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
@@ -554,7 +576,7 @@ if st.session_state.initialized:
                             for i, _ in df.iterrows():
                                 if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
                                     for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
-                excel_bytes = out.getvalue()
+                st.session_state.excel_bytes = out.getvalue()
 
                 buf = io.BytesIO()
                 doc = SimpleDocTemplate(buf, pagesize=letter); elements = []; styles = getSampleStyleSheet()
@@ -581,17 +603,33 @@ if st.session_state.initialized:
                     elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1,12), t]
                     if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
                 doc.build(elements)
-                pdf_bytes = buf.getvalue()
+                st.session_state.pdf_bytes = buf.getvalue()
 
-                # REMOVED icon= from toast
                 st.toast("Files generated!")
-                st.download_button("Download Excel (Auto)", excel_bytes, "meet_schedule.xlsx",
-                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
             except Exception as e:
                 st.error(f"Generation failed: {e}")
                 st.toast("Error – check console.")
 
+# Show buttons persistently
+col_ex, col_pdf = st.columns(2)
+with col_ex:
+    if st.session_state.excel_bytes is not None:
+        st.download_button(
+            label="Download Excel",
+            data=st.session_state.excel_bytes,
+            file_name="meet_schedule.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+with col_pdf:
+    if st.session_state.pdf_bytes is not None:
+        st.download_button(
+            label="Download PDF",
+            data=st.session_state.pdf_bytes,
+            file_name="meet_schedule.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
