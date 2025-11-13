@@ -67,6 +67,7 @@ def generate_initial_matchups(active):
                 if len(w["match_ids"])>=CONFIG["MAX_MATCHES"]:continue
                 opps=[o for o in active
                       if o["id"] not in w["match_ids"]
+                      and o["id"] != w["id"]
                       and len(o["match_ids"])<CONFIG["MAX_MATCHES"]
                       and is_compatible(w,o)
                       and abs(w["weight"]-o["weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
@@ -97,9 +98,9 @@ def build_suggestions(active,bout_list):
     under=[w for w in active if len(w["match_ids"])<CONFIG["MIN_MATCHES"]]
     sugg=[]
     for w in under:
-        opps=[o for o in active if o["id"] not in w["match_ids"]]
+        opps=[o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         opps=[o for o in opps if abs(w["weight"]-o["weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"])) and abs(w["level"]-o["level"])<=CONFIG["MAX_LEVEL_DIFF"]]
-        if not opps:opps=[o for o in active if o["id"] not in w["match_ids"]]
+        if not opps:opps=[o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         for o in sorted(opps,key=lambda o:matchup_score(w,o))[:3]:
             sugg.append({
                 "wrestler":w["name"],"team":w["team"],"level":w["level"],"weight":w["weight"],
