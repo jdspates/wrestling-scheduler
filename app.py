@@ -22,8 +22,12 @@ except Exception:
 def load_config():
     try:
         with open('config.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
+            data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Invalid config format")
+            return data
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        # Create default config if missing or broken
         default_config = {
             "team_colors": {
                 "Red Team": "#FF0000",
@@ -34,8 +38,9 @@ def load_config():
             json.dump(default_config, f, indent=4)
         return default_config
 
-config = load_config()
-TEAM_COLORS = config["team_colors"]
+# Safely load config
+config = load_config() or {"team_colors": {}}
+TEAM_COLORS = config.get("team_colors", {})
 
 # Custom CSS
 st.markdown("""
@@ -51,7 +56,7 @@ if 'roster_df' not in st.session_state:
 if 'matchups' not in st.session_state:
     st.session_state.matchups = pd.DataFrame()
 if 'suggested_matchups' not in st.session_state:
-    suggested_matchups = pd.DataFrame()
+    st.session_state.suggested_matchups = pd.DataFrame()
 if 'accepted_matchups' not in st.session_state:
     st.session_state.accepted_matchups = pd.DataFrame()
 if 'mat_schedules' not in st.session_state:
@@ -62,9 +67,11 @@ def highlight_early(val):
     return 'background-color: yellow' if val == 'Early' else ''
 
 def color_team_name(val):
-    if pd.isna(val) or val not in TEAM_COLORS:
-        return f'<span class="team-color">{val}</span>' if pd.notna(val) else ''
-    return f'<span style="color: {TEAM_COLORS.get(val, "#000000")}">{val}</span>'
+    if pd.isna(val):
+        return ''
+    if val in TEAM_COLORS:
+        return f'<span style="color: {TEAM_COLORS[val]}; font-weight: bold;">{val}</span>'
+    return f'<span class="team-color">{val}</span>'
 
 # Core logic
 @st.cache_data
@@ -72,6 +79,8 @@ def generate_matchups(roster_df):
     if roster_df is None or roster_df.empty:
         return pd.DataFrame()
     valid_df = roster_df[roster_df['Scratched'] != 'Yes'].copy()
+    if 'ID' not in valid_df.columns:
+        valid_df = valid_df.reset_index().rename(columns={'index': 'ID'})
     valid_df = valid_df.sort_values(['Level', 'Weight'], ascending=[True, True])
     matchups = []
     used = set()
@@ -126,11 +135,11 @@ def create_excel_bytes(matchups, suggested, accepted, mat_schedules):
                     workbook = writer.book
                     ws = writer.sheets[sheet]
                     yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-                    early_col = df.columns.get_loc("Early") + 1  # 1-based
-                    for r_idx, row in df.iterrows():
-                        if row["Early"] == "Early":
+                    early_col = df.columns.get_loc("Early") + 1
+                    for r_idx in range(len(df)):
+                        if df.iloc[r_idx]["Early"] == "Early":
                             for c_idx in range(1, len(df.columns) + 1):
-                                ws.cell(row=r_idx + 2, column=c_idx).fill = yellow_fill  # +2: header + 0-based
+                                ws.cell(row=r_idx + 2, column=c_idx).fill = yellow_fill
     return output.getvalue()
 
 def create_pdf_bytes(df, title, is_mat=False):
@@ -180,7 +189,7 @@ if uploaded_file is not None:
         else:
             st.session_state.roster_df = pd.read_excel(uploaded_file)
         st.success("Roster uploaded!")
-        # Reset on new upload
+        # Reset state
         st.session_state.matchups = pd.DataFrame()
         st.session_state.suggested_matchups = pd.DataFrame()
         st.session_state.accepted_matchups = pd.DataFrame()
@@ -238,10 +247,11 @@ if not st.session_state.suggested_matchups.empty:
     )
     if st.button("Accept Selected Suggestions"):
         sel = st.session_state.suggestions_editor.get("selected_rows", [])
-        selected_rows = edited_suggestions.iloc[sel]
-        st.session_state.accepted_matchups = pd.concat([st.session_state.accepted_matchups, selected_rows], ignore_index=True)
-        st.session_state.suggested_matchups = st.session_state.suggested_matchups.drop(selected_rows.index).reset_index(drop=True)
-        st.rerun()
+        if sel:
+            selected_rows = edited_suggestions.iloc[sel]
+            st.session_state.accepted_matchups = pd.concat([st.session_state.accepted_matchups, selected_rows], ignore_index=True)
+            st.session_state.suggested_matchups = st.session_state.suggested_matchups.drop(selected_rows.index).reset_index(drop=True)
+            st.rerun()
 
 # Mat Previews (always expanded)
 st.subheader("Mat Previews")
@@ -253,7 +263,7 @@ for mat_name, df in st.session_state.mat_schedules.items():
             st.markdown(styled_df.to_html(escape=False), unsafe_allow_html=True)
 
             edited_df = st.data_editor(
-                df,
+                df.copy(),
                 column_config={
                     "Team1": st.column_config.TextColumn("Team1"),
                     "Team2": st.column_config.TextColumn("Team2"),
