@@ -328,7 +328,7 @@ search_term = st.sidebar.text_input(
     value="",
     placeholder="e.g. Smith or Red",
     key="wrestler_search",
-    help="Live filter – shows **all** matches for matching wrestlers"
+    help="Live filter – shows all matches for matching wrestlers in Mat Previews"
 )
 
 changed = False
@@ -627,3 +627,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
