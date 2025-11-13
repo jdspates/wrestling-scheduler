@@ -454,6 +454,9 @@ if st.session_state.initialized:
     # ---- MAT PREVIEWS – ONLY ACTIVE MAT STAYS OPEN ----
     st.subheader("Mat Previews")
 
+    # Save current open state before rendering
+    open_mats = st.session_state.mat_open.copy()
+
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"] == mat]
         if not bouts:
@@ -461,9 +464,10 @@ if st.session_state.initialized:
             continue
 
         open_key = f"mat_{mat}_open"
-        is_open = st.session_state.mat_open.get(open_key, False)
+        is_open = open_mats.get(open_key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
+            # Mark as open after rendering
             st.session_state.mat_open[open_key] = True
 
             for idx, m in enumerate(bouts):
