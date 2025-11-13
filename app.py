@@ -1,4 +1,4 @@
-# app.py – FULL CARD DRAG + REORDER + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
+# app.py – FULL CARD DRAG + REORDER + YELLOW HIGHLIGHT + X CENTERED
 import streamlit as st
 import pandas as pd
 import io
@@ -225,7 +225,7 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# DRAG + X CENTERED
+# DRAG + X CENTERED + YELLOW HIGHLIGHT
 st.markdown("""
 <style>
     .card-container {
@@ -233,7 +233,6 @@ st.markdown("""
         user-select: none;
         margin-bottom: 8px;
         padding: 10px;
-        background: #fff;
         border: 1px solid #e6e6e6;
         border-radius: 8px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -293,32 +292,29 @@ document.addEventListener('drop', e => {
         const from = dragged.dataset.bout;
         const to = target.dataset.bout;
         const mat = target.closest('[data-mat]').dataset.mat;
-        const msg = JSON.stringify({type: 'drag', mat, from, to});
-        window.parent.postMessage(msg, '*');
+        const url = new URL(window.location);
+        url.searchParams.set('drag', `${mat}|${from}|${to}`);
+        window.location = url;
     }
 });
 </script>
 """, unsafe_allow_html=True)
 
-# Listen for drag events
-if "drag_event" in st.query_params:
-    try:
-        data = json.loads(st.query_params["drag_event"])
-        if data["type"] == "drag":
-            mat = int(data["mat"])
-            from_bout = int(data["from"])
-            to_bout = int(data["to"])
-            if mat in st.session_state.mat_order:
-                order = st.session_state.mat_order[mat]
-                if from_bout in order and to_bout in order:
-                    i = order.index(from_bout)
-                    j = order.index(to_bout)
-                    order.pop(i)
-                    order.insert(j if i < j else j, from_bout)
-        st.query_params.clear()
-        st.rerun()
-    except:
-        pass
+# Listen for drag
+if "drag" in st.experimental_get_query_params():
+    drag = st.experimental_get_query_params()["drag"][0].split("|")
+    mat = int(drag[0])
+    from_bout = int(drag[1])
+    to_bout = int(drag[2])
+    if mat in st.session_state.mat_order:
+        order = st.session_state.mat_order[mat]
+        if from_bout in order and to_bout in order:
+            i = order.index(from_bout)
+            j = order.index(to_bout)
+            order.pop(i)
+            order.insert(j if i < j else j, from_bout)
+    st.experimental_set_query_params()
+    st.rerun()
 
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
@@ -456,7 +452,7 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE ----
+    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE + YELLOW ----
     st.subheader("Mat Previews")
 
     open_mats = st.session_state.mat_open.copy()
@@ -492,7 +488,7 @@ if st.session_state.initialized:
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
-                    <div class="card-container" data-mat="{mat}" data-bout="{b['bout_num']}" draggable="true">
+                    <div class="card-container" data-mat="{mat}" data-bout="{b['bout_num']}" draggable="true" style="background:{bg};">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
