@@ -565,7 +565,7 @@ if st.session_state.initialized:
                     table = [["#","Wrestler 1","Wrestler 2"]]
                     for e in data:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
-                        table.append([e["mat_bour_num"],
+                        table.append([e["mat_bout_num"],
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w1_team"],"#000")}"><b>{b["w1_name"]}</b></font> ({b["w1_team"]})', styles["Normal"]),
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w2_team"],"#000")}"><b>{b["w2_name"]}</b></font> ({b["w2_team"]})', styles["Normal"])])
                     t = Table(table, colWidths=[0.5*inch, 3*inch, 3*inch])
@@ -594,3 +594,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
