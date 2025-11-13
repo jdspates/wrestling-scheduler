@@ -270,6 +270,14 @@ st.markdown("""
         height: auto !important;
         min-width: auto !important;
     }
+
+    /* Center text in delete (trash) buttons */
+    .stButton > button[key^="del_"] {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        text-align: center !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
@@ -524,5 +532,6 @@ if st.session_state.initialized:
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
