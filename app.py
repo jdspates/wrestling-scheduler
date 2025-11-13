@@ -1,4 +1,4 @@
-# app.py – FULL CARD DRAG + REORDER + YELLOW HIGHLIGHT + X CENTERED
+# app.py – DRAG + REORDER + YELLOW HIGHLIGHT + X CENTERED
 import streamlit as st
 import pandas as pd
 import io
@@ -271,6 +271,7 @@ st.markdown("""
 st.markdown("""
 <script>
 let dragged = null;
+let dragId = 0;
 document.addEventListener('dragstart', e => {
     const card = e.target.closest('.card-container');
     if (card) {
@@ -278,6 +279,7 @@ document.addEventListener('dragstart', e => {
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', card.dataset.bout);
+        dragId = Date.now();
     }
 });
 document.addEventListener('dragend', () => {
@@ -293,6 +295,7 @@ document.addEventListener('drop', e => {
         const to = target.dataset.bout;
         const mat = target.closest('[data-mat]').dataset.mat;
         const url = new URL(window.location);
+        url.searchParams.set('drag_id', dragId);
         url.searchParams.set('drag', `${mat}|${from}|${to}`);
         window.location = url;
     }
@@ -301,18 +304,25 @@ document.addEventListener('drop', e => {
 """, unsafe_allow_html=True)
 
 # Listen for drag
-if "drag" in st.experimental_get_query_params():
-    drag = st.experimental_get_query_params()["drag"][0].split("|")
-    mat = int(drag[0])
-    from_bout = int(drag[1])
-    to_bout = int(drag[2])
-    if mat in st.session_state.mat_order:
-        order = st.session_state.mat_order[mat]
-        if from_bout in order and to_bout in order:
-            i = order.index(from_bout)
-            j = order.index(to_bout)
-            order.pop(i)
-            order.insert(j if i < j else j, from_bout)
+query_params = st.experimental_get_query_params()
+if "drag" in query_params and "drag_id" in query_params:
+    try:
+        drag_id = query_params["drag_id"][0]
+        if "last_drag_id" not in st.session_state or st.session_state.last_drag_id != drag_id:
+            st.session_state.last_drag_id = drag_id
+            drag = query_params["drag"][0].split("|")
+            mat = int(drag[0])
+            from_bout = int(drag[1])
+            to_bout = int(drag[2])
+            if mat in st.session_state.mat_order:
+                order = st.session_state.mat_order[mat]
+                if from_bout in order and to_bout in order:
+                    i = order.index(from_bout)
+                    j = order.index(to_bout)
+                    order.pop(i)
+                    order.insert(j if i < j else j, from_bout)
+    except:
+        pass
     st.experimental_set_query_params()
     st.rerun()
 
