@@ -484,7 +484,7 @@ if st.session_state.initialized:
     # ---- GENERATE MEET ----
     if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
-        with pd activating pd.ExcelWriter(out, engine="openpyxl") as writer:
+        with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
             for m in range(1, CONFIG["NUM_MATS"]+1):
                 data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
@@ -532,3 +532,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
