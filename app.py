@@ -1,4 +1,4 @@
-# app.py – X BUTTON CENTER = CARD CENTER + ONLY ACTIVE MAT STAYS OPEN
+# app.py – TOOLTIPS + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
 import streamlit as st
 import pandas as pd
 import io
@@ -85,7 +85,7 @@ def generate_initial_matchups(active):
         w2=next(w for w in active if w["id"]==list(b)[1])
         bout_list.append({
             "bout_num":idx,"w1_id":w1["id"],"w1_name":w1["name"],"w1_team":w1["team"],
-            "w1_level":w1["level"],"w1_weight":w1["weight"],"w1_grade":w1["grade"],"w1_early":w1["early"],
+            "w1_level":w1["level"],"w1_weight":w1[" temas"],"w1_grade":w1["grade"],"w1_early":w1["early"],
             "w2_id":w2["id"],"w2_name":w2["name"],"w2_team":w2["team"],
             "w2_level":w2["level"],"w2_weight":w2["weight"],"w2_grade":w2["grade"],"w2_early":w2["early"],
             "score":matchup_score(w1,w2),"avg_weight":(w1["weight"]+w2["weight"])/2,
@@ -225,7 +225,7 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# X BUTTON CENTER = CARD CENTER
+# X BUTTON CENTERED + TOOLTIP
 st.markdown("""
 <style>
     .trash-col {
@@ -284,19 +284,19 @@ if uploaded and not st.session_state.initialized:
     st.session_state.mat_open = {}
     st.success("Roster loaded!")
 
-# ---- SETTINGS SIDEBAR (FULLY RESTORED) ----
+# ---- SETTINGS SIDEBAR (WITH TOOLTIPS) ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
 c1, c2 = st.sidebar.columns(2)
 with c1:
-    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
-    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
-    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
+    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches", help="Minimum matches each wrestler must get")
+    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches", help="Maximum matches each wrestler can get")
+    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats", help="Total mats available for scheduling")
 with c2:
-    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
-    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor")
-    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff")
+    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff", help="Max allowed level gap between opponents")
+    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor", help="Max weight difference as % of wrestler's weight")
+    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff", help="Absolute minimum weight difference in lbs")
 if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
@@ -335,7 +335,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS (unchanged) ----
+    # ---- SUGGESTED MATCHUPS (WITH TOOLTIP) ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -371,7 +371,7 @@ if st.session_state.initialized:
             hide_index=True,
             key="sugg_editor"
         )
-        if st.button("Add Selected"):
+        if st.button("Add Selected", help="Add checked suggested matches"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -418,7 +418,8 @@ if st.session_state.initialized:
 
                 col_del, col_card = st.columns([0.08,1], gap="small")
                 with col_del:
-                    if st.button("X", key=f"del_{b['bout_num']}"):
+                    # TOOLTIP ON DELETE BUTTON
+                    if st.button("X", key=f"del_{b['bout_num']}", help="Click to remove this match (Undo available)"):
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
@@ -442,14 +443,14 @@ if st.session_state.initialized:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # ---- UNDO BUTTON ----
+    # ---- UNDO BUTTON (WITH TOOLTIP) ----
     if st.session_state.undo_stack:
         st.markdown("---")
-        if st.button("Undo"):
+        if st.button("Undo", help="Restore last removed match"):
             undo_last()
 
-    # ---- GENERATE MEET ----
-    if st.button("Generate Meet", type="primary"):
+    # ---- GENERATE MEET (WITH TOOLTIP) ----
+    if st.button("Generate Meet", type="primary", help="Download Excel + PDF schedules"):
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
@@ -498,4 +499,4 @@ if st.session_state.initialized:
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf")
 
 st.markdown("---")
-st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+st.caption("**Privacy**: Your roster...
