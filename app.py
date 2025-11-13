@@ -1,4 +1,4 @@
-# app.py – DRAG + REORDER + YELLOW HIGHLIGHT + X CENTERED
+# app.py – FULL CARD DRAG + REORDER + YELLOW HIGHLIGHT + X CENTERED
 import streamlit as st
 import pandas as pd
 import io
@@ -70,7 +70,7 @@ def generate_initial_matchups(active):
                       and len(o["match_ids"])<CONFIG["MAX_MATCHES"]
                       and is_compatible(w,o)
                       and abs(w["weight"]-o["weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
-                      and abs(w["level"]-o["level"])<=CONFIG["MAX_LEVEL_DIFF"]]
+                      and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps:continue
                 best=min(opps,key=lambda o:matchup_score(w,o))
                 w["match_ids"].append(best["id"])
@@ -271,7 +271,6 @@ st.markdown("""
 st.markdown("""
 <script>
 let dragged = null;
-let dragId = 0;
 document.addEventListener('dragstart', e => {
     const card = e.target.closest('.card-container');
     if (card) {
@@ -279,7 +278,6 @@ document.addEventListener('dragstart', e => {
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', card.dataset.bout);
-        dragId = Date.now();
     }
 });
 document.addEventListener('dragend', () => {
@@ -295,7 +293,6 @@ document.addEventListener('drop', e => {
         const to = target.dataset.bout;
         const mat = target.closest('[data-mat]').dataset.mat;
         const url = new URL(window.location);
-        url.searchParams.set('drag_id', dragId);
         url.searchParams.set('drag', `${mat}|${from}|${to}`);
         window.location = url;
     }
@@ -303,27 +300,21 @@ document.addEventListener('drop', e => {
 </script>
 """, unsafe_allow_html=True)
 
-# Listen for drag
-query_params = st.experimental_get_query_params()
-if "drag" in query_params and "drag_id" in query_params:
-    try:
-        drag_id = query_params["drag_id"][0]
-        if "last_drag_id" not in st.session_state or st.session_state.last_drag_id != drag_id:
-            st.session_state.last_drag_id = drag_id
-            drag = query_params["drag"][0].split("|")
-            mat = int(drag[0])
-            from_bout = int(drag[1])
-            to_bout = int(drag[2])
-            if mat in st.session_state.mat_order:
-                order = st.session_state.mat_order[mat]
-                if from_bout in order and to_bout in order:
-                    i = order.index(from_bout)
-                    j = order.index(to_bout)
-                    order.pop(i)
-                    order.insert(j if i < j else j, from_bout)
-    except:
-        pass
-    st.experimental_set_query_params()
+# Listen for drag events
+query_params = st.query_params.to_dict()
+if "drag" in query_params:
+    drag = query_params["drag"][0].split("|")
+    mat = int(drag[0])
+    from_bout = int(drag[1])
+    to_bout = int(drag[2])
+    if mat in st.session_state.mat_order:
+        order = st.session_state.mat_order[mat]
+        if from_bout in order and to_bout in order:
+            i = order.index(from_bout)
+            j = order.index(to_bout)
+            order.pop(i)
+            order.insert(j if i < j else j, from_bout)
+    st.query_params.clear()
     st.rerun()
 
 st.title("Wrestling Meet Scheduler")
@@ -402,7 +393,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS ----
+    # ---- SUGGESTED MATCHUPS (RESTORED CURRENT COLUMN) ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -411,6 +402,7 @@ if st.session_state.initialized:
             o = next(o for o in st.session_state.active if o["id"] == s["_o_id"])
             sugg_data.append({
                 "Add": False,
+                "Current": f"{s['current']}",
                 "Wrestler": f"{w['name']} ({w['team']})",
                 "Lvl": f"{w['level']:.1f}",
                 "Wt": f"{w['weight']:.0f}",
@@ -426,6 +418,7 @@ if st.session_state.initialized:
             sugg_display_df,
             column_config={
                 "Add": st.column_config.CheckboxColumn("Add"),
+                "Current": st.column_config.NumberColumn("Current"),
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
                 "Lvl": st.column_config.NumberColumn("Lvl"),
                 "Wt": st.column_config.NumberColumn("Wt"),
