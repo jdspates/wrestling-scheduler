@@ -174,7 +174,7 @@ def generate_mat_schedule(bout_list, gap=4):
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
-                    best = B
+                    best = b
             if best is None: break
             early_bouts.remove(best)
             scheduled.append((slot, best))
@@ -277,7 +277,6 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    /* Small buttons in main content */
     .main .stButton > button {
         min-width: 30px;
         height: 30px;
@@ -287,16 +286,13 @@ st.markdown("""
         align-items: center;
         justify-content: center;
     }
-    /* Normal sidebar buttons */
     .stSidebar .stButton > button {
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
     }
-    /* Search input polish */
     .stTextInput > div > div > input { border-radius: 6px !important; }
     .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
-    /* Center trash emoji */
     .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -569,7 +565,7 @@ if st.session_state.initialized:
                     table = [["#","Wrestler 1","Wrestler 2"]]
                     for e in data:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
-                        table.append([e["mat_bout_num"],
+                        table.append([e["mat_bour_num"],
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w1_team"],"#000")}"><b>{b["w1_name"]}</b></font> ({b["w1_team"]})', styles["Normal"]),
                                       Paragraph(f'<font color="{TEAM_COLORS.get(b["w2_team"],"#000")}"><b>{b["w2_name"]}</b></font> ({b["w2_team"]})', styles["Normal"])])
                     t = Table(table, colWidths=[0.5*inch, 3*inch, 3*inch])
@@ -587,13 +583,14 @@ if st.session_state.initialized:
                 doc.build(elements)
                 pdf_bytes = buf.getvalue()
 
-                st.toast("Files generated!", icon="Checkmark")
+                # REMOVED icon= from toast
+                st.toast("Files generated!")
                 st.download_button("Download Excel (Auto)", excel_bytes, "meet_schedule.xlsx",
                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                 st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
             except Exception as e:
                 st.error(f"Generation failed: {e}")
-                st.toast("Error – check console.", icon="Cross")
+                st.toast("Error – check console.")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
