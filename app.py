@@ -1,4 +1,4 @@
-# app.py – FINAL: ALWAYS OPEN MATS + REAL ARROW ICONS + NO COLLAPSE
+# app.py – DRAG REORDER + ADDING SUGGESTED MATCHUPS FIX - BEST BUILD SO FAR, just need to fix mat previews closing when clicking buttons
 import streamlit as st
 import pandas as pd
 import io
@@ -12,7 +12,6 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
-
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
@@ -39,14 +38,12 @@ else:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 TEAMS = CONFIG["TEAMS"]
-
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
-
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
@@ -54,13 +51,10 @@ def is_compatible(w1,w2):
     return w1["team"]!=w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
-
 def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
-
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
-
 def generate_initial_matchups(active):
     bouts = set()
     for level in sorted({w["level"] for w in active}, reverse=True):
@@ -98,7 +92,6 @@ def generate_initial_matchups(active):
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
-
 def build_suggestions(active, bout_list):
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
@@ -114,7 +107,6 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
-
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
@@ -204,11 +196,12 @@ def generate_mat_schedule(bout_list, gap=4):
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
     return schedules
-
 # ----------------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
+    # Save open state BEFORE rerun
+    open_mats = st.session_state.mat_open.copy()
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
@@ -219,10 +212,11 @@ def remove_match(bout_num):
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.mat_order = {}
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.session_state.mat_open = open_mats
     st.success("Match removed.")
     st.rerun()
-
 def undo_last():
+    open_mats = st.session_state.mat_open.copy()
     if st.session_state.undo_stack:
         bout_num = st.session_state.undo_stack.pop()
         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num and x["manual"] == "Removed")
@@ -234,9 +228,9 @@ def undo_last():
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+        st.session_state.mat_open = open_mats
         st.success("Undo successful!")
     st.rerun()
-
 def move_up(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
@@ -244,8 +238,6 @@ def move_up(mat, bout_num):
             idx = order.index(bout_num)
             if idx > 0:
                 order[idx-1], order[idx] = order[idx], order[idx-1]
-    st.rerun()
-
 def move_down(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
@@ -253,30 +245,23 @@ def move_down(mat, bout_num):
             idx = order.index(bout_num)
             if idx < len(order) - 1:
                 order[idx], order[idx+1] = order[idx+1], order[idx]
-    st.rerun()
-
 # ----------------------------------------------------------------------
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown("""
 <style>
+    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .stButton > button { 
-        min-width: 30px; height: 30px; padding: 0; font-size: 14px; 
-        border: 1px solid #ccc; border-radius: 4px;
-    }
-    .stButton > button:hover { background: #f0f0f0; }
+    .stButton > button { min-width: 30px; height: 30px; padding: 0; font-size: 14px; }
 </style>
 """, unsafe_allow_html=True)
-
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
-
-# ---- UPLOAD ----
+# ---- UPLOAD (NO KEY) ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
     try:
@@ -299,11 +284,11 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.initialized = True
+        st.session_state.mat_open = {} # Reset open state
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
         st.error(f"Error: {e}")
-
-# ---- SETTINGS ----
+# ---- SETTINGS (unchanged) ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
@@ -355,12 +340,11 @@ if changed:
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
-
 # ----------------------------------------------------------------------
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS ----
+    # ---- SUGGESTED MATCHUPS (WITH WRESTLER 2 CURRENT COLUMN) ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -401,6 +385,7 @@ if st.session_state.initialized:
             key="sugg_editor"
         )
         if st.button("Add Selected", help="Add checked suggested matches"):
+            open_mats = st.session_state.mat_open.copy()
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -420,73 +405,67 @@ if st.session_state.initialized:
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
             st.session_state.mat_order = {}
+            st.session_state.mat_open = open_mats
             st.success("Matches added!")
             st.rerun()
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
-
-    # ---- MAT PREVIEWS (ALWAYS EXPANDED) ----
+    # ---- MAT PREVIEWS – DRAG + REORDER + DELETE + YELLOW ----
     st.subheader("Mat Previews")
+    open_mats = st.session_state.mat_open.copy()
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
         if not bouts:
-            st.markdown(f"**Mat {mat}: No matches**")
+            st.write(f"**Mat {mat}: No matches**")
             continue
-        st.markdown(f"### Mat {mat}")
-        if mat not in st.session_state.mat_order:
-            st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
-        ordered_bouts = []
-        for bout_num in st.session_state.mat_order[mat]:
-            entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
-            if entry:
-                ordered_bouts.append(entry)
-
-        for idx, m in enumerate(ordered_bouts):
-            b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
-            bg = "#fff3cd" if b["is_early"] else "#ffffff"
-            w1c = TEAM_COLORS.get(b["w1_team"], "#999")
-            w2c = TEAM_COLORS.get(b["w2_team"], "#999")
-
-            col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
-
-            with col_up:
-                st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}",
-                          on_click=move_up, args=(mat, b['bout_num']), help="Move up")
-            with col_down:
-                st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}",
-                          on_click=move_down, args=(mat, b['bout_num']), help="Move down")
-            with col_del:
-                st.button("X", key=f"del_{b['bout_num']}_{idx}",
-                          help="Remove match (Undo available)", on_click=remove_match,
-                          args=(b['bout_num'],))
-            with col_card:
-                st.markdown(f"""
-                <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
-                    <div style="display:flex;align-items:center;gap:12px;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <div style="width:12px;height:12px;background:{w1c};border-radius:50%;"></div>
-                            <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
-                            <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
+        key = f"mat_{mat}"
+        is_open = open_mats.get(key, False)
+        with st.expander(f"Mat {mat}", expanded=is_open):
+            if mat not in st.session_state.mat_order:
+                st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
+            ordered_bouts = []
+            for bout_num in st.session_state.mat_order[mat]:
+                entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
+                if entry:
+                    ordered_bouts.append(entry)
+            for idx, m in enumerate(ordered_bouts):
+                b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
+                bg = "#fff3cd" if b["is_early"] else "#ffffff"
+                w1c = TEAM_COLORS.get(b["w1_team"], "#999")
+                w2c = TEAM_COLORS.get(b["w2_team"], "#999")
+                col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
+                with col_up:
+                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                with col_down:
+                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                with col_del:
+                    st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+                with col_card:
+                    st.markdown(f"""
+                    <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
+                                <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
+                                <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
+                            </div>
+                            <div style="font-weight:700;">vs</div>
+                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
+                                <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
+                                <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
+                                <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
+                            </div>
                         </div>
-                        <div style="font-weight:700;">vs</div>
-                        <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
-                            <div style="width:12px;height:12px;background:{w2c};border-radius:50%;"></div>
-                            <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
-                            <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
+                        <div style="font-size:0.8rem;color:#555;margin-top:4px;">
+                            Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
                         </div>
                     </div>
-                    <div style="font-size:0.8rem;color:#555;margin-top:4px;">
-                        Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
+                    """, unsafe_allow_html=True)
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo", help="Restore last removed match"):
             undo_last()
-
     # ---- GENERATE MEET ----
     if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
@@ -535,6 +514,6 @@ if st.session_state.initialized:
         st.download_button("Download Excel", excel_bytes, "meet_schedule.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
-
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
