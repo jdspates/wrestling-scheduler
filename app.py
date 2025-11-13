@@ -265,11 +265,7 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .stButton > button { 
-        min-width: 32px; height: 32px; padding: 0; font-size: 16px; 
-        border: 1px solid #ccc; border-radius: 4px;
-    }
-    .stButton > button:hover { background: #f0f0f0; }
+    .stButton > button { min-width: 30px; height: 30px; padding: 0; font-size: 14px; }
 </style>
 """, unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
@@ -452,14 +448,11 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    if st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up"):
-                        pass
+                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                 with col_down:
-                    if st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down"):
-                        pass
+                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                 with col_del:
-                    if st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],)):
-                        pass
+                    st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                 with col_card:
                     st.markdown(f"""
                     <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
