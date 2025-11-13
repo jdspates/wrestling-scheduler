@@ -1,4 +1,4 @@
-# app.py – ONLY ACTIVE MAT STAYS OPEN + RED X + UNDO + SETTINGS SIDEBAR + NO ERRORS
+# app.py – ONLY ACTIVE MAT STAYS OPEN + SETTINGS + RED X + UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -48,7 +48,7 @@ for key in ["initialized","bout_list","mat_schedules","suggestions","active","un
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
 # ----------------------------------------------------------------------
-# CORE LOGIC
+# CORE LOGIC (unchanged)
 # ----------------------------------------------------------------------
 def is_compatible(w1,w2):
     return w1["team"]!=w2["team"] and not ((w1["grade"]==5 and w2["grade"] in [7,8]) or (w2["grade"]==5 and w1["grade"] in [7,8]))
@@ -254,7 +254,7 @@ if uploaded and not st.session_state.initialized:
     st.session_state.suggestions = build_suggestions(st.session_state.active,st.session_state.bout_list)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list,gap=4)
     st.session_state.initialized = True
-    st.session_state.mat_open = {}
+    st.session_state.mat_open = {}  # Start with all collapsed
     st.success("Roster loaded!")
 
 # ---- SETTINGS SIDEBAR (FULLY RESTORED) ----
@@ -308,7 +308,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS (unchanged – copy your working block) ----
+    # ---- SUGGESTED MATCHUPS (unchanged) ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -371,6 +371,7 @@ if st.session_state.initialized:
     # ---- MAT PREVIEWS – ONLY ACTIVE MAT STAYS OPEN ----
     st.subheader("Mat Previews")
 
+    # Save current open state before rendering
     open_mats = st.session_state.mat_open.copy()
 
     for mat in range(1, CONFIG["NUM_MATS"]+1):
@@ -383,7 +384,9 @@ if st.session_state.initialized:
         is_open = open_mats.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
-            st.session_state.mat_open[key] = True
+            # ONLY mark as open if user actually opened it
+            if not is_open:
+                st.session_state.mat_open[key] = True
 
             for idx,m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
