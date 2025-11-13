@@ -43,7 +43,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order","drag_event"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
@@ -293,32 +293,30 @@ document.addEventListener('drop', e => {
         const from = dragged.dataset.bout;
         const to = target.dataset.bout;
         const mat = target.closest('[data-mat]').dataset.mat;
-        window.parent.postMessage({type: 'drag', mat, from, to}, '*');
+        const msg = JSON.stringify({type: 'drag', mat, from, to});
+        window.parent.postMessage(msg, '*');
     }
 });
 </script>
 """, unsafe_allow_html=True)
 
 # Listen for drag events
-if st._is_running_with_streamlit:
+if "drag_event" in st.query_params:
     try:
-        msg = st.experimental_get_query_params().get("msg", [None])[0]
-        if msg:
-            import json
-            data = json.loads(msg)
-            if data["type"] == "drag":
-                mat = int(data["mat"])
-                from_bout = int(data["from"])
-                to_bout = int(data["to"])
-                if mat in st.session_state.mat_order:
-                    order = st.session_state.mat_order[mat]
-                    if from_bout in order and to_bout in order:
-                        i = order.index(from_bout)
-                        j = order.index(to_bout)
-                        order.pop(i)
-                        order.insert(j if i < j else j, from_bout)
-                st.experimental_set_query_params()
-                st.rerun()
+        data = json.loads(st.query_params["drag_event"])
+        if data["type"] == "drag":
+            mat = int(data["mat"])
+            from_bout = int(data["from"])
+            to_bout = int(data["to"])
+            if mat in st.session_state.mat_order:
+                order = st.session_state.mat_order[mat]
+                if from_bout in order and to_bout in order:
+                    i = order.index(from_bout)
+                    j = order.index(to_bout)
+                    order.pop(i)
+                    order.insert(j if i < j else j, from_bout)
+        st.query_params.clear()
+        st.rerun()
     except:
         pass
 
