@@ -43,7 +43,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order","drag_event"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
@@ -225,7 +225,7 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# DRAG ENTIRE CARD + X CENTERED
+# DRAG + X CENTERED
 st.markdown("""
 <style>
     .card-container {
@@ -268,22 +268,59 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# DRAG & DROP WITH QUERY PARAMS
-query_params = st.experimental_get_query_params()
-if "drag" in query_params:
-    drag_data = query_params["drag"][0].split("|")
-    mat = int(drag_data[0])
-    from_bout = int(drag_data[1])
-    to_bout = int(drag_data[2])
-    if mat in st.session_state.mat_order:
-        order = st.session_state.mat_order[mat]
-        if from_bout in order and to_bout in order:
-            i = order.index(from_bout)
-            j = order.index(to_bout)
-            order.pop(i)
-            order.insert(j if i < j else j, from_bout)
-    st.experimental_set_query_params()  # Clear
-    st.rerun()
+# DRAG & DROP JS
+st.markdown("""
+<script>
+let dragged = null;
+document.addEventListener('dragstart', e => {
+    const card = e.target.closest('.card-container');
+    if (card) {
+        dragged = card;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.dataset.bout);
+    }
+});
+document.addEventListener('dragend', () => {
+    if (dragged) dragged.classList.remove('dragging');
+    dragged = null;
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+    e.preventDefault();
+    const target = e.target.closest('.card-container');
+    if (dragged && target && dragged !== target) {
+        const from = dragged.dataset.bout;
+        const to = target.dataset.bout;
+        const mat = target.closest('[data-mat]').dataset.mat;
+        window.parent.postMessage({type: 'drag', mat, from, to}, '*');
+    }
+});
+</script>
+""", unsafe_allow_html=True)
+
+# Listen for drag events
+if st._is_running_with_streamlit:
+    try:
+        msg = st.experimental_get_query_params().get("msg", [None])[0]
+        if msg:
+            import json
+            data = json.loads(msg)
+            if data["type"] == "drag":
+                mat = int(data["mat"])
+                from_bout = int(data["from"])
+                to_bout = int(data["to"])
+                if mat in st.session_state.mat_order:
+                    order = st.session_state.mat_order[mat]
+                    if from_bout in order and to_bout in order:
+                        i = order.index(from_bout)
+                        j = order.index(to_bout)
+                        order.pop(i)
+                        order.insert(j if i < j else j, from_bout)
+                st.experimental_set_query_params()
+                st.rerun()
+    except:
+        pass
 
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
@@ -457,11 +494,7 @@ if st.session_state.initialized:
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
-                    <div class="card-container" 
-                         draggable="true" 
-                         ondragstart="event.dataTransfer.setData('text', '{mat}|{b['bout_num']}')"
-                         ondrop="event.preventDefault(); window.location.href = '?drag=' + '{mat}|{b['bout_num']}' + '|' + event.dataTransfer.getData('text').split('|')[1]"
-                         ondragover="event.preventDefault()">
+                    <div class="card-container" data-mat="{mat}" data-bout="{b['bout_num']}" draggable="true">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
