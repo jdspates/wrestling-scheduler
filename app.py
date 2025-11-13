@@ -1,4 +1,4 @@
-# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + ALWAYS OPEN MATS + REAL ARROW ICONS
+# app.py – FINAL: ALWAYS OPEN MATS + REAL ARROW ICONS + NO COLLAPSE
 import streamlit as st
 import pandas as pd
 import io
@@ -12,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 from openpyxl.styles import PatternFill
+
 # ----------------------------------------------------------------------
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
@@ -38,12 +39,14 @@ else:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 TEAMS = CONFIG["TEAMS"]
+
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
 for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
+
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
@@ -51,10 +54,13 @@ def is_compatible(w1,w2):
     return w1["team"]!=w2["team"] and not (
         (w1["grade"] == 5 and w2["grade"] in [7,8]) or (w2["grade"] == 5 and w1["grade"] in [7,8])
     )
+
 def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
+
 def generate_initial_matchups(active):
     bouts = set()
     for level in sorted({w["level"] for w in active}, reverse=True):
@@ -92,6 +98,7 @@ def generate_initial_matchups(active):
             "is_early": w1["early"] or w2["early"], "manual": ""
         })
     return bout_list
+
 def build_suggestions(active, bout_list):
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
@@ -107,6 +114,7 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
+
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])
@@ -196,6 +204,7 @@ def generate_mat_schedule(bout_list, gap=4):
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
     return schedules
+
 # ----------------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------------
@@ -252,7 +261,6 @@ def move_down(mat, bout_num):
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown("""
 <style>
-    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
@@ -264,10 +272,11 @@ st.markdown("""
     .stButton > button:hover { background: #f0f0f0; }
 </style>
 """, unsafe_allow_html=True)
+
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
-# ---- UPLOAD (NO KEY) ----
+# ---- UPLOAD ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv")
 if uploaded and not st.session_state.initialized:
     try:
@@ -294,7 +303,7 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error: {e}")
 
-# ---- SETTINGS (unchanged) ----
+# ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
@@ -431,18 +440,25 @@ if st.session_state.initialized:
             entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
             if entry:
                 ordered_bouts.append(entry)
+
         for idx, m in enumerate(ordered_bouts):
             b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
             bg = "#fff3cd" if b["is_early"] else "#ffffff"
             w1c = TEAM_COLORS.get(b["w1_team"], "#999")
             w2c = TEAM_COLORS.get(b["w2_team"], "#999")
+
             col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
+
             with col_up:
-                st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}",
+                          on_click=move_up, args=(mat, b['bout_num']), help="Move up")
             with col_down:
-                st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}",
+                          on_click=move_down, args=(mat, b['bout_num']), help="Move down")
             with col_del:
-                st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+                st.button("X", key=f"del_{b['bout_num']}_{idx}",
+                          help="Remove match (Undo available)", on_click=remove_match,
+                          args=(b['bout_num'],))
             with col_card:
                 st.markdown(f"""
                 <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
