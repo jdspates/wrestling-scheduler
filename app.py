@@ -106,3 +106,4 @@ def generate_mat_schedule(bout_list, gap=4):
             entry["mat_bout_num"] = idx
 
     return schedules
+
