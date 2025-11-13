@@ -1,4 +1,4 @@
-# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + PERSIST OPEN STATE
+# app.py – DRAG REORDER + WRESTLER 2 CURRENT + ADD TO MAT + YELLOW HIGHLIGHT + PERSIST OPEN STATE + ARROW ICONS
 import streamlit as st
 import pandas as pd
 import io
@@ -265,7 +265,11 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    .stButton > button { min-width: 30px; height: 30px; padding: 0; font-size: 14px; }
+    .stButton > button { 
+        min-width: 32px; height: 32px; padding: 0; font-size: 16px; 
+        border: 1px solid #ccc; border-radius: 4px;
+    }
+    .stButton > button:hover { background: #f0f0f0; }
 </style>
 """, unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
@@ -448,11 +452,14 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                    if st.button("Up Arrow", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up"):
+                        pass
                 with col_down:
-                    st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                    if st.button("Down Arrow", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down"):
+                        pass
                 with col_del:
-                    st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
+                    if st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],)):
+                        pass
                 with col_card:
                     st.markdown(f"""
                     <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
@@ -532,4 +539,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
