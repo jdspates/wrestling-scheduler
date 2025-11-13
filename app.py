@@ -430,7 +430,7 @@ if st.session_state.initialized:
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
     st.subheader("Suggested Matches")
-    current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
+    current_suggestions = build_sSuggestions(filtered_active, st.session_state.bout_list)
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
     st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
     if current_suggestions:
@@ -532,7 +532,7 @@ if st.session_state.initialized:
                     with col_del:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
-                        st  st.markdown(f"""
+                        st.markdown(f"""
                         <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:12px;">
                                 <div style="display:flex;align-items:center;gap:8px;">
@@ -613,7 +613,7 @@ if st.session_state.initialized:
                                     ("VALIGN",(0,0),(-1,-1),"MIDDLE")])
                     for r, _ in enumerate(table[1:], 1):
                         if next(b for b in st.session_state.bout_list if b["bout_num"] == data[r-1]["bout_num"])["is_early"]:
-                            s.add("BACKGROUND",(0,r),(-1,r),HexColor("#FFFF99"))
+                            s.add("BACKGROUND",(0,r),-1,r),HexColor("#FFFF99"))
                     t.setStyle(s)
                     elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1,12), t]
                     if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
