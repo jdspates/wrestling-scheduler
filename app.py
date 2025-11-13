@@ -1,5 +1,5 @@
 # app.py – DRAG REORDER + ADDING SUGGESTED MATCHUPS FIX
-# Mat previews NO LONGER auto‑collapse
+# Mat previews now start OPEN and re-open on rerun (no auto-collapse)
 import streamlit as st
 import pandas as pd
 import io
@@ -229,7 +229,7 @@ def undo_last():
         w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
         if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
-        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(w["w1_id"])
+        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -427,7 +427,7 @@ if st.session_state.initialized:
             st.write(f"**Mat {mat}: No matches**")
             continue
         key = f"mat_{mat}"
-        with st.expander(f"Mat {mat}"):          # <-- no `expanded=` argument
+        with st.expander(f"Mat {mat}", expanded=True):
             if mat not in st.session_state.mat_order:
                 st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
             ordered_bouts = []
@@ -442,9 +442,9 @@ if st.session_state.initialized:
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                 col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                 with col_up:
-                    st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                    st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                 with col_down:
-                    st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                    st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                 with col_del:
                     st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                 with col_card:
