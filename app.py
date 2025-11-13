@@ -1,4 +1,4 @@
-# app.py – ONLY ACTIVE MAT STAYS OPEN + SETTINGS + RED X + UNDO + NO ERRORS
+# app.py – FULL CARD DRAG + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
 import streamlit as st
 import pandas as pd
 import io
@@ -43,7 +43,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
@@ -190,9 +190,7 @@ def generate_mat_schedule(bout_list,gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
-    # Save open state BEFORE any rerun
     open_mats = st.session_state.mat_open.copy()
-
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
@@ -203,8 +201,6 @@ def remove_match(bout_num):
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
-
-    # Restore open state AFTER rerun
     st.session_state.mat_open = open_mats
     st.rerun()
 
@@ -228,19 +224,94 @@ def undo_last():
 # UI
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
+
+# DRAG ENTIRE CARD + X CENTERED
 st.markdown("""
 <style>
-    .trash-btn{background:#ff4444!important;color:#fff!important;border:none!important;border-radius:4px!important;
-               width:20px!important;height:20px!important;font-size:12px!important;line-height:1!important;
-               display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important}
-    .trash-btn:hover{background:#cc0000!important}
+    .card-container {
+        cursor: grab;
+        user-select: none;
+        margin-bottom: 8px;
+    }
+    .card-container:active { cursor: grabbing; }
+    .trash-col {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .trash-btn {
+        background:#ff4444!important;
+        color:#fff!important;
+        border:none!important;
+        border-radius:4px!important;
+        width:100%!important;
+        height:100%!important;
+        font-size:12px!important;
+        line-height:1!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        cursor:pointer!important;
+        padding:0!important;
+        margin:0!important;
+    }
+    .trash-btn:hover { background:#cc0000!important; }
+
+    div[data-testid="column"]:has(> div > button.trash-btn) {
+        height: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
+# DRAG & DROP JS
+st.markdown("""
+<script>
+let dragged = null;
+document.addEventListener('dragstart', e => {
+    if (e.target.classList.contains('card-container')) {
+        dragged = e.target;
+        e.dataTransfer.effectAllowed = 'move';
+    }
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+    e.preventDefault();
+    if (dragged && e.target.classList.contains('card-container')) {
+        const mat = e.target.closest('[data-mat]').dataset.mat;
+        const from = dragged.dataset.bout;
+        const to = e.target.dataset.bout;
+        if (from !== to) {
+            window.parent.postMessage({type: 'drag', mat, from, to}, '*');
+        }
+    }
+    dragged = null;
+});
+</script>
+""", unsafe_allow_html=True)
 
-# ---- UPLOAD (unique key) ----
+# Listen for drag events
+if st.session_state.get("drag_event"):
+    event = st.session_state.drag_event
+    mat = event["mat"]
+    from_bout = event["from"]
+    to_bout = event["to"]
+    if mat in st.session_state.mat_order:
+        order = st.session_state.mat_order[mat]
+        if from_bout in order and to_bout in order:
+            i = order.index(from_bout)
+            j = order.index(to_bout)
+            order.pop(i)
+            order.insert(j, from_bout)
+    st.session_state.drag_event = None
+    st.rerun()
+
+st.title("Wrestling Meet Scheduler")
+st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
+
+# ---- UPLOAD ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv", key="roster_uploader")
 if uploaded and not st.session_state.initialized:
     df = pd.read_csv(uploaded)
@@ -258,22 +329,23 @@ if uploaded and not st.session_state.initialized:
     st.session_state.suggestions = build_suggestions(st.session_state.active,st.session_state.bout_list)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list,gap=4)
     st.session_state.initialized = True
-    st.session_state.mat_open = {}  # Start with all collapsed
+    st.session_state.mat_open = {}
+    st.session_state.mat_order = {}
     st.success("Roster loaded!")
 
-# ---- SETTINGS SIDEBAR (FULLY RESTORED) ----
+# ---- SETTINGS SIDEBAR (WITH TOOLTIPS) ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
 c1, c2 = st.sidebar.columns(2)
 with c1:
-    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
-    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
-    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
+    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches", help="Minimum matches each wrestler must get")
+    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches", help="Maximum matches each wrestler can get")
+    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats", help="Total mats available")
 with c2:
-    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
-    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor")
-    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff")
+    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff", help="Max level gap between opponents")
+    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor", help="Max weight diff as % of weight")
+    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff", help="Absolute min weight diff")
 if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
@@ -312,7 +384,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS (unchanged) ----
+    # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -348,7 +420,7 @@ if st.session_state.initialized:
             hide_index=True,
             key="sugg_editor"
         )
-        if st.button("Add Selected"):
+        if st.button("Add Selected", help="Add checked suggested matches"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -372,10 +444,9 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – ONLY ACTIVE MAT STAYS OPEN ----
+    # ---- MAT PREVIEWS – DRAG ENTIRE CARD + DELETE ----
     st.subheader("Mat Previews")
 
-    # Save open state BEFORE rendering
     open_mats = st.session_state.mat_open.copy()
 
     for mat in range(1, CONFIG["NUM_MATS"]+1):
@@ -388,22 +459,29 @@ if st.session_state.initialized:
         is_open = open_mats.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
-            # DO NOT set st.session_state.mat_open[key] = True here
-            # It will be restored from open_mats after rerun
+            if mat not in st.session_state.mat_order:
+                st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
 
-            for idx,m in enumerate(bouts):
+            ordered_bouts = []
+            for bout_num in st.session_state.mat_order[mat]:
+                entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
+                if entry:
+                    ordered_bouts.append(entry)
+
+            for idx, m in enumerate(ordered_bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                col_del, col_card = st.columns([0.08,1], gap="small")
+                # DRAG + DELETE + CARD
+                col_del, col_card = st.columns([0.08, 1], gap="small")
                 with col_del:
-                    if st.button("X", key=f"del_{b['bout_num']}"):
+                    if st.button("X", key=f"del_{b['bout_num']}", help="Remove match (Undo available)"):
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
-                    <div style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;">
+                    <div class="card-container" draggable="true" data-mat="{mat}" data-bout="{b['bout_num']}" style="background:{bg};border:1px solid #e6e6e6;border-radius:8px;padding:10px;">
                         <div style="display:flex;align-items:center;gap:12px;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
@@ -418,7 +496,7 @@ if st.session_state.initialized:
                             </div>
                         </div>
                         <div style="font-size:0.8rem;color:#555;margin-top:4px;">
-                            Slot: {m['mat_bout_num']} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                            Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -426,11 +504,11 @@ if st.session_state.initialized:
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
-        if st.button("Undo"):
+        if st.button("Undo", help="Restore last removed match"):
             undo_last()
 
     # ---- GENERATE MEET ----
-    if st.button("Generate Meet", type="primary"):
+    if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
@@ -480,4 +558,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
