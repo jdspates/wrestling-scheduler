@@ -1,4 +1,4 @@
-# app.py – CARDS BACK + DRAG + X CENTERED + ONLY ACTIVE MAT STAYS OPEN
+# app.py – ONLY ACTIVE MAT STAYS OPEN + SETTINGS + RED X + UNDO + NO ERRORS
 import streamlit as st
 import pandas as pd
 import io
@@ -43,7 +43,7 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open","mat_order"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_open"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
@@ -190,7 +190,9 @@ def generate_mat_schedule(bout_list,gap=4):
 # HELPERS
 # ----------------------------------------------------------------------
 def remove_match(bout_num):
+    # Save open state BEFORE any rerun
     open_mats = st.session_state.mat_open.copy()
+
     b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
     b["manual"] = "Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
@@ -201,6 +203,8 @@ def remove_match(bout_num):
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.success("Match removed.")
+
+    # Restore open state AFTER rerun
     st.session_state.mat_open = open_mats
     st.rerun()
 
@@ -224,53 +228,19 @@ def undo_last():
 # UI
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
-
-# DRAG + X CENTERED
 st.markdown("""
 <style>
-    .drag-handle {
-        cursor: move;
-        font-size: 1.2rem;
-        color: #666;
-        padding: 0 4px;
-        user-select: none;
-    }
-    .trash-col {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .trash-btn {
-        background:#ff4444!important;
-        color:#fff!important;
-        border:none!important;
-        border-radius:4px!important;
-        width:100%!important;
-        height:100%!important;
-        font-size:12px!important;
-        line-height:1!important;
-        display:flex!important;
-        align-items:center!important;
-        justify-content:center!important;
-        cursor:pointer!important;
-        padding:0!important;
-        margin:0!important;
-    }
-    .trash-btn:hover { background:#cc0000!important; }
-
-    div[data-testid="column"]:has(> div > button.trash-btn) {
-        height: 100%;
-    }
+    .trash-btn{background:#ff4444!important;color:#fff!important;border:none!important;border-radius:4px!important;
+               width:20px!important;height:20px!important;font-size:12px!important;line-height:1!important;
+               display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important}
+    .trash-btn:hover{background:#cc0000!important}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
+st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
 
-# ---- UPLOAD ----
+# ---- UPLOAD (unique key) ----
 uploaded = st.file_uploader("Upload `roster.csv`", type="csv", key="roster_uploader")
 if uploaded and not st.session_state.initialized:
     df = pd.read_csv(uploaded)
@@ -288,23 +258,22 @@ if uploaded and not st.session_state.initialized:
     st.session_state.suggestions = build_suggestions(st.session_state.active,st.session_state.bout_list)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list,gap=4)
     st.session_state.initialized = True
-    st.session_state.mat_open = {}
-    st.session_state.mat_order = {}
+    st.session_state.mat_open = {}  # Start with all collapsed
     st.success("Roster loaded!")
 
-# ---- SETTINGS SIDEBAR (WITH TOOLTIPS) ----
+# ---- SETTINGS SIDEBAR (FULLY RESTORED) ----
 st.sidebar.header("Meet Settings")
 changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
 c1, c2 = st.sidebar.columns(2)
 with c1:
-    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches", help="Minimum matches each wrestler must get")
-    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches", help="Maximum matches each wrestler can get")
-    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats", help="Total mats available")
+    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
+    new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
+    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
 with c2:
-    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff", help="Max level gap between opponents")
-    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor", help="Max weight diff as % of weight")
-    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff", help="Absolute min weight diff")
+    new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
+    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01, format="%.2f", key="weight_factor")
+    new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5, key="min_weight_diff")
 if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
@@ -343,7 +312,7 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # ---- SUGGESTED MATCHUPS ----
+    # ---- SUGGESTED MATCHUPS (unchanged) ----
     st.subheader("Suggested Matches")
     if st.session_state.suggestions:
         sugg_data = []
@@ -379,7 +348,7 @@ if st.session_state.initialized:
             hide_index=True,
             key="sugg_editor"
         )
-        if st.button("Add Selected", help="Add checked suggested matches"):
+        if st.button("Add Selected"):
             to_add = [st.session_state.suggestions[sugg_full_df.iloc[row.name]["idx"]]
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
@@ -403,22 +372,11 @@ if st.session_state.initialized:
     else:
         st.info("All wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – CARDS + DRAG + DELETE ----
+    # ---- MAT PREVIEWS – ONLY ACTIVE MAT STAYS OPEN ----
     st.subheader("Mat Previews")
 
+    # Save open state BEFORE rendering
     open_mats = st.session_state.mat_open.copy()
-
-    # Rebuild mat_schedules with current order
-    if st.session_state.mat_order:
-        new_schedules = []
-        for mat in range(1, CONFIG["NUM_MATS"]+1):
-            if mat in st.session_state.mat_order:
-                for bout_num in st.session_state.mat_order[mat]:
-                    entry = next((e for e in st.session_state.mat_schedules if e["bout_num"] == bout_num), None)
-                    if entry:
-                        new_schedules.append(entry)
-        if new_schedules:
-            st.session_state.mat_schedules = new_schedules
 
     for mat in range(1, CONFIG["NUM_MATS"]+1):
         bouts = [m for m in st.session_state.mat_schedules if m["mat"]==mat]
@@ -430,28 +388,18 @@ if st.session_state.initialized:
         is_open = open_mats.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
-            # Init order if missing
-            if mat not in st.session_state.mat_order:
-                st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
+            # DO NOT set st.session_state.mat_open[key] = True here
+            # It will be restored from open_mats after rerun
 
-            # Use ordered bout_nums
-            ordered_bouts = []
-            for bout_num in st.session_state.mat_order[mat]:
-                entry = next((e for e in bouts if e["bout_num"] == bout_num), None)
-                if entry:
-                    ordered_bouts.append(entry)
-
-            for idx, m in enumerate(ordered_bouts):
+            for idx,m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
                 w2c = TEAM_COLORS.get(b["w2_team"], "#999")
 
-                col_drag, col_del, col_card = st.columns([0.05, 0.08, 1], gap="small")
-                with col_drag:
-                    st.markdown('<div class="drag-handle">Drag Handle</div>', unsafe_allow_html=True)
+                col_del, col_card = st.columns([0.08,1], gap="small")
                 with col_del:
-                    if st.button("X", key=f"del_{b['bout_num']}", help="Remove match (Undo available)"):
+                    if st.button("X", key=f"del_{b['bout_num']}"):
                         remove_match(b["bout_num"])
                 with col_card:
                     st.markdown(f"""
@@ -470,27 +418,19 @@ if st.session_state.initialized:
                             </div>
                         </div>
                         <div style="font-size:0.8rem;color:#555;margin-top:4px;">
-                            Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                            Slot: {m['mat_bout_num']} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-                # DRAG LOGIC
-                if st.session_state.get(f"drag_{mat}_{b['bout_num']}"):
-                    new_idx = st.session_state[f"drag_{mat}_{b['bout_num']}"]
-                    if 0 <= new_idx < len(st.session_state.mat_order[mat]):
-                        st.session_state.mat_order[mat].remove(b["bout_num"])
-                        st.session_state.mat_order[mat].insert(new_idx, b["bout_num"])
-                    st.rerun()
-
     # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
-        if st.button("Undo", help="Restore last removed match"):
+        if st.button("Undo"):
             undo_last()
 
     # ---- GENERATE MEET ----
-    if st.button("Generate Meet", type="primary", help="Download Excel + PDF"):
+    if st.button("Generate Meet", type="primary"):
         out = io.BytesIO()
         with pd.ExcelWriter(out, engine="openpyxl") as writer:
             pd.DataFrame(st.session_state.bout_list).to_excel(writer, "Matchups", index=False)
@@ -540,3 +480,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
