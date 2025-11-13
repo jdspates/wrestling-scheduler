@@ -1,5 +1,4 @@
-# app.py – DRAG REORDER + ADDING SUGGESTED MATCHUPS FIX
-# Mat previews stay open | Reset button has padding | Arrows are correct
+# app.py – FINAL: Arrows Up Down + Reset button padded
 import streamlit as st
 import pandas as pd
 import io
@@ -49,7 +48,7 @@ for key in ["initialized","bout_list","mat_schedules","suggestions","active","un
         st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {}
 
 # ----------------------------------------------------------------------
-# CORE LOGIC
+# CORE LOGIC (unchanged)
 # ----------------------------------------------------------------------
 def is_compatible(w1,w2):
     return w1["team"]!=w2["team"] and not (
@@ -265,8 +264,8 @@ st.markdown("""
     h1 { margin-top:0 !important; }
     .stButton > button { min-width: 30px; height: 30px; padding: 0; font-size: 14px; }
 
-    /* Only give padding to Reset to Default button */
-    [data-testid="stButton"] button[key="reset_default_btn"] {
+    /* Reset to Default button – padding via aria-label */
+    button[aria-label="Reset to Default"] {
         padding: 0.5rem 1rem !important;
         min-height: 40px !important;
     }
@@ -343,8 +342,8 @@ if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
                    "MIN_WEIGHT_DIFF": new_min_weight})
     changed = True
 st.sidebar.markdown("---")
-# Reset to Default button with key and padding
-if st.sidebar.button("Reset to Default", type="secondary", key="reset_default_btn"):
+# Reset to Default button – uses aria-label for CSS
+if st.sidebar.button("Reset to Default", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
@@ -433,7 +432,6 @@ if st.session_state.initialized:
         if not bouts:
             st.write(f"**Mat {mat}: No matches**")
             continue
-        key = f"mat_{mat}"
         with st.expander(f"Mat {mat}", expanded=True):
             if mat not in st.session_state.mat_order:
                 st.session_state.mat_order[mat] = [b["bout_num"] for b in bouts]
