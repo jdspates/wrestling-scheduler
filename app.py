@@ -1,4 +1,4 @@
-# app.py – RED X PERFECTLY CENTERED + ONLY ACTIVE MAT STAYS OPEN
+# app.py – X BUTTON CENTER = CARD CENTER + ONLY ACTIVE MAT STAYS OPEN
 import streamlit as st
 import pandas as pd
 import io
@@ -69,7 +69,7 @@ def generate_initial_matchups(active):
                       if o["id"] not in w["match_ids"]
                       and len(o["match_ids"])<CONFIG["MAX_MATCHES"]
                       and is_compatible(w,o)
-                      and abs(w["weight"]-o["weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
+                      and abs(w["weight"]-o["w2_weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
                       and abs(w["level"]-o["level"])<=CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps:continue
                 best=min(opps,key=lambda o:matchup_score(w,o))
@@ -225,12 +225,12 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# RED X PERFECTLY CENTERED WITH CARD
+# X BUTTON CENTER = CARD CENTER
 st.markdown("""
 <style>
     .trash-col {
         display: flex;
-        align-items: stretch;
+        align-items: center;
         justify-content: center;
         height: 100%;
         padding: 0 !important;
@@ -241,7 +241,7 @@ st.markdown("""
         color:#fff!important;
         border:none!important;
         border-radius:4px!important;
-        width:20px!important;
+        width:100%!important;
         height:100%!important;
         font-size:12px!important;
         line-height:1!important;
@@ -410,7 +410,7 @@ if st.session_state.initialized:
         is_open = open_mats.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
-            for idx,m in enumerate(bouts):
+ ≡            for idx,m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
