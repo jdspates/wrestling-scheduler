@@ -277,7 +277,6 @@ st.markdown("""
     .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
-    /* Small buttons in main content */
     .main .stButton > button {
         min-width: 30px;
         height: 30px;
@@ -287,16 +286,13 @@ st.markdown("""
         align-items: center;
         justify-content: center;
     }
-    /* Normal sidebar buttons */
     .stSidebar .stButton > button {
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
     }
-    /* Search input polish */
     .stTextInput > div > div > input { border-radius: 6px !important; }
     .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
-    /* Center trash emoji */
     .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -398,7 +394,6 @@ TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 # MAIN APP – SEARCH + CLEAN MATS
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
-    # Build filtered active list
     raw_active = st.session_state.active
     if search_term.strip():
         term = search_term.strip().lower()
@@ -411,7 +406,6 @@ if st.session_state.initialized:
         filtered_active = raw_active
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
-    # ---- SUGGESTED MATCHUPS ----
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
@@ -479,7 +473,6 @@ if st.session_state.initialized:
     else:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
 
-    # ---- MAT PREVIEWS – CLEAN: Empty = empty expander
     st.subheader("Mat Previews")
     filtered_ids = {w["id"] for w in filtered_active}
     filtered_bout_list = [
@@ -535,7 +528,6 @@ if st.session_state.initialized:
                         </div>
                         """, unsafe_allow_html=True)
 
-    # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo", help="Restore last removed match"):
@@ -591,7 +583,7 @@ if st.session_state.initialized:
                 doc.build(elements)
                 pdf_bytes = buf.getvalue()
 
-                st.toast("Files generated!", icon="Success")
+                st.toast("Files generated!", icon="Checkmark")
                 st.download_button("Download Excel (Auto)", excel_bytes, "meet_schedule.xlsx",
                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                 st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
