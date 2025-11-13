@@ -69,7 +69,7 @@ def generate_initial_matchups(active):
                       if o["id"] not in w["match_ids"]
                       and len(o["match_ids"])<CONFIG["MAX_MATCHES"]
                       and is_compatible(w,o)
-                      and abs(w["weight"]-o["w2_weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
+                      and abs(w["weight"]-o["weight"])<=min(max_weight_diff(w["weight"]),max_weight_diff(o["weight"]))
                       and abs(w["level"]-o["level"])<=CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps:continue
                 best=min(opps,key=lambda o:matchup_score(w,o))
@@ -410,7 +410,7 @@ if st.session_state.initialized:
         is_open = open_mats.get(key, False)
 
         with st.expander(f"Mat {mat}", expanded=is_open):
- ≡            for idx,m in enumerate(bouts):
+            for idx,m in enumerate(bouts):
                 b = next(x for x in st.session_state.bout_list if x["bout_num"]==m["bout_num"])
                 bg = "#fff3cd" if b["is_early"] else "#ffffff"
                 w1c = TEAM_COLORS.get(b["w1_team"], "#999")
