@@ -271,12 +271,17 @@ st.markdown("""
         min-width: auto !important;
     }
 
-    /* Center text in delete (trash) buttons */
-    .stButton > button[key^="del_"] {
+    /* Center emoji/text in delete (trash) buttons - stronger targeting */
+    .stButton > button[key^="del_"],
+    .stButton > button[key^="del_"] > span {
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
         text-align: center !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -532,6 +537,7 @@ if st.session_state.initialized:
         st.download_button("Download PDF", pdf_bytes, "meet_schedule.pdf", "application/pdf", use_container_width=True)
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
