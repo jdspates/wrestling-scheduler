@@ -1,4 +1,4 @@
-# app.py – RED X VERTICALLY CENTERED + ONLY ACTIVE MAT STAYS OPEN + NO ERRORS
+# app.py – RED X PERFECTLY CENTERED + ONLY ACTIVE MAT STAYS OPEN
 import streamlit as st
 import pandas as pd
 import io
@@ -225,16 +225,24 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# RED X VERTICALLY CENTERED
+# RED X PERFECTLY CENTERED WITH CARD
 st.markdown("""
 <style>
+    .trash-col {
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        height: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
     .trash-btn {
         background:#ff4444!important;
         color:#fff!important;
         border:none!important;
         border-radius:4px!important;
         width:20px!important;
-        height:20px!important;
+        height:100%!important;
         font-size:12px!important;
         line-height:1!important;
         display:flex!important;
@@ -247,9 +255,6 @@ st.markdown("""
     .trash-btn:hover { background:#cc0000!important; }
 
     div[data-testid="column"]:has(> div > button.trash-btn) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
         height: 100%;
     }
 </style>
@@ -437,7 +442,7 @@ if st.session_state.initialized:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # ---- UNDO BUTTON (FIXED INDENTATION) ----
+    # ---- UNDO BUTTON ----
     if st.session_state.undo_stack:
         st.markdown("---")
         if st.button("Undo"):
