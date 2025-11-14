@@ -396,7 +396,7 @@ c1, c2 = st.sidebar.columns(2)
 with c1:
     new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
     new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
-    n_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
+    new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
 with c2:
     new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
     new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01,
@@ -436,11 +436,11 @@ for i in range(5):
 
 # SAVE CONFIG CHANGES
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
-    n_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
+    new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"] or
     new_rest_gap != CONFIG.get("REST_GAP", 4)):
     CONFIG.update({
-        "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": n_mats,
+        "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
         "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
         "MIN_WEIGHT_DIFF": new_min_weight, "REST_GAP": new_rest_gap
     })
@@ -462,7 +462,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – SEARCH + FULL MAT PREVIEWS
+# MAIN APP – SEARCH + CLEAN MATS
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
@@ -477,7 +477,7 @@ if st.session_state.initialized:
         filtered_active = raw_active
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
-    # NEW: Summary uses FULL data
+    # NEW: Stats after generation
     total_wrestlers = len(st.session_state.active)
     total_bouts_generated = len([b for b in st.session_state.bout_list if b["manual"] != "Manually Removed"])
     total_bouts_assigned = len(st.session_state.mat_schedules)
@@ -570,7 +570,7 @@ if st.session_state.initialized:
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [b for b in st.session_state.bout_list if b["manual"] != "Manually Removed" and bout_to_mat.get(b["bout_num"]) == mat]
-        with st.expander(f"Mat {mat} ({len(mat_bouts)} matches)", expanded=True):
+        with st.expander(f"Mat {mat}", expanded=True):
             if not mat_bouts:
                 pass
             else:
