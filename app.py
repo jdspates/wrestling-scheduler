@@ -134,10 +134,10 @@ def build_suggestions(active, bout_list):
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # PRIORITIZE EARLY MATCHES FIRST, THEN BY WEIGHT
-    valid.sort(key=lambda x: (not x["is_early"], x["avg_weight"]))
+    # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
+    valid.sort(key=lambda x: x["avg_weight"])
     
-    # DISTRIBUTE ACROSS MATS (early matches go to front)
+    # 2. DISTRIBUTE ACROSS MATS (lightest → Mat 1)
     per_mat = len(valid) // CONFIG["NUM_MATS"]
     extra = len(valid) % CONFIG["NUM_MATS"]
     mats = []
@@ -150,6 +150,8 @@ def generate_mat_schedule(bout_list, gap=4):
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
+        early_bouts = [b for b in mat_bouts if b["is_early"]]
+        non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
         total_slots = len(mat_bouts)
         first_half_end = (total_slots + 1) // 2
         slot = 1
@@ -158,14 +160,14 @@ def generate_mat_schedule(bout_list, gap=4):
 
         # FORCE FIRST EARLY MATCH AT SLOT 1
         first_early = None
-        for b in mat_bouts:
-            if not b["is_early"]: continue
+        for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
             l2 = last_slot.get(b["w2_id"], -100)
             if l1 < 0 and l2 < 0:
                 first_early = b
                 break
         if first_early:
+            early_bouts.remove(first_early)
             scheduled.append((1, first_early))
             last_slot[first_early["w1_id"]] = 1
             last_slot[first_early["w2_id"]] = 1
@@ -173,11 +175,10 @@ def generate_mat_schedule(bout_list, gap=4):
             slot = 2
 
         # FILL FIRST HALF WITH REMAINING EARLY MATCHES
-        remaining_early = [b for b in mat_bouts if b["is_early"] and b not in [s[1] for s in scheduled]]
-        while remaining_early and len(scheduled) < first_half_end:
+        while early_bouts and len(scheduled) < first_half_end:
             best = None
             best_score = -float("inf")
-            for b in remaining_early:
+            for b in early_bouts:
                 if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
@@ -187,7 +188,7 @@ def generate_mat_schedule(bout_list, gap=4):
                     best_score = score
                     best = b
             if best is None: break
-            remaining_early.remove(best)
+            early_bouts.remove(best)
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
             last_slot[best["w2_id"]] = slot
@@ -195,7 +196,7 @@ def generate_mat_schedule(bout_list, gap=4):
             slot += 1
 
         # FILL REST WITH GAP LOGIC
-        remaining = [b for b in mat_bouts if b not in [s[1] for s in scheduled]]
+        remaining = non_early_bouts + early_bouts
         while remaining:
             best = None
             best_gap = -1
@@ -461,7 +462,7 @@ if st.session_state.initialized:
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
                 "Lvl": st.column_config.NumberColumn("Lvl"),
                 "Wt": st.column_config.NumberColumn("Wt"),
-                "vs_Current": st.column_config.NumberColumn("vs_Current"),
+                "vs_current": st.column_config.NumberColumn("vs_Current"),
                 "vs": st.column_config.TextColumn("vs"),
                 "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
                 "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
