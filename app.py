@@ -153,103 +153,61 @@ def generate_mat_schedule(bout_list):
         start = end
 
     schedules = []
-    st.session_state.mat_order = {}  # Reset
+    st.session_state.mat_order = {}
 
-    # 3. REORDER EACH MAT WITH YOUR RULES
+    # 3. REORDER EACH MAT USING YOUR REST-SPACING SCHEDULER
     for mat_num, mat_bouts in enumerate(mats, 1):
         if not mat_bouts:
             continue
 
-        total_slots = len(mat_bouts)
-        slots = [None] * total_slots
-        used_bouts = set()
-
-        # Build wrestler → bouts
-        wrestler_bouts = {}
+        # Step 1: Pre-sort matches by total match count (A + B)
+        match_counts = {}
         for bout in mat_bouts:
-            for wid in [bout["w1_id"], bout["w2_id"]]:
-                wrestler_bouts.setdefault(wid, []).append(bout)
+            count = len([b for b in mat_bouts if b["w1_id"] == bout["w1_id"] or b["w2_id"] == bout["w1_id"]])
+            count += len([b for b in mat_bouts if b["w1_id"] == bout["w2_id"] or b["w2_id"] == bout["w2_id"]])
+            match_counts[bout["bout_num"]] = count
 
-        # Sort by match count (descending)
-        sorted_wrestlers = sorted(wrestler_bouts.items(), key=lambda x: len(x[1]), reverse=True)
+        mat_bouts.sort(key=lambda x: match_counts.get(x["bout_num"], 0), reverse=True)
 
-        # Place bouts
-        for wrestler_id, bouts in sorted_wrestlers:
-            if not bouts: continue
+        # Step 2: Greedy cooldown scheduler
+        cooldown = {}
+        placed = []
+        queue = mat_bouts[:]
 
-            # Sort bouts by avg_weight for consistency
-            bouts.sort(key=lambda x: x["avg_weight"])
+        while queue:
+            bout = queue.pop(0)
+            w1, w2 = bout["w1_id"], bout["w2_id  # w2_id
 
-            num_matches = len(bouts)
-            if num_matches == 1:
-                # Place first match in slot 1 if available
-                if slots[0] is None:
-                    slots[0] = bouts[0]
-                    used_bouts.add(bouts[0]["bout_num"])
-                else:
-                    # Find first safe slot
-                    for s in range(total_slots):
-                        if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
-                            slots[s] = bouts[0]
-                            used_bouts.add(bouts[0]["bout_num"])
-                            break
+            if cooldown.get(w1, 0) == 0 and cooldown.get(w2, 0) == 0:
+                placed.append(bout)
+                cooldown[w1] = CONFIG["REST_GAP"]
+                cooldown[w2] = CONFIG["REST_GAP"]
             else:
-                # Calculate ideal spacing
-                spacing = total_slots // num_matches
-                ideal_slots = [i * spacing for i in range(num_matches)]
+                queue.append(bout)  # Move to end
 
-                # Try to place in ideal slots
-                for i, bout in enumerate(bouts):
-                    target = ideal_slots[i]
-                    placed = False
-                    # Try near target (±2)
-                    for offset in range(-2, 3):
-                        s = target + offset
-                        if 0 <= s < total_slots and slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
-                            slots[s] = bout
-                            used_bouts.add(bout["bout_num"])
-                            placed = True
-                            break
-                    if not placed:
-                        # Move down to next safe slot
-                        for s in range(target, total_slots):
-                            if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
-                                slots[s] = bout
-                                used_bouts.add(bout["bout_num"])
-                                placed = True
-                                break
-                        if not placed:
-                            # Fallback: first available
-                            for s in range(total_slots):
-                                if slots[s] is None:
-                                    slots[s] = bout
-                                    used_bouts.add(bout["bout_num"])
-                                    break
+            # Decrease all cooldowns
+            for w in list(cooldown.keys()):
+                cooldown[w] = max(0, cooldown[w] - 1)
 
-        # Fill remaining with unplaced bouts
+        # Fallback: ensure all bouts are placed
         for bout in mat_bouts:
-            if bout["bout_num"] not in used_bouts:
-                for s in range(total_slots):
-                    if slots[s] is None:
-                        slots[s] = bout
-                        break
+            if bout not in placed:
+                placed.append(bout)
 
         # Build schedule
-        for slot_idx, bout in enumerate(slots, 1):
-            if bout:
-                schedules.append({
-                    "mat": mat_num,
-                    "slot": slot_idx,
-                    "bout_num": bout["bout_num"],
-                    "w1": f"{bout['w1_name']} ({bout['w1_team']})",
-                    "w2": f"{bout['w2_name']} ({bout['w2_team']})",
-                    "w1_team": bout["w1_team"],
-                    "w2_team": bout["w2_team"],
-                    "is_early": bout["is_early"]
-                })
+        for slot_idx, bout in enumerate(placed, 1):
+            schedules.append({
+                "mat": mat_num,
+                "slot": slot_idx,
+                "bout_num": bout["bout_num"],
+                "w1": f"{bout['w1_name']} ({bout['w1_team']})",
+                "w2": f"{bout['w2_name']} ({bout['w2_team']})",
+                "w1_team": bout["w1_team"],
+                "w2_team": bout["w2_team"],
+                "is_early": bout["is_early"]
+            })
 
-        # Update mat_order
-        st.session_state.mat_order[mat_num] = [bout["bout_num"] for bout in slots if bout]
+        st.session_state.mat_order[mat_num] = [b["bout_num"] for b in placed]
 
     # ASSIGN MAT BOUT NUMBERS
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
@@ -259,16 +217,6 @@ def generate_mat_schedule(bout_list):
             entry["mat_bout_num"] = idx
 
     return schedules
-
-def is_safe_slot(slots, slot_idx, wrestler_id, total_slots):
-    """Check if placing wrestler in slot_idx violates rest gap (±5)"""
-    for check in range(max(0, slot_idx-5), min(total_slots, slot_idx+6)):
-        if check == slot_idx: continue
-        bout = slots[check]
-        if bout and (bout["w1_id"] == wrestler_id or bout["w2_id"] == wrestler_id):
-            if abs(check - slot_idx) <= CONFIG["REST_GAP"]:
-                return False
-    return True
 
 # ----------------------------------------------------------------------
 # HELPERS
@@ -466,7 +414,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – FULL MAT PREVIEWS + REORDERING
+# MAIN APP – FULL MAT PREVIEWS + YOUR REST-SPACING SCHEDULER
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
@@ -704,4 +652,3 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
