@@ -211,7 +211,7 @@ def generate_mat_schedule(bout_list):
                         break
 
         # Build schedule
-        for slot_idx, bout in enumerate(slates, 1):
+        for slot_idx, bout in enumerate(slots, 1):
             if bout:
                 schedules.append({
                     "mat": mat_num,
@@ -720,3 +720,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
