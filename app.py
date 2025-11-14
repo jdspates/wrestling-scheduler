@@ -172,7 +172,7 @@ def generate_mat_schedule(bout_list, gap=None):
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
             l2 = last_slot.get(b["w2_id"], -100)
-            if l1 < slot - gap - 1 and l2 < slot - gap - 1:
+            if slot - l1 > gap and slot - l2 > gap:
                 first_early = b
                 break
         if first_early:
@@ -192,7 +192,7 @@ def generate_mat_schedule(bout_list, gap=None):
                 if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - gap - 1 or l2 >= slot - gap - 1: continue
+                if slot - l1 <= gap or slot - l2 <= gap: continue
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
@@ -214,13 +214,13 @@ def generate_mat_schedule(bout_list, gap=None):
             for b in remaining:
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - gap - 1 or l2 >= slot - gap - 1: continue
+                if slot - l1 <= gap or slot - l2 <= gap: continue
                 gap_val = min(slot - l1 - 1, slot - l2 - 1)
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
             if best is None and remaining:
-                best = remaining[0]
+                best = remaining[0]  # Fallback if no option
             if best:
                 remaining.remove(best)
                 scheduled.append((slot, best))
@@ -597,12 +597,19 @@ if st.session_state.initialized:
             try:
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                    # Roster sheet
                     roster_df = pd.DataFrame(st.session_state.active)
                     roster_df.to_excel(writer, sheet_name='Roster', index=False)
+
+                    # Matchups sheet
                     matchups_df = pd.DataFrame(st.session_state.bout_list)
                     matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
+
+                    # Remaining Suggestions sheet
                     suggestions_df = pd.DataFrame(st.session_state.suggestions)
                     suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
+
+                    # Mat sheets
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
