@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – FINAL CLEAN VERSION - 946 111325
+# app.py – Wrestling Scheduler – FINAL FAST & CLEAN VERSION
 import streamlit as st
 import pandas as pd
 import io
@@ -125,7 +125,7 @@ def build_suggestions(active, bout_list):
     sugg = []
     for w in under:
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
-        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
+        opps = [o for o in opps if abs(w["weight"]-o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["|level"]-o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps: opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
@@ -139,7 +139,7 @@ def build_suggestions(active, bout_list):
 def generate_mat_schedule(bout_list):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
+    # 1. SORT BY AVERAGE WEIGHT FIRST
     valid.sort(key=lambda x: x["avg_weight"])
     
     # 2. DISTRIBUTE EVENLY ACROSS MATS
@@ -159,30 +159,27 @@ def generate_mat_schedule(bout_list):
         if not mat_bouts:
             continue
 
-        # Step 1: Pre-sort by total match count
+        # Pre-sort by total match count
         match_counts = {}
         for bout in mat_bouts:
             count = len([b for b in mat_bouts if b["w1_id"] == bout["w1_id"] or b["w2_id"] == bout["w1_id"]])
             count += len([b for b in mat_bouts if b["w1_id"] == bout["w2_id"] or b["w2_id"] == bout["w2_id"]])
             match_counts[bout["bout_num"]] = count
-
         mat_bouts.sort(key=lambda x: match_counts.get(x["bout_num"], 0), reverse=True)
 
-        # Step 2: Greedy cooldown scheduler with SLOT CHECK
-        cooldown = {}
-        placed = []
-        queue = mat_bouts[:]
+        # Fast placement
         slots = [None] * len(mat_bouts)
+        wrestler_last_slot = {}
 
-        while queue:
-            bout = queue.pop(0)
+        for bout in mat_bouts:
             w1, w2 = bout["w1_id"], bout["w2_id"]
+            last1 = wrestler_last_slot.get(w1, -CONFIG["REST_GAP"] - 1)
+            last2 = wrestler_last_slot.get(w2, -CONFIG["REST_GAP"] - 1)
+            min_slot = max(last1, last2) + CONFIG["REST_GAP"] + 1
 
-            placed_slot = None
-            for s in range(len(slots)):
+            placed = False
+            for s in range(min_slot, len(slots)):
                 if slots[s] is not None:
-                    continue
-                if cooldown.get(w1, 0) > 0 or cooldown.get(w2, 0) > 0:
                     continue
                 safe = True
                 for check in range(max(0, s - CONFIG["REST_GAP"]), min(len(slots), s + CONFIG["REST_GAP"] + 1)):
@@ -192,27 +189,17 @@ def generate_mat_schedule(bout_list):
                         safe = False
                         break
                 if safe:
-                    placed_slot = s
+                    slots[s] = bout
+                    wrestler_last_slot[w1] = s
+                    wrestler_last_slot[w2] = s
+                    placed = True
                     break
-
-            if placed_slot is not None:
-                slots[placed_slot] = bout
-                placed.append(bout)
-                cooldown[w1] = CONFIG["REST_GAP"] + 1
-                cooldown[w2] = CONFIG["REST_GAP"] + 1
-            else:
-                queue.append(bout)
-
-            for w in list(cooldown.keys()):
-                cooldown[w] = max(0, cooldown[w] - 1)
-
-        # Fallback
-        for bout in mat_bouts:
-            if bout not in placed:
+            if not placed:
                 for s in range(len(slots)):
                     if slots[s] is None:
                         slots[s] = bout
-                        placed.append(bout)
+                        wrestler_last_slot[w1] = s
+                        wrestler_last_slot[w2] = s
                         break
 
         # Build schedule
@@ -229,7 +216,7 @@ def generate_mat_schedule(bout_list):
                     "is_early": bout["is_early"]
                 })
 
-        st.session_state.mat_order[mat_num] = [b["bout_num"] for b in placed if b]
+        st.session_state.mat_order[mat_num] = [b["bout_num"] for b in slots if b]
 
     # ASSIGN MAT BOUT NUMBERS
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
@@ -251,9 +238,7 @@ def verify_rest_gaps():
         for e in mat_entries:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
             for wid in [b["w1_id"], b["w2_id"]]:
-                if wid not in wrestler_slots:
-                    wrestler_slots[wid] = []
-                wrestler_slots[wid].append(e["slot"])
+                wrestler_slots.setdefault(wid, []).append(e["slot"])
         for wid, slots in wrestler_slots.items():
             slots.sort()
             for i in range(1, len(slots)):
@@ -396,7 +381,7 @@ changed = False
 st.sidebar.subheader("Match & Scheduling Rules")
 c1, c2 = st.sidebar.columns(2)
 with c1:
-    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="min_matches")
+    new_min = st.number_input("Min Matches per Wrestler", 1, 10, CONFIG["MIN_MATCHES"], key="\u006din_matches")
     new_max = st.number_input("Max Matches per Wrestler", 1, 10, CONFIG["MAX_MATCHES"], key="max_matches")
     new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
 with c2:
@@ -464,7 +449,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – FULL MAT PREVIEWS + REST ENFORCED
+# MAIN APP – FAST & ENFORCED
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
