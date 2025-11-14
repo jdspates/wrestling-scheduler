@@ -134,25 +134,28 @@ def build_suggestions(active, bout_list):
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # 1. GROUP BY WEIGHT CLASS (round avg_weight to nearest 5lbs)
+    # 1. GROUP BY WEIGHT CLASS (round to nearest 5 lbs)
     from collections import defaultdict
     weight_groups = defaultdict(list)
     for b in valid:
-        rounded_weight = round(b["avg_weight"] / 5) * 5
-        weight_groups[rounded_weight].append(b)
+        rounded = round(b["avg_weight"] / 5) * 5
+        weight_groups[rounded].append(b)
     
-    # 2. ASSIGN GROUPS TO MATS (cycle to keep weights together)
+    # 2. SORT GROUPS BY WEIGHT (lightest first)
+    sorted_groups = sorted(weight_groups.items())  # list of (weight, [bouts])
+
+    # 3. ASSIGN ENTIRE GROUPS TO MATS (keep same weight together)
     mats = [[] for _ in range(CONFIG["NUM_MATS"])]
-    group_keys = sorted(weight_groups.keys())
     mat_index = 0
-    for key in group_keys:
-        mats[mat_index].extend(weight_groups[key])
-        mat_index = (mat_index + 1) % CONFIG["NUM_MATS"]
+    for weight, group in sorted_groups:
+        mats[mat_index].extend(group)
+        mat_index = (mat_index + 1) % CONFIG["NUM_MATS"]  # cycle mats
 
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
         if not mat_bouts: continue
+        
         early_bouts = [b for b in mat_bouts if b["is_early"]]
         non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
         total_slots = len(mat_bouts)
