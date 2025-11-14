@@ -155,7 +155,7 @@ def generate_mat_schedule(bout_list):
     schedules = []
     st.session_state.mat_order = {}  # Reset
 
-    # 3. REORDER EACH MAT WITH GREEDY INTERVAL SCHEDULING
+    # 3. REORDER EACH MAT WITH YOUR RULES
     for mat_num, mat_bouts in enumerate(mats, 1):
         if not mat_bouts:
             continue
@@ -173,33 +173,58 @@ def generate_mat_schedule(bout_list):
         # Sort by match count (descending)
         sorted_wrestlers = sorted(wrestler_bouts.items(), key=lambda x: len(x[1]), reverse=True)
 
-        # Place bouts greedily
+        # Place bouts
         for wrestler_id, bouts in sorted_wrestlers:
             if not bouts: continue
 
             # Sort bouts by avg_weight for consistency
             bouts.sort(key=lambda x: x["avg_weight"])
 
-            last_slot = -CONFIG["REST_GAP"] - 1  # Allow first match at slot 0
-            for bout in bouts:
-                placed = False
-                # Start searching from last_slot + REST_GAP + 1
-                start_slot = last_slot + CONFIG["REST_GAP"] + 1
-                for s in range(max(0, start_slot), total_slots):
-                    if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
-                        slots[s] = bout
-                        used_bouts.add(bout["bout_num"])
-                        last_slot = s
-                        placed = True
-                        break
-                if not placed:
-                    # Fallback: append to first available slot
+            num_matches = len(bouts)
+            if num_matches == 1:
+                # Place first match in slot 1 if available
+                if slots[0] is None:
+                    slots[0] = bouts[0]
+                    used_bouts.add(bouts[0]["bout_num"])
+                else:
+                    # Find first safe slot
                     for s in range(total_slots):
-                        if slots[s] is None:
+                        if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
+                            slots[s] = bouts[0]
+                            used_bouts.add(bouts[0]["bout_num"])
+                            break
+            else:
+                # Calculate ideal spacing
+                spacing = total_slots // num_matches
+                ideal_slots = [i * spacing for i in range(num_matches)]
+
+                # Try to place in ideal slots
+                for i, bout in enumerate(bouts):
+                    target = ideal_slots[i]
+                    placed = False
+                    # Try near target (±2)
+                    for offset in range(-2, 3):
+                        s = target + offset
+                        if 0 <= s < total_slots and slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
                             slots[s] = bout
                             used_bouts.add(bout["bout_num"])
-                            last_slot = s
+                            placed = True
                             break
+                    if not placed:
+                        # Move down to next safe slot
+                        for s in range(target, total_slots):
+                            if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
+                                slots[s] = bout
+                                used_bouts.add(bout["bout_num"])
+                                placed = True
+                                break
+                        if not placed:
+                            # Fallback: first available
+                            for s in range(total_slots):
+                                if slots[s] is None:
+                                    slots[s] = bout
+                                    used_bouts.add(bout["bout_num"])
+                                    break
 
         # Fill remaining with unplaced bouts
         for bout in mat_bouts:
@@ -217,7 +242,7 @@ def generate_mat_schedule(bout_list):
                     "slot": slot_idx,
                     "bout_num": bout["bout_num"],
                     "w1": f"{bout['w1_name']} ({bout['w1_team']})",
-                    "w2": f"{bout['w2_name']} ({bout['w2_team']})",
+                    "w2": f odm"{bout['w2_name']} ({bout['w2_team']})",
                     "w1_team": bout["w1_team"],
                     "w2_team": bout["w2_team"],
                     "is_early": bout["is_early"]
@@ -232,13 +257,6 @@ def generate_mat_schedule(bout_list):
         mat_entries.sort(key=lambda x: x["slot"])
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
-
-    # Debug check: Ensure all valid bouts are in schedules
-    scheduled_bouts = set(s["bout_num"] for s in schedules)
-    valid_bouts = set(b["bout_num"] for b in valid)
-    if scheduled_bouts != valid_bouts:
-        missing = valid_bouts - scheduled_bouts
-        st.error(f"Debug: {len(missing)} matches missing from schedule: {missing}")
 
     return schedules
 
@@ -448,7 +466,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – FULL MAT PREVIEWS + GREEDY REORDERING
+# MAIN APP – FULL MAT PREVIEWS + REORDERING
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
@@ -539,19 +557,9 @@ if st.session_state.initialized:
                     "is_early": w["early"] or o["early"], "manual": "Manually Added"
                 }
                 st.session_state.bout_list.append(new_bout)
-                # Place new bout at top of appropriate mat
-                if new_bout["is_early"]:
-                    temp_schedules = generate_mat_schedule(st.session_state.bout_list)
-                    for entry in temp_schedules:
-                        if entry["bout_num"] == new_bout["bout_num"]:
-                            mat = entry["mat"]
-                            break
-                    if mat in st.session_state.mat_order:
-                        st.session_state.mat_order[mat].insert(0, new_bout["bout_num"])
-                    else:
-                        st.session_state.mat_order[mat] = [new_bout["bout_num"]]
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+            st.session_state.mat_order = {}
             st.success("Matches added!")
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
