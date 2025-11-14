@@ -153,29 +153,103 @@ def generate_mat_schedule(bout_list):
         start = end
 
     schedules = []
-    # Reset mat_order to ensure all bouts are included
-    st.session_state.mat_order = {}
+    st.session_state.mat_order = {}  # Reset
 
-    # 3. ASSIGN MATCHES TO MATS (NO REORDERING)
+    # 3. REORDER EACH MAT WITH YOUR RULES
     for mat_num, mat_bouts in enumerate(mats, 1):
         if not mat_bouts:
             continue
 
-        # Update mat_order for this mat
-        st.session_state.mat_order[mat_num] = [b["bout_num"] for b in mat_bouts]
+        total_slots = len(mat_bouts)
+        slots = [None] * total_slots
+        used_bouts = set()
+
+        # Build wrestler → bouts
+        wrestler_bouts = {}
+        for bout in mat_bouts:
+            for wid in [bout["w1_id"], bout["w2_id"]]:
+                wrestler_bouts.setdefault(wid, []).append(bout)
+
+        # Sort by match count (descending)
+        sorted_wrestlers = sorted(wrestler_bouts.items(), key=lambda x: len(x[1]), reverse=True)
+
+        # Place bouts
+        for wrestler_id, bouts in sorted_wrestlers:
+            if not bouts: continue
+
+            # Sort bouts by avg_weight for consistency
+            bouts.sort(key=lambda x: x["avg_weight"])
+
+            num_matches = len(bouts)
+            if num_matches == 1:
+                # Place first match in slot 1 if available
+                if slots[0] is None:
+                    slots[0] = bouts[0]
+                    used_bouts.add(bouts[0]["bout_num"])
+                else:
+                    # Find first safe slot
+                    for s in range(total_slots):
+                        if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
+                            slots[s] = bouts[0]
+                            used_bouts.add(bouts[0]["bout_num"])
+                            break
+            else:
+                # Calculate ideal spacing
+                spacing = total_slots // num_matches
+                ideal_slots = [i * spacing for i in range(num_matches)]
+
+                # Try to place in ideal slots
+                for i, bout in enumerate(bouts):
+                    target = ideal_slots[i]
+                    placed = False
+                    # Try near target (±2)
+                    for offset in range(-2, 3):
+                        s = target + offset
+                        if 0 <= s < total_slots and slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
+                            slots[s] = bout
+                            used_bouts.add(bout["bout_num"])
+                            placed = True
+                            break
+                    if not placed:
+                        # Move down to next safe slot
+                        for s in range(target, total_slots):
+                            if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
+                                slots[s] = bout
+                                used_bouts.add(bout["bout_num"])
+                                placed = True
+                                break
+                        if not placed:
+                            # Fallback: first available
+                            for s in range(total_slots):
+                                if slots[s] is None:
+                                    slots[s] = bout
+                                    used_bouts.add(bout["bout_num"])
+                                    break
+
+        # Fill remaining with unplaced bouts
+        for bout in mat_bouts:
+            if bout["bout_num"] not in used_bouts:
+                for s in range(total_slots):
+                    if slots[s] is None:
+                        slots[s] = bout
+                        break
 
         # Build schedule
-        for slot_idx, bout in enumerate(mat_bouts, 1):
-            schedules.append({
-                "mat": mat_num,
-                "slot": slot_idx,
-                "bout_num": bout["bout_num"],
-                "w1": f"{bout['w1_name']} ({bout['w1_team']})",
-                "w2": f"{bout['w2_name']} ({bout['w2_team']})",
-                "w1_team": bout["w1_team"],
-                "w2_team": bout["w2_team"],
-                "is_early": bout["is_early"]
-            })
+        for slot_idx, bout in enumerate(slots, 1):
+            if bout:
+                schedules.append({
+                    "mat": mat_num,
+                    "slot": slot_idx,
+                    "bout_num": bout["bout_num"],
+                    "w1": f"{bout['w1_name']} ({bout['w1_team']})",
+                    "w2": f odm"{bout['w2_name']} ({bout['w2_team']})",
+                    "w1_team": bout["w1_team"],
+                    "w2_team": bout["w2_team"],
+                    "is_early": bout["is_early"]
+                })
+
+        # Update mat_order
+        st.session_state.mat_order[mat_num] = [bout["bout_num"] for bout in slots if bout]
 
     # ASSIGN MAT BOUT NUMBERS
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
@@ -184,14 +258,17 @@ def generate_mat_schedule(bout_list):
         for idx, entry in enumerate(mat_entries, 1):
             entry["mat_bout_num"] = idx
 
-    # Debug check: Ensure all valid bouts are in schedules
-    scheduled_bouts = set(s["bout_num"] for s in schedules)
-    valid_bouts = set(b["bout_num"] for b in valid)
-    if scheduled_bouts != valid_bouts:
-        missing = valid_bouts - scheduled_bouts
-        st.error(f"Debug: {len(missing)} matches missing from schedule: {missing}")
-
     return schedules
+
+def is_safe_slot(slots, slot_idx, wrestler_id, total_slots):
+    """Check if placing wrestler in slot_idx violates rest gap (±5)"""
+    for check in range(max(0, slot_idx-5), min(total_slots, slot_idx+6)):
+        if check == slot_idx: continue
+        bout = slots[check]
+        if bout and (bout["w1_id"] == wrestler_id or bout["w2_id"] == wrestler_id):
+            if abs(check - slot_idx) <= CONFIG["REST_GAP"]:
+                return False
+    return True
 
 # ----------------------------------------------------------------------
 # HELPERS
@@ -389,7 +466,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP – FULL MAT PREVIEWS
+# MAIN APP – FULL MAT PREVIEWS + REORDERING
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
@@ -491,18 +568,15 @@ if st.session_state.initialized:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
 
     st.subheader("Mat Previews")
-    # Use FULL schedule directly from mat_schedules
     full_schedule = st.session_state.mat_schedules
 
     total_displayed = 0
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [e for e in full_schedule if e["mat"] == mat]
-        mat_bouts = [b for b in st.session_state.bout_list if b["manual"] != "Manually Removed" and b["bout_num"] in [e["bout_num"] for e in mat_entries]]
         with st.expander(f"Mat {mat} ({len(mat_entries)} matches)", expanded=True):
             if not mat_entries:
                 st.write("No matches assigned.")
             else:
-                # Update mat_order to ensure all bouts are included
                 st.session_state.mat_order[mat] = [e["bout_num"] for e in mat_entries]
                 for idx, entry in enumerate(mat_entries):
                     b = next(x for x in st.session_state.bout_list if x["bout_num"] == entry["bout_num"])
@@ -539,9 +613,8 @@ if st.session_state.initialized:
                         """, unsafe_allow_html=True)
                 total_displayed += len(mat_entries)
 
-    # Verify total displayed matches
     if total_displayed != total_bouts_assigned:
-        st.error(f"Display mismatch: {total_bouts_assigned} assigned, but only {total_displayed} shown in Mat Previews.")
+        st.error(f"Display mismatch: {total_bouts_assigned} assigned, but only {total_displayed} shown.")
 
     if st.session_state.undo_stack:
         st.markdown("---")
