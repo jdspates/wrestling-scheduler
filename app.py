@@ -210,12 +210,20 @@ def generate_mat_schedule(bout_list):
                             placed = True
                             break
                     if not placed:
-                        # Find next safe slot moving down
-                        for s in range(total_slots):
+                        # Move down to next safe slot
+                        for s in range(target, total_slots):
                             if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
                                 slots[s] = bout
                                 used_bouts.add(bout["bout_num"])
+                                placed = True
                                 break
+                        if not placed:
+                            # Fallback: first available
+                            for s in range(total_slots):
+                                if slots[s] is None:
+                                    slots[s] = bout
+                                    used_bouts.add(bout["bout_num"])
+                                    break
 
         # Fill remaining with unplaced bouts
         for bout in mat_bouts:
@@ -468,6 +476,22 @@ if st.session_state.initialized:
     else:
         filtered_active = raw_active
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
+
+    # NEW: Stats after generation
+    total_wrestlers = len(st.session_state.active)
+    total_bouts_generated = len([b for b in st.session_state.bout_list if b["manual"] != "Manually Removed"])
+    total_bouts_assigned = len(st.session_state.mat_schedules)
+
+    st.markdown(f"""
+    **Schedule Summary**  
+    - **Wrestlers**: {total_wrestlers}  
+    - **Matches Generated**: {total_bouts_generated}  
+    - **Matches Assigned to Mats**: {total_bouts_assigned}  
+    """)
+    if total_bouts_generated == total_bouts_assigned:
+        st.success("All matches successfully assigned to mats!")
+    else:
+        st.warning(f"{total_bouts_generated - total_bouts_assigned} match(es) not assigned. Check for conflicts.")
 
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
