@@ -585,12 +585,12 @@ if st.session_state.initialized:
                     with col_up:
                         st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']))
                     with col_down:
-                        st.button("Down", key=f"down_{mat}_{b['bount_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']))
+                        st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']))  # FIXED
                     with col_del:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
                         st.markdown(f"""
-                        <div style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                        <div style="background:{bg}; border:1px solid #ddd; padding:1px; padding:8px; border-radius:4px; margin-bottom:4px;">
                             <div style="display:flex; align-items:center; gap:12px;">
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <div style="width:12px; height:12px; background:{w1c}; border-radius:3px;"></div>
