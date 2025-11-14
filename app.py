@@ -142,48 +142,20 @@ def generate_mat_schedule(bout_list):
     # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
     valid.sort(key=lambda x: x["avg_weight"])
     
-    # 2. ASSIGN MATCHES TO MATS TO KEEP WRESTLERS ON SAME MAT
-    wrestler_mat = {}  # w_id → mat_num
-    mats = [[] for _ in range(CONFIG["NUM_MATS"])]
-    mat_load = [0 for _ in range(CONFIG["NUM_MATS"])]  # Number of matches per mat
-
-    for bout in valid:
-        w1 = bout["w1_id"]
-        w2 = bout["w2_id"]
-
-        # Find mat for w1 and w2
-        w1_mat = wrestler_mat.get(w1)
-        w2_mat = wrestler_mat.get(w2)
-
-        if w1_mat is None and w2_mat is None:
-            # Assign to mat with least load
-            mat_num = mat_load.index(min(mat_load)) + 1
-        elif w1_mat is None:
-            mat_num = w2_mat
-        elif w2_mat is None:
-            mat_num = w1_mat
-        else:
-            if w1_mat != w2_mat:
-                # Conflict - merge to the mat with fewer matches
-                if mat_load[w1_mat - 1] < mat_load[w2_mat - 1]:
-                    mat_num = w1_mat
-                else:
-                    mat_num = w2_mat
-            else:
-                mat_num = w1_mat
-
-        # Update wrestler mats
-        wrestler_mat[w1] = mat_num
-        wrestler_mat[w2] = mat_num
-
-        # Add bout to mat
-        mats[mat_num - 1].append(bout)
-        mat_load[mat_num - 1] += 1
+    # 2. DISTRIBUTE EVENLY ACROSS MATS
+    per_mat = len(valid) // CONFIG["NUM_MATS"]
+    extra = len(valid) % CONFIG["NUM_MATS"]
+    mats = []
+    start = 0
+    for i in range(CONFIG["NUM_MATS"]):
+        end = start + per_mat + (1 if i < extra else 0)
+        mats.append(valid[start:end])
+        start = end
 
     schedules = []
 
+    # 3. BUILD SCHEDULES (no reordering)
     for mat_num, mat_bouts in enumerate(mats, 1):
-        # No reordering — just keep original order (by weight)
         for slot, bout in enumerate(mat_bouts, 1):
             schedules.append({
                 "mat": mat_num,
