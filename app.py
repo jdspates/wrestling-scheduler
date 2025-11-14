@@ -31,7 +31,7 @@ COLOR_MAP = {
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2, "MAX_MATCHES": 4, "NUM_MATS": 4,
     "MAX_LEVEL_DIFF": 1, "WEIGHT_DIFF_FACTOR": 0.10, "MIN_WEIGHT_DIFF": 5.0,
-    "REST_GAP": 4,  # Configurable rest gap
+    "REST_GAP": 4,
     "TEAMS": [
         {"name": "", "color": "red"}, {"name": "", "color": "blue"},
         {"name": "", "color": "green"}, {"name": "", "color": "yellow"},
@@ -54,7 +54,6 @@ else:
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 
-# Ensure REST_GAP exists
 if "REST_GAP" not in CONFIG:
     CONFIG["REST_GAP"] = DEFAULT_CONFIG["REST_GAP"]
     with open(CONFIG_FILE, "w") as f:
@@ -173,7 +172,7 @@ def generate_mat_schedule(bout_list, gap=None):
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
             l2 = last_slot.get(b["w2_id"], -100)
-            if l1 < slot - gap and l2 < slot - gap:
+            if l1 < slot - gap - 1 and l2 < slot - gap - 1:
                 first_early = b
                 break
         if first_early:
@@ -193,7 +192,7 @@ def generate_mat_schedule(bout_list, gap=None):
                 if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - gap or l2 >= slot - gap: continue
+                if l1 >= slot - gap - 1 or l2 >= slot - gap - 1: continue
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
@@ -215,7 +214,7 @@ def generate_mat_schedule(bout_list, gap=None):
             for b in remaining:
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - gap or l2 >= slot - gap: continue
+                if l1 >= slot - gap - 1 or l2 >= slot - gap - 1: continue
                 gap_val = min(slot - l1 - 1, slot - l2 - 1)
                 if gap_val > best_gap:
                     best_gap = gap_val
@@ -466,7 +465,7 @@ if st.session_state.initialized:
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
-    st. caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
+    st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
     if current_suggestions:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
@@ -567,7 +566,7 @@ if st.session_state.initialized:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
                         st.markdown(f"""
-                        <  <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                        <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:12px;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
