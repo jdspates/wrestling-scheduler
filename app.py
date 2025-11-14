@@ -282,6 +282,7 @@ def remove_match(bout_num):
     st.success("Match removed.")
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    verify_rest_gaps()
     st.rerun()
 
 def undo_last():
@@ -299,6 +300,7 @@ def undo_last():
         st.success("Undo successful!")
         st.session_state.excel_bytes = None
         st.session_state.pdf_bytes = None
+        verify_rest_gaps()
     st.rerun()
 
 def move_up(mat, bout_num):
@@ -375,7 +377,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
         st.session_state.initialized = True
         st.success("Roster loaded and matchups generated!")
-        verify_rest_gaps()  # DEBUG
+        verify_rest_gaps()
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -559,7 +561,7 @@ if st.session_state.initialized:
             st.success("Matches added!")
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
-            verify_rest_gaps()  # DEBUG
+            verify_rest_gaps()
             st.rerun()
     else:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
