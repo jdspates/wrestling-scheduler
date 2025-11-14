@@ -31,7 +31,7 @@ COLOR_MAP = {
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2, "MAX_MATCHES": 4, "NUM_MATS": 4,
     "MAX_LEVEL_DIFF": 1, "WEIGHT_DIFF_FACTOR": 0.10, "MIN_WEIGHT_DIFF": 5.0,
-    "REST_GAP": 4,  # NEW: configurable rest gap
+    "REST_GAP": 4,  # Configurable rest gap
     "TEAMS": [
         {"name": "", "color": "red"}, {"name": "", "color": "blue"},
         {"name": "", "color": "green"}, {"name": "", "color": "yellow"},
@@ -43,15 +43,20 @@ DEFAULT_CONFIG = {
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r") as f:
-            CONFIG = json.load(f)
-            if not isinstance(CONFIG, dict):
-                raise ValueError
+            loaded_config = json.load(f)
+            CONFIG = {**DEFAULT_CONFIG, **loaded_config}
     except Exception:
         CONFIG = DEFAULT_CONFIG.copy()
         with open(CONFIG_FILE, "w") as f:
             json.dump(CONFIG, f, indent=4)
 else:
     CONFIG = DEFAULT_CONFIG.copy()
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(CONFIG, f, indent=4)
+
+# Ensure REST_GAP exists
+if "REST_GAP" not in CONFIG:
+    CONFIG["REST_GAP"] = DEFAULT_CONFIG["REST_GAP"]
     with open(CONFIG_FILE, "w") as f:
         json.dump(CONFIG, f, indent=4)
 
@@ -134,7 +139,7 @@ def build_suggestions(active, bout_list):
 
 def generate_mat_schedule(bout_list, gap=None):
     if gap is None:
-        gap = CONFIG["REST_GAP"]  # Use config value
+        gap = CONFIG.get("REST_GAP", 4)
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
     # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
@@ -151,10 +156,12 @@ def generate_mat_schedule(bout_list, gap=None):
         start = end
 
     schedules = []
-    last_slot = {}
+    last_slot = {}  # wrestler_id → last slot (GLOBAL)
+    all_scheduled_bouts = set()  # bout_num → prevent duplicates
+
     for mat_num, mat_bouts in enumerate(mats, 1):
-        early_bouts = [b for b in mat_bouts if b["is_early"]]
-        non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
+        early_bouts = [b for b in mat_bouts if b["is_early"] and b["bout_num"] not in all_scheduled_bouts]
+        non_early_bouts = [b for b in mat_bouts if not b["is_early"] and b["bout_num"] not in all_scheduled_bouts]
         total_slots = len(mat_bouts)
         first_half_end = (total_slots + 1) // 2
         slot = 1
@@ -166,7 +173,7 @@ def generate_mat_schedule(bout_list, gap=None):
         for b in early_bouts:
             l1 = last_slot.get(b["w1_id"], -100)
             l2 = last_slot.get(b["w2_id"], -100)
-            if l1 < 0 and l2 < 0:
+            if l1 < slot - gap and l2 < slot - gap:
                 first_early = b
                 break
         if first_early:
@@ -175,6 +182,7 @@ def generate_mat_schedule(bout_list, gap=None):
             last_slot[first_early["w1_id"]] = 1
             last_slot[first_early["w2_id"]] = 1
             first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
+            all_scheduled_bouts.add(first_early["bout_num"])
             slot = 2
 
         # FILL FIRST HALF WITH REMAINING EARLY MATCHES
@@ -185,7 +193,7 @@ def generate_mat_schedule(bout_list, gap=None):
                 if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
                 l1 = last_slot.get(b["w1_id"], -100)
                 l2 = last_slot.get(b["w2_id"], -100)
-                if l1 >= slot - 1 or l2 >= slot - 1: continue
+                if l1 >= slot - gap or l2 >= slot - gap: continue
                 score = min(slot - l1 - 1, slot - l2 - 1)
                 if score > best_score:
                     best_score = score
@@ -196,10 +204,11 @@ def generate_mat_schedule(bout_list, gap=None):
             last_slot[best["w1_id"]] = slot
             last_slot[best["w2_id"]] = slot
             first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
+            all_scheduled_bouts.add(best["bout_num"])
             slot += 1
 
-        # FILL REST WITH GAP LOGIC
-        remaining = non_early_bouts + early_bouts
+        # FILL REST WITH GLOBAL GAP LOGIC
+        remaining = [b for b in (non_early_bouts + early_bouts) if b["bout_num"] not in all_scheduled_bouts]
         while remaining:
             best = None
             best_gap = -1
@@ -211,13 +220,15 @@ def generate_mat_schedule(bout_list, gap=None):
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
-            if best is None:
+            if best is None and remaining:
                 best = remaining[0]
-            remaining.remove(best)
-            scheduled.append((slot, best))
-            last_slot[best["w1_id"]] = slot
-            last_slot[best["w2_id"]] = slot
-            slot += 1
+            if best:
+                remaining.remove(best)
+                scheduled.append((slot, best))
+                last_slot[best["w1_id"]] = slot
+                last_slot[best["w2_id"]] = slot
+                all_scheduled_bouts.add(best["bout_num"])
+                slot += 1
 
         # BUILD FINAL SCHEDULE
         for s, b in scheduled:
@@ -385,7 +396,7 @@ new_rest_gap = st.sidebar.slider(
     "Rest Gap (matches)",
     min_value=1,
     max_value=10,
-    value=CONFIG["REST_GAP"],
+    value=CONFIG.get("REST_GAP", 4),
     help="Minimum matches between a wrestler's bouts",
     key="rest_gap"
 )
@@ -413,7 +424,7 @@ for i in range(5):
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
     new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"] or
-    new_rest_gap != CONFIG["REST_GAP"]):
+    new_rest_gap != CONFIG.get("REST_GAP", 4)):
     CONFIG.update({
         "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
         "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
@@ -455,7 +466,7 @@ if st.session_state.initialized:
     st.subheader("Suggested Matches")
     current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
     under_count = len([w for w in filtered_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
-    st.caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
+    st. caption(f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches.")
     if current_suggestions:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
@@ -556,7 +567,7 @@ if st.session_state.initialized:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
                         st.markdown(f"""
-                        <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                        <  <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
                             <div style="display:flex;align-items:center;gap:12px;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
@@ -587,19 +598,12 @@ if st.session_state.initialized:
             try:
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    # Roster sheet
                     roster_df = pd.DataFrame(st.session_state.active)
                     roster_df.to_excel(writer, sheet_name='Roster', index=False)
-
-                    # Matchups sheet
                     matchups_df = pd.DataFrame(st.session_state.bout_list)
                     matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
-
-                    # Remaining Suggestions sheet
                     suggestions_df = pd.DataFrame(st.session_state.suggestions)
                     suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
-
-                    # Mat sheets
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
@@ -614,7 +618,7 @@ if st.session_state.initialized:
                             for i, _ in df.iterrows():
                                 if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
                                     for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
-                st.session_state.excel_bytes =  out.getvalue()
+                st.session_state.excel_bytes = out.getvalue()
 
                 buf = io.BytesIO()
                 doc = SimpleDocTemplate(buf, pagesize=letter); elements = []; styles = getSampleStyleSheet()
