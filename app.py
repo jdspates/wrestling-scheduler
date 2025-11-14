@@ -589,7 +589,7 @@ if st.session_state.initialized:
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
-                            pd.DataFrame([["", "", ""]], columns=["#","W"}}$
+                            pd.DataFrame([["", "", ""]], columns=["#","W"]]$
                             continue
                         df = pd.DataFrame(data)[["mat_bout_num","w1","w2"]]
                         df.columns = ["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]
@@ -657,4 +657,5 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
