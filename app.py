@@ -156,9 +156,11 @@ def generate_mat_schedule(bout_list, gap=None):
 
     schedules = []
     last_slot = {}  # wrestler_id → last slot (GLOBAL)
+    wrestler_slots = [{} for _ in range(CONFIG["NUM_MATS"])]  # per mat: w_id → list of slots
     all_scheduled_bouts = set()  # bout_num → prevent duplicates
 
     for mat_num, mat_bouts in enumerate(mats, 1):
+        mat_idx = mat_num - 1
         early_bouts = [b for b in mat_bouts if b["is_early"] and b["bout_num"] not in all_scheduled_bouts]
         non_early_bouts = [b for b in mat_bouts if not b["is_early"] and b["bout_num"] not in all_scheduled_bouts]
         total_slots = len(mat_bouts)
@@ -170,9 +172,10 @@ def generate_mat_schedule(bout_list, gap=None):
         # FORCE FIRST EARLY MATCH AT SLOT 1
         first_early = None
         for b in early_bouts:
-            l1 = last_slot.get(b["w1_id"], -100)
-            l2 = last_slot.get(b["w2_id"], -100)
-            if slot - l1 > gap and slot - l2 > gap:
+            w1_slots = wrestler_slots[mat_idx].get(b["w1_id"], [])
+            w2_slots = wrestler_slots[mat_idx].get(b["w2_id"], [])
+            if (not w1_slots or slot - max(w1_slots) > gap) and \
+               (not w2_slots or slot - max(w2_slots) > gap):
                 first_early = b
                 break
         if first_early:
@@ -180,6 +183,8 @@ def generate_mat_schedule(bout_list, gap=None):
             scheduled.append((1, first_early))
             last_slot[first_early["w1_id"]] = 1
             last_slot[first_early["w2_id"]] = 1
+            wrestler_slots[mat_idx].setdefault(first_early["w1_id"], []).append(1)
+            wrestler_slots[mat_idx].setdefault(first_early["w2_id"], []).append(1)
             first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
             all_scheduled_bouts.add(first_early["bout_num"])
             slot = 2
@@ -190,10 +195,12 @@ def generate_mat_schedule(bout_list, gap=None):
             best_score = -float("inf")
             for b in early_bouts:
                 if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers: continue
-                l1 = last_slot.get(b["w1_id"], -100)
-                l2 = last_slot.get(b["w2_id"], -100)
-                if slot - l1 <= gap or slot - l2 <= gap: continue
-                score = min(slot - l1 - 1, slot - l2 - 1)
+                w1_slots = wrestler_slots[mat_idx].get(b["w1_id"], [])
+                w2_slots = wrestler_slots[mat_idx].get(b["w2_id"], [])
+                if (w1_slots and slot - max(w1_slots) <= gap) or \
+                   (w2_slots and slot - max(w2_slots) <= gap): continue
+                score = min(slot - (max(w1_slots) if w1_slots else -100) - 1,
+                            slot - (max(w2_slots) if w2_slots else -100) - 1)
                 if score > best_score:
                     best_score = score
                     best = b
@@ -202,30 +209,36 @@ def generate_mat_schedule(bout_list, gap=None):
             scheduled.append((slot, best))
             last_slot[best["w1_id"]] = slot
             last_slot[best["w2_id"]] = slot
+            wrestler_slots[mat_idx].setdefault(best["w1_id"], []).append(slot)
+            wrestler_slots[mat_idx].setdefault(best["w2_id"], []).append(slot)
             first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
             all_scheduled_bouts.add(best["bout_num"])
             slot += 1
 
-        # FILL REST WITH GLOBAL GAP LOGIC
+        # FILL REST WITH PER-MAT + GLOBAL GAP LOGIC
         remaining = [b for b in (non_early_bouts + early_bouts) if b["bout_num"] not in all_scheduled_bouts]
         while remaining:
             best = None
             best_gap = -1
             for b in remaining:
-                l1 = last_slot.get(b["w1_id"], -100)
-                l2 = last_slot.get(b["w2_id"], -100)
-                if slot - l1 <= gap or slot - l2 <= gap: continue
-                gap_val = min(slot - l1 - 1, slot - l2 - 1)
+                w1_slots = wrestler_slots[mat_idx].get(b["w1_id"], [])
+                w2_slots = wrestler_slots[mat_idx].get(b["w2_id"], [])
+                if (w1_slots and slot - max(w1_slots) <= gap) or \
+                   (w2_slots and slot - max(w2_slots) <= gap): continue
+                gap_val = min(slot - (max(w1_slots) if w1_slots else -100) - 1,
+                              slot - (max(w2_slots) if w2_slots else -100) - 1)
                 if gap_val > best_gap:
                     best_gap = gap_val
                     best = b
             if best is None and remaining:
-                best = remaining[0]  # Fallback if no option
+                best = remaining[0]
             if best:
                 remaining.remove(best)
                 scheduled.append((slot, best))
                 last_slot[best["w1_id"]] = slot
                 last_slot[best["w2_id"]] = slot
+                wrestler_slots[mat_idx].setdefault(best["w1_id"], []).append(slot)
+                wrestler_slots[mat_idx].setdefault(best["w2_id"], []).append(slot)
                 all_scheduled_bouts.add(best["bout_num"])
                 slot += 1
 
@@ -597,19 +610,12 @@ if st.session_state.initialized:
             try:
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    # Roster sheet
                     roster_df = pd.DataFrame(st.session_state.active)
                     roster_df.to_excel(writer, sheet_name='Roster', index=False)
-
-                    # Matchups sheet
                     matchups_df = pd.DataFrame(st.session_state.bout_list)
                     matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
-
-                    # Remaining Suggestions sheet
                     suggestions_df = pd.DataFrame(st.session_state.suggestions)
                     suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
-
-                    # Mat sheets
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
