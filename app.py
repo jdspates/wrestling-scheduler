@@ -137,90 +137,60 @@ def build_suggestions(active, bout_list):
             })
     return sugg
 
-def generate_mat_schedule(bout_list, gap=None):
-    if gap is None:
-        gap = CONFIG.get("REST_GAP", 4)
+def generate_mat_schedule(bout_list):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # 1. GROUP BY WEIGHT CLASS (round to nearest 5 lbs)
-    weight_groups = defaultdict(list)
-    for b in valid:
-        rounded = round(b["avg_weight"] / 5) * 5
-        weight_groups[rounded].append(b)
+    # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
+    valid.sort(key=lambda x: x["avg_weight"])
     
-    # 2. SORT GROUPS BY WEIGHT (lightest first)
-    sorted_groups = sorted(weight_groups.items())
-    
-    # 3. ASSIGN ENTIRE GROUPS TO MATS (keep same weight together)
+    # 3. ASSIGN MATCHES TO MATS TO KEEP WRESTLERS ON SAME MAT
+    wrestler_mat = {}  # w_id → mat_num
     mats = [[] for _ in range(CONFIG["NUM_MATS"])]
-    mat_index = 0
-    for weight, group in sorted_groups:
-        mats[mat_index].extend(group)
-        mat_index = (mat_index + 1) % CONFIG["NUM_MATS"]
+    mat_load = [0 for _ in range(CONFIG["NUM_MATS"])]  # Number of matches per mat
+
+    for bout in valid:
+        w1 = bout["w1_id"]
+        w2 = bout["w2_id"]
+
+        # Find mat for w1 and w2
+        w1_mat = wrestler_mat.get(w1)
+        w2_mat = wrestler_mat.get(w2)
+
+        if w1_mat is None and w2_mat is None:
+            # Assign to mat with least load
+            mat_num = mat_load.index(min(mat_load)) + 1
+        elif w1_mat is None:
+            mat_num = w2_mat
+        elif w2_mat is None:
+            mat_num = w1_mat
+        else:
+            if w1_mat != w2_mat:
+                # Conflict - merge to the mat with fewer matches
+                if mat_load[w1_mat - 1] < mat_load[w2_mat - 1]:
+                    mat_num = w1_mat
+                else:
+                    mat_num = w2_mat
+            else:
+                mat_num = w1_mat
+
+        # Update wrestler mats
+        wrestler_mat[w1] = mat_num
+        wrestler_mat[w2] = mat_num
+
+        # Add bout to mat
+        mats[mat_num - 1].append(bout)
+        mat_load[mat_num - 1] += 1
 
     schedules = []
-    mat_wrestler_slots = [{} for _ in range(CONFIG["NUM_MATS"])]  # per mat: w_id → list of slots
 
     for mat_num, mat_bouts in enumerate(mats, 1):
-        mat_idx = mat_num - 1
-        remaining_bouts = list(mat_bouts)
-        scheduled = []
+        # No reordering for rest - just sort by weight for now
+        mat_bouts.sort(key=lambda x: x["avg_weight"])
 
-        while remaining_bouts:
-            found = False
-            for i, bout in enumerate(remaining_bouts):
-                w1 = bout["w1_id"]
-                w2 = bout["w2_id"]
-                slot = len(scheduled) + 1
-
-                # Check ALL prior slots for both wrestlers on this mat
-                w1_slots = mat_wrestler_slots[mat_idx].get(w1, [])
-                w2_slots = mat_wrestler_slots[mat_idx].get(w2, [])
-
-                if any(slot - s <= gap for s in w1_slots):
-                    continue
-                if any(slot - s <= gap for s in w2_slots):
-                    continue
-
-                # Valid bout
-                scheduled.append((slot, bout))
-                mat_wrestler_slots[mat_idx].setdefault(w1, []).append(slot)
-                mat_wrestler_slots[mat_idx].setdefault(w2, []).append(slot)
-                remaining_bouts.pop(i)
-                found = True
-                break
-
-            if not found and remaining_bouts:
-                # Fallback: take first bout
-                bout = remaining_bouts.pop(0)
-                slot = len(scheduled) + 1
-                scheduled.append((slot, bout))
-                mat_wrestler_slots[mat_idx].setdefault(bout["w1_id"], []).append(slot)
-                mat_wrestler_slots[mat_idx].setdefault(bout["w2_id"], []).append(slot)
-
-        # Prioritize early matches in first half
-        early_scheduled = [b for s, b in scheduled if b["is_early"]]
-        non_early_scheduled = [b for s, b in scheduled if not b["is_early"]]
-        first_half_size = (len(scheduled) + 1) // 2
-        early_count = min(len(early_scheduled), first_half_size)
-
-        new_scheduled = []
-        early_idx = 0
-        non_early_idx = 0
-        for i in range(len(scheduled)):
-            if i < first_half_size and early_idx < early_count:
-                new_scheduled.append(early_scheduled[early_idx])
-                early_idx += 1
-            else:
-                new_scheduled.append(non_early_scheduled[non_early_idx])
-                non_early_idx += 1
-        new_scheduled.extend(non_early_scheduled[non_early_idx:])
-
-        # Rebuild with new order
-        for new_slot, bout in enumerate(new_scheduled, 1):
+        for slot, bout in enumerate(mat_bouts, 1):
             schedules.append({
                 "mat": mat_num,
-                "slot": new_slot,
+                "slot": slot,
                 "bout_num": bout["bout_num"],
                 "w1": f"{bout['w1_name']} ({bout['w1_team']})",
                 "w2": f"{bout['w2_name']} ({bout['w2_team']})",
@@ -499,7 +469,7 @@ if st.session_state.initialized:
                 o = next(o for o in raw_active if o["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]: w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]: o["match_ids"].append(w["id"])
-                st.session_state.bout_list.append({
+                new_bout = {
                     "bout_num": len(st.session_state.bout_list)+1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
                     "w1_level": w["level"], "w1_weight": w["weight"], "w1_grade": w["grade"], "w1_early": w["early"],
@@ -507,10 +477,22 @@ if st.session_state.initialized:
                     "w2_level": o["level"], "w2_weight": o["weight"], "w2_grade": o["grade"], "w2_early": o["early"],
                     "score": s["score"], "avg_weight": (w["weight"]+o["weight"])/2,
                     "is_early": w["early"] or o["early"], "manual": "Manually Added"
-                })
+                }
+                st.session_state.bout_list.append(new_bout)
+                # Add to the beginning of the mat preview if early
+                if new_bout["is_early"]:
+                    # First, rebuild to find which mat it would be on
+                    temp_schedules = generate_mat_schedule(st.session_state.bout_list)
+                    for entry in temp_schedules:
+                        if entry["bout_num"] == new_bout["bout_num"]:
+                            mat = entry["mat"]
+                            break
+                    if mat in st.session_state.mat_order:
+                        st.session_state.mat_order[mat].insert(0, new_bout["bout_num"])
+                    else:
+                        st.session_state.mat_order[mat] = [new_bout["bout_num"]]
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
-            st.session_state.mat_order = {}
             st.success("Matches added!")
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
@@ -564,7 +546,7 @@ if st.session_state.initialized:
                                 <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
                                     <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
                                     <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
-                                    <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div
+                                    <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
                                 </div>
                             </div>
                             <div style="font-size:0.8rem;color:#555;margin-top:4px;">
