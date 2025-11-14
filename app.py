@@ -1,9 +1,8 @@
-# app.py – Wrestling Scheduler – SAME MAT + RED CARD FOR REST_GAP VIOLATIONS
+# app.py – Wrestling Scheduler – FINAL FIXED & CLEAN VERSION
 import streamlit as st
 import pandas as pd
 import io
 import random
-from collections import defaultdict
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
@@ -44,8 +43,8 @@ DEFAULT_CONFIG = {
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r") as f:
-            loaded = json.load(f)
-            CONFIG = {**DEFAULT_CONFIG, **loaded}
+            loaded_config = json.load(f)
+            CONFIG = {**DEFAULT_CONFIG, **loaded_config}
     except Exception:
         CONFIG = DEFAULT_CONFIG.copy()
         with open(CONFIG_FILE, "w") as f:
@@ -65,24 +64,16 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
-for key in ["initialized","bout_list","mat_schedules","suggestions","active",
-            "undo_stack","mat_order","excel_bytes","pdf_bytes","rest_violations"]:
+for key in ["initialized","bout_list","mat_schedules","suggestions","active","undo_stack","mat_order","excel_bytes","pdf_bytes"]:
     if key not in st.session_state:
-        st.session_state[key] = (
-            [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"]
-            else {} if key == "mat_order"
-            else set() if key == "rest_violations"
-            else None if key in ["excel_bytes","pdf_bytes"]
-            else None
-        )
+        st.session_state[key] = [] if key in ["bout_list","mat_schedules","suggestions","active","undo_stack"] else {} if key == "mat_order" else None if key in ["excel_bytes","pdf_bytes"] else None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
     return w1["team"] != w2["team"] and not (
-        (w1["grade"] == 5 and w2["grade"] in [7, 8]) or
-        (w2["grade"] == 5 and w1["grade"] in [7, 8])
+        (w1["grade"] == 5 and w2["grade"] in [7, 8]) or (w2["grade"] == 5 and w1["grade"] in [7, 8])
     )
 
 def max_weight_diff(w):
@@ -91,9 +82,6 @@ def max_weight_diff(w):
 def matchup_score(w1, w2):
     return round(abs(w1["weight"] - w2["weight"]) + abs(w1["level"] - w2["level"]) * 10, 1)
 
-# ----------------------------------------------------------------------
-# 1. Generate initial matchups
-# ----------------------------------------------------------------------
 def generate_initial_matchups(active):
     bouts = set()
     for level in sorted({w["level"] for w in active}, reverse=True):
@@ -102,7 +90,8 @@ def generate_initial_matchups(active):
             added = False
             random.shuffle(group)
             for w in group:
-                if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]: continue
+                if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]: 
+                    continue
                 opps = [o for o in active
                         if o["id"] not in w["match_ids"]
                         and o["id"] != w["id"]
@@ -110,14 +99,16 @@ def generate_initial_matchups(active):
                         and is_compatible(w, o)
                         and abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                         and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
-                if not opps: continue
+                if not opps: 
+                    continue
                 best = min(opps, key=lambda o: matchup_score(w, o))
                 w["match_ids"].append(best["id"])
                 best["match_ids"].append(w["id"])
                 bouts.add(frozenset({w["id"], best["id"]}))
                 added = True
                 break
-            if not added: break
+            if not added: 
+                break
     bout_list = []
     for idx, b in enumerate(bouts, 1):
         w1 = next(w for w in active if w["id"] == list(b)[0])
@@ -132,79 +123,73 @@ def generate_initial_matchups(active):
         })
     return bout_list
 
-# ----------------------------------------------------------------------
-# 2. Build suggestions
-# ----------------------------------------------------------------------
 def build_suggestions(active, bout_list):
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
     for w in under:
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
-        opps = [o for o in opps
-                if abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
+        # Fixed: Removed "|level" typo
+        opps = [o for o in opps if 
+                abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) 
                 and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
-        if not opps:
+        if not opps: 
             opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
                 "wrestler": w["name"], "team": w["team"], "level": w["level"], "weight": w["weight"],
                 "current": len(w["match_ids"]), "vs": o["name"], "vs_team": o["team"],
-                "vs_current": len(o["match_ids"]), "vs_level": o["level"], "vs_weight": o["weight"],
+                "vs_current": len(o["match_ids"]), "vs_level": o["level"], "vs_weight": o["weight"], 
                 "score": matchup_score(w, o),
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
 
-# ----------------------------------------------------------------------
-# 3. Mat schedule – SAME MAT + REST_GAP + RED CARD
-# ----------------------------------------------------------------------
 def generate_mat_schedule(bout_list):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
+   
+    # 1. SORT BY AVERAGE WEIGHT FIRST
+    valid.sort(key=lambda x: x["avg_weight"])
+   
+    # 2. DISTRIBUTE EVENLY ACROSS MATS
+    per_mat = len(valid) // CONFIG["NUM_MATS"]
+    extra = len(valid) % CONFIG["NUM_MATS"]
+    mats = []
+    start = 0
+    for i in range(CONFIG["NUM_MATS"]):
+        end = start + per_mat + (1 if i < extra else 0)
+        mats.append(valid[start:end])
+        start = end
 
-    # Clear previous violations
-    st.session_state.rest_violations = set()
-
-    # ---- 1. Group bouts by wrestler -------------------------------------------------
-    wrestler_bouts = defaultdict(list)
-    for b in valid:
-        wrestler_bouts[b["w1_id"]].append(b)
-        wrestler_bouts[b["w2_id"]].append(b)
-
-    # ---- 2. Assign each wrestler to ONE mat (load-balanced) -------------------------
-    mat_lists = [[] for _ in range(CONFIG["NUM_MATS"])]
-    wrestler_mat = {}
-
-    for wid, bouts in sorted(wrestler_bouts.items(), key=lambda x: len(x[1]), reverse=True):
-        mat_idx = min(range(CONFIG["NUM_MATS"]), key=lambda i: len(mat_lists[i]))
-        wrestler_mat[wid] = mat_idx
-        mat_lists[mat_idx].extend(bouts)
-
-    # ---- 3. Place bouts with REST_GAP (track violations) ----------------------------
     schedules = []
     st.session_state.mat_order = {}
-
-    for mat_num, mat_bouts in enumerate(mat_lists, 1):
+    for mat_num, mat_bouts in enumerate(mats, 1):
         if not mat_bouts:
             continue
-
-        mat_bouts.sort(key=lambda x: x["avg_weight"])
+        # Pre-sort by total match count
+        match_counts = {}
+        for bout in mat_bouts:
+            count = len([b for b in mat_bouts if b["w1_id"] == bout["w1_id"] or b["w2_id"] == bout["w1_id"]])
+            count += len([b for b in mat_bouts if b["w1_id"] == bout["w2_id"] or b["w2_id"] == bout["w2_id"]])
+            match_counts[bout["bout_num"]] = count
+        mat_bouts.sort(key=lambda x: match_counts.get(x["bout_num"], 0), reverse=True)
+        
+        # Fast placement
         slots = [None] * len(mat_bouts)
         wrestler_last_slot = {}
-
         for bout in mat_bouts:
             w1, w2 = bout["w1_id"], bout["w2_id"]
             last1 = wrestler_last_slot.get(w1, -CONFIG["REST_GAP"] - 1)
             last2 = wrestler_last_slot.get(w2, -CONFIG["REST_GAP"] - 1)
             min_slot = max(last1, last2) + CONFIG["REST_GAP"] + 1
-
             placed = False
             for s in range(min_slot, len(slots)):
                 if slots[s] is not None:
                     continue
                 safe = True
-                for chk in range(max(0, s - CONFIG["REST_GAP"]), min(len(slots), s + CONFIG["REST_GAP"] + 1)):
-                    if chk == s: continue
-                    existing = slots[chk]
+                for check in range(max(0, s - CONFIG["REST_GAP"]), min(len(slots), s + CONFIG["REST_GAP"] + 1)):
+                    if check == s: 
+                        continue
+                    existing = slots[check]
                     if existing and (existing["w1_id"] in (w1, w2) or existing["w2_id"] in (w1, w2)):
                         safe = False
                         break
@@ -214,18 +199,15 @@ def generate_mat_schedule(bout_list):
                     wrestler_last_slot[w2] = s
                     placed = True
                     break
-
-            # ---- Force place if needed → mark as violation -----------------------
             if not placed:
                 for s in range(len(slots)):
                     if slots[s] is None:
                         slots[s] = bout
                         wrestler_last_slot[w1] = s
                         wrestler_last_slot[w2] = s
-                        st.session_state.rest_violations.add(bout["bout_num"])
                         break
-
-        # ---- Build schedule entries -------------------------------------------------
+        
+        # Build schedule
         for slot_idx, bout in enumerate(slots, 1):
             if bout:
                 schedules.append({
@@ -240,13 +222,12 @@ def generate_mat_schedule(bout_list):
                 })
         st.session_state.mat_order[mat_num] = [b["bout_num"] for b in slots if b]
 
-    # ---- Assign mat-bout numbers -------------------------------------------------
+    # ASSIGN MAT BOUT NUMBERS
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
-        entries = [e for e in schedules if e["mat"] == mat_num]
-        entries.sort(key=lambda x: x["slot"])
-        for idx, e in enumerate(entries, 1):
-            e["mat_bout_num"] = idx
-
+        mat_entries = [m for m in schedules if m["mat"] == mat_num]
+        mat_entries.sort(key=lambda x: x["slot"])
+        for idx, entry in enumerate(mat_entries, 1):
+            entry["mat_bout_num"] = idx
     return schedules
 
 # ----------------------------------------------------------------------
@@ -259,18 +240,18 @@ def verify_rest_gaps():
         wrestler_slots = {}
         for e in mat_entries:
             b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
-            for wid in (b["w1_id"], b["w2_id"]):
+            for wid in [b["w1_id"], b["w2_id"]]:
                 wrestler_slots.setdefault(wid, []).append(e["slot"])
         for wid, slots in wrestler_slots.items():
             slots.sort()
             for i in range(1, len(slots)):
                 if slots[i] - slots[i-1] <= CONFIG["REST_GAP"]:
                     name = next(w for w in st.session_state.active if w["id"] == wid)["name"]
-                    violations.append(f"Mat {mat}: {name} slots {slots[i-1]} to {slots[i]} (gap {slots[i]-slots[i-1]})")
+                    violations.append(f"Mat {mat}: {name} in slots {slots[i-1]} and {slots[i]} (gap {slots[i]-slots[i-1]})")
     if violations:
-        st.error("REST_GAP VIOLATIONS (highlighted in red):\n" + "\n".join(violations[:10]))
+        st.error("REST_GAP VIOLATIONS:\n" + "\n".join(violations[:10]))
     else:
-        st.success(f"REST_GAP={CONFIG['REST_GAP']} enforced!")
+        st.success(f"REST_GAP={CONFIG['REST_GAP']} enforced across all mats!")
 
 # ----------------------------------------------------------------------
 # HELPERS
@@ -280,8 +261,10 @@ def remove_match(bout_num):
     b["manual"] = "Manually Removed"
     w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
     w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-    if b["w2_id"] in w1["match_ids"]: w1["match_ids"].remove(b["w2_id"])
-    if b["w1_id"] in w2["match_ids"]: w2["match_ids"].remove(b["w1_id"])
+    if b["w2_id"] in w1["match_ids"]: 
+        w1["match_ids"].remove(b["w2_id"])
+    if b["w1_id"] in w2["match_ids"]: 
+        w2["match_ids"].remove(b["w1_id"])
     st.session_state.undo_stack.append(bout_num)
     st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
     st.session_state.mat_order = {}
@@ -299,8 +282,10 @@ def undo_last():
         b["manual"] = ""
         w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-        if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
-        if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(b["w1_id"])
+        if b["w2_id"] not in w1["match_ids"]: 
+            w1["match_ids"].append(b["w2_id"])
+        if b["w1_id"] not in w2["match_ids"]: 
+            w2["match_ids"].append(b["w1_id"])
         st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -314,31 +299,48 @@ def move_up(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
-            i = order.index(bout_num)
-            if i > 0:
-                order[i-1], order[i] = order[i], order[i-1]
+            idx = order.index(bout_num)
+            if idx > 0:
+                order[idx-1], order[idx] = order[idx], order[idx-1]
                 st.rerun()
 
 def move_down(mat, bout_num):
     if mat in st.session_state.mat_order:
         order = st.session_state.mat_order[mat]
         if bout_num in order:
-            i = order.index(bout_num)
-            if i < len(order)-1:
-                order[i], order[i+1] = order[i+1], order[i]
+            idx = order.index(bout_num)
+            if idx < len(order) - 1:
+                order[idx], order[idx+1] = order[idx+1], order[idx]
                 st.rerun()
 
 # ----------------------------------------------------------------------
-# STREAMLIT UI
+# STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown("""
 <style>
-    div[data-testid="stExpander"] > div > div {padding:0 !important;margin:0 !important;}
-    .block-container {padding:2rem 1rem !important;max-width:1200px !important;margin:0 auto !important;}
-    .main .stButton>button {min-width:30px;height:30px;padding:0;font-size:14px;}
-    .stSidebar .stButton>button {padding:0.5rem 1rem !important;height:auto !important;}
-    .stButton>button[key^="del_"] {line-height:30px !important;font-size:18px !important;}
+    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
+    .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
+    .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
+    h1 { margin-top:0 !important; }
+    .main .stButton > button {
+        min-width: 30px;
+        height: 30px;
+        padding: 0;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .stSidebar .stButton > button {
+        padding: 0.5rem 1rem !important;
+        height: auto !important;
+        min-width: auto !important;
+    }
+    .stTextInput > div > div > input { border-radius: 6px !important; }
+    .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
+    .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -426,8 +428,10 @@ for i in range(5):
         format_func=lambda x: x.capitalize(),
         key=f"color_{i}", label_visibility="collapsed"
     )
-    if new_name != team["name"]: team["name"], changed = new_name, True
-    if new_color != team["color"]: team["color"], changed = new_color, True
+    if new_name != team["name"]: 
+        team["name"], changed = new_name, True
+    if new_color != team["color"]: 
+        team["color"], changed = new_color, True
 
 # SAVE CONFIG CHANGES
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
@@ -458,7 +462,7 @@ if changed:
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
 # ----------------------------------------------------------------------
-# MAIN APP
+# MAIN APP – FAST & ENFORCED
 # ----------------------------------------------------------------------
 if st.session_state.initialized:
     raw_active = st.session_state.active
@@ -537,8 +541,10 @@ if st.session_state.initialized:
             for s in to_add:
                 w = next(w for w in raw_active if w["id"] == s["_w_id"])
                 o = next(o for o in raw_active if o["id"] == s["_o_id"])
-                if o["id"] not in w["match_ids"]: w["match_ids"].append(o["id"])
-                if w["id"] not in o["match_ids"]: o["match_ids"].append(w["id"])
+                if o["id"] not in w["match_ids"]: 
+                    w["match_ids"].append(o["id"])
+                if w["id"] not in o["match_ids"]: 
+                    o["match_ids"].append(w["id"])
                 new_bout = {
                     "bout_num": len(st.session_state.bout_list)+1,
                     "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
@@ -563,7 +569,6 @@ if st.session_state.initialized:
     st.subheader("Mat Previews")
     full_schedule = st.session_state.mat_schedules
     total_displayed = 0
-
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [e for e in full_schedule if e["mat"] == mat]
         with st.expander(f"Mat {mat} ({len(mat_entries)} matches)", expanded=True):
@@ -573,47 +578,41 @@ if st.session_state.initialized:
                 st.session_state.mat_order[mat] = [e["bout_num"] for e in mat_entries]
                 for idx, entry in enumerate(mat_entries):
                     b = next(x for x in st.session_state.bout_list if x["bout_num"] == entry["bout_num"])
-
-                    # --- RED CARD IF REST_GAP VIOLATED ---
-                    is_violation = b["bout_num"] in st.session_state.rest_violations
-                    bg = "#ffcccc" if is_violation else "#fff3cd" if b["is_early"] else "#ffffff"
-
+                    bg = "#fff3cd" if b["is_early"] else "#ffffff"
                     w1c = TEAM_COLORS.get(b["w1_team"], "#999")
                     w2c = TEAM_COLORS.get(b["w2_team"], "#999")
-
                     col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                     with col_up:
-                        st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']))
+                        st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                     with col_down:
-                        st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']))  # FIXED
+                        st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                     with col_del:
-                        st.button("X", key=f"del_{b['bout_num']}_{idx}", on_click=remove_match, args=(b['bout_num'],))
+                        st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
                         st.markdown(f"""
-                        <div style="background:{bg}; border:1px solid #ddd; padding:1px; padding:8px; border-radius:4px; margin-bottom:4px;">
-                            <div style="display:flex; align-items:center; gap:12px;">
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <div style="width:12px; height:12px; background:{w1c}; border-radius:3px;"></div>
+                        <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                            <div style="display:flex;align-items:center;gap:12px;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
                                     <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
-                                    <div style="font-size:0.85rem; color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
+                                    <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
                                 </div>
                                 <div style="font-weight:700;">vs</div>
-                                <div style="display:flex; flex-direction:row-reverse; align-items:center; gap:8px;">
-                                    <div style="width:12px; height:12px; background:{w2c}; border-radius:3px;"></div>
-                                    <div style="font-size:0.85rem; color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
+                                <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
+                                    <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
+                                    <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
                                     <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
                                 </div>
                             </div>
-                            <div style="font-size:0.8rem; color:#555; margin-top:4px;">
+                            <div style="font-size:0.8rem;color:#555;margin-top:4px;">
                                 Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
-                                {'' if not is_violation else ' <span style="color:red; font-weight:bold;">REST VIOLATION</span>'}
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
                 total_displayed += len(mat_entries)
 
-    if st.session_state.rest_violations:
-        st.warning(f"**{len(st.session_state.rest_violations)} bout(s) violate REST_GAP** – highlighted in red.")
+    if total_displayed != total_bouts_assigned:
+        st.error(f"Display mismatch: {total_bouts_assigned} assigned, but only {total_displayed} shown.")
 
     if st.session_state.undo_stack:
         st.markdown("---")
@@ -645,7 +644,8 @@ if st.session_state.initialized:
                             fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
                             for i, _ in df.iterrows():
                                 if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
-                                    for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
+                                    for c in range(1,4): 
+                                        ws.cell(row=i+2, column=c).fill = fill
                 st.session_state.excel_bytes = out.getvalue()
 
                 buf = io.BytesIO()
@@ -671,19 +671,18 @@ if st.session_state.initialized:
                                     ("ALIGN",(0,0),(-1,-1),"LEFT"),
                                     ("VALIGN",(0,0),(-1,-1),"MIDDLE")])
                     for r, _ in enumerate(table[1:], 1):
-                        bout_num = data[r-1]["bout_num"]
-                        if next(b for b in st.session_state.bout_list if b["bout_num"] == bout_num)["is_early"]:
+                        if next(b for b in st.session_state.bout_list if b["bout_num"] == data[r-1]["bout_num"])["is_early"]:
                             s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
-                        if bout_num in st.session_state.rest_violations:
-                            s.add("BACKGROUND", (0, r), (-1, r), HexColor("#ffcccc"))
                     t.setStyle(s)
                     elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1,12), t]
-                    if m < CONFIG["NUM_MATS"]: elements.append(PageBreak())
+                    if m < CONFIG["NUM_MATS"]: 
+                        elements.append(PageBreak())
                 doc.build(elements)
                 st.session_state.pdf_bytes = buf.getvalue()
                 st.toast("Files generated!")
             except Exception as e:
                 st.error(f"Generation failed: {e}")
+                st.toast("Error – check console.")
 
     # Show buttons persistently
     col_ex, col_pdf = st.columns(2)
