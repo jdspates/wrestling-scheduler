@@ -242,7 +242,7 @@ def generate_mat_schedule(bout_list):
                     "slot": slot_idx,
                     "bout_num": bout["bout_num"],
                     "w1": f"{bout['w1_name']} ({bout['w1_team']})",
-                    "w2": f odm"{bout['w2_name']} ({bout['w2_team']})",
+                    "w2": f"{bout['w2_name']} ({bout['w2_team']})",
                     "w1_team": bout["w1_team"],
                     "w2_team": bout["w2_team"],
                     "is_early": bout["is_early"]
@@ -704,3 +704,4 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
