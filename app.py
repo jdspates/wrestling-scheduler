@@ -154,19 +154,109 @@ def generate_mat_schedule(bout_list):
 
     schedules = []
 
-    # 3. BUILD SCHEDULES (no reordering)
+    # 3. REORDER EACH MAT WITH REST RULES
     for mat_num, mat_bouts in enumerate(mats, 1):
-        for slot, bout in enumerate(mat_bouts, 1):
-            schedules.append({
-                "mat": mat_num,
-                "slot": slot,
-                "bout_num": bout["bout_num"],
-                "w1": f"{bout['w1_name']} ({bout['w1_team']})",
-                "w2": f"{bout['w2_name']} ({bout['w2_team']})",
-                "w1_team": bout["w1_team"],
-                "w2_team": bout["w2_team"],
-                "is_early": bout["is_early"]
-            })
+        # Build wrestler → list of bouts
+        wrestler_bouts = {}
+        for bout in mat_bouts:
+            for wid in [bout["w1_id"], bout["w2_id"]]:
+                wrestler_bouts.setdefault(wid, []).append(bout)
+
+        # Sort wrestlers by number of bouts (descending)
+        sorted_wrestlers = sorted(wrestler_bouts.items(), key=lambda x: len(x[1]), reverse=True)
+
+        # Slots: list of (slot, bout or None)
+        total_slots = len(mat_bouts)
+        slots = [None] * total_slots
+        used_bouts = set()
+
+        for wrestler_id, bouts in sorted_wrestlers:
+            if not bouts: continue
+            for bout in bouts:
+                if bout["bout_num"] in used_bouts: continue
+
+                # Try to place bout
+                placed = False
+                for slot in range(total_slots):
+                    if slots[slot] is not None: continue
+
+                    # Check rest gap (±5 slots)
+                    safe = True
+                    for check_slot in range(max(0, slot-5), min(total_slots, slot+6)):
+                        if check_slot == slot: continue
+                        existing = slots[check_slot]
+                        if existing and (existing["w1_id"] == wrestler_id or existing["w2_id"] == wrestler_id):
+                            if abs(check_slot - slot) <= CONFIG["REST_GAP"]:
+                                safe = False
+                                break
+                    if not safe: continue
+
+                    # Try swap if needed
+                    if not safe and slots[slot] is not None:
+                        # Simple swap logic: find a non-conflicting swap
+                        for swap_slot in range(total_slots):
+                            if swap_slot == slot: continue
+                            swap_bout = slots[swap_slot]
+                            if swap_bout is None: continue
+
+                            # Check if swap would fix
+                            # (Simplified: just try)
+                            temp = slots[slot]
+                            slots[slot] = swap_bout
+                            slots[swap_slot] = temp
+                            # Re-check
+                            safe = True
+                            for cs in range(max(0, slot-5), min(total_slots, slot+6)):
+                                if cs == slot: continue
+                                eb = slots[cs]
+                                if eb and (eb["w1_id"] == wrestler_id or eb["w2_id"] == wrestler_id):
+                                    if abs(cs - slot) <= CONFIG["REST_GAP"]:
+                                        safe = False
+                                        break
+                            if safe:
+                                placed = True
+                                used_bouts.add(bout["bout_num"])
+                                used_bouts.add(swap_bout["bout_num"])
+                                break
+                            else:
+                                # Undo
+                                slots[swap_slot], slots[slot] = slots[slot], slots[swap_slot]
+
+                    if safe:
+                        slots[slot] = bout
+                        used_bouts.add(bout["bout_num"])
+                        placed = True
+                        break
+
+                if not placed:
+                    # Fallback: place at first open slot
+                    for s in range(total_slots):
+                        if slots[s] is None:
+                            slots[s] = bout
+                            used_bouts.add(bout["bout_num"])
+                            break
+
+        # Fill any remaining slots
+        for bout in mat_bouts:
+            if bout["bout_num"] not in used_bouts:
+                for s in range(total_slots):
+                    if slots[s] is None:
+                        slots[s] = bout
+                        break
+
+        # Build final schedule
+        for slot_idx, bout in enumerate(slots, 1):
+            if bout:
+                schedules.append({
+                    "mat": mat_num,
+                    "slot": slot_idx,
+                    "bout_num": bout["bout_num"],
+                    "w1": f"{bout['w1_name']} ({bout['w1_team']})",
+                    "w2": f"{bout['w2_name']} ({bout['w2_team']})",
+                    "w1_team": bout["w1_team"],
+                    "w2_team": bout["w2_team"],
+                    "is_early": bout["is_early"]
+                })
 
     # ASSIGN MAT BOUT NUMBERS
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
@@ -403,7 +493,7 @@ if st.session_state.initialized:
                 "Wrestler": f"{w['name']} ({w['team']})",
                 "Lvl": f"{w['level']:.1f}",
                 "Wt": f"{w['weight']:.0f}",
-                "vs_Curr": f"{len(o['match_ids'])}",
+                "vs_Current": f"{len(o['match_ids'])}",
                 "vs": f"{o['name']} ({o['team']})",
                 "vs_Lvl": f"{o['level']:.1f}",
                 "vs_Wt": f"{o['weight']:.0f}",
@@ -420,7 +510,7 @@ if st.session_state.initialized:
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
                 "Lvl": st.column_config.NumberColumn("Lvl"),
                 "Wt": st.column_config.NumberColumn("Wt"),
-                "vs_Curr": st.column_config.NumberColumn("vs_Current"),
+                "vs_Current": st.column_config.NumberColumn("vs_Current"),
                 "vs": st.column_config.TextColumn("vs"),
                 "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
                 "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
