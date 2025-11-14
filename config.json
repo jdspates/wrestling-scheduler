@@ -5,6 +5,7 @@
     "MAX_LEVEL_DIFF": 1,
     "WEIGHT_DIFF_FACTOR": 0.1,
     "MIN_WEIGHT_DIFF": 5.0,
+    "REST_GAP": 4,
     "TEAMS": [
         {"name": "", "color": "red"},
         {"name": "", "color": "blue"},
