@@ -176,7 +176,7 @@ def generate_mat_schedule(bout_list):
 
         while queue:
             bout = queue.pop(0)
-            w1, w2 = bout["w1_id"], bout["w2_id  # w2_id
+            w1, w2 = bout["w1_id"], bout["w2_id"]
 
             if cooldown.get(w1, 0) == 0 and cooldown.get(w2, 0) == 0:
                 placed.append(bout)
@@ -652,3 +652,4 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
