@@ -11,7 +11,6 @@ from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 import json
 import os
-from collections import defaultdict
 
 # ---------- Safe PatternFill import ----------
 try:
@@ -143,7 +142,7 @@ def generate_mat_schedule(bout_list):
     # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
     valid.sort(key=lambda x: x["avg_weight"])
     
-    # 3. ASSIGN MATCHES TO MATS TO KEEP WRESTLERS ON SAME MAT
+    # 2. ASSIGN MATCHES TO MATS TO KEEP WRESTLERS ON SAME MAT
     wrestler_mat = {}  # w_id → mat_num
     mats = [[] for _ in range(CONFIG["NUM_MATS"])]
     mat_load = [0 for _ in range(CONFIG["NUM_MATS"])]  # Number of matches per mat
@@ -184,9 +183,7 @@ def generate_mat_schedule(bout_list):
     schedules = []
 
     for mat_num, mat_bouts in enumerate(mats, 1):
-        # No reordering for rest - just sort by weight for now
-        mat_bouts.sort(key=lambda x: x["avg_weight"])
-
+        # No reordering — just keep original order (by weight)
         for slot, bout in enumerate(mat_bouts, 1):
             schedules.append({
                 "mat": mat_num,
@@ -479,20 +476,9 @@ if st.session_state.initialized:
                     "is_early": w["early"] or o["early"], "manual": "Manually Added"
                 }
                 st.session_state.bout_list.append(new_bout)
-                # Add to the beginning of the mat preview if early
-                if new_bout["is_early"]:
-                    # First, rebuild to find which mat it would be on
-                    temp_schedules = generate_mat_schedule(st.session_state.bout_list)
-                    for entry in temp_schedules:
-                        if entry["bout_num"] == new_bout["bout_num"]:
-                            mat = entry["mat"]
-                            break
-                    if mat in st.session_state.mat_order:
-                        st.session_state.mat_order[mat].insert(0, new_bout["bout_num"])
-                    else:
-                        st.session_state.mat_order[mat] = [new_bout["bout_num"]]
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
+            st.session_state.mat_order = {}
             st.success("Matches added!")
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
