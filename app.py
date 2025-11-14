@@ -326,7 +326,7 @@ def move_down(mat, bout_num):
             i = order.index(bout_num)
             if i < len(order)-1:
                 order[i], order[i+1] = order[i+1], order[i]
-                st.rererun()
+                st.rerun()
 
 # ----------------------------------------------------------------------
 # STREAMLIT UI
@@ -454,8 +454,6 @@ if changed:
         json.dump(CONFIG, f, indent=4)
     st.sidebar.success("Settings saved! Refresh to apply.")
     st.rerun()
-
-TEAM
 
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
 
@@ -587,7 +585,7 @@ if st.session_state.initialized:
                     with col_up:
                         st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']))
                     with col_down:
-                        st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']))
+                        st.button("Down", key=f"down_{mat}_{b['bount_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']))
                     with col_del:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
