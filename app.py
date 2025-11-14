@@ -134,22 +134,25 @@ def build_suggestions(active, bout_list):
 def generate_mat_schedule(bout_list, gap=4):
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
-    valid.sort(key=lambda x: x["avg_weight"])
+    # 1. GROUP BY WEIGHT CLASS (round avg_weight to nearest 5lbs)
+    from collections import defaultdict
+    weight_groups = defaultdict(list)
+    for b in valid:
+        rounded_weight = round(b["avg_weight"] / 5) * 5
+        weight_groups[rounded_weight].append(b)
     
-    # 2. DISTRIBUTE ACROSS MATS (lightest → Mat 1)
-    per_mat = len(valid) // CONFIG["NUM_MATS"]
-    extra = len(valid) % CONFIG["NUM_MATS"]
-    mats = []
-    start = 0
-    for i in range(CONFIG["NUM_MATS"]):
-        end = start + per_mat + (1 if i < extra else 0)
-        mats.append(valid[start:end])
-        start = end
+    # 2. ASSIGN GROUPS TO MATS (cycle to keep weights together)
+    mats = [[] for _ in range(CONFIG["NUM_MATS"])]
+    group_keys = sorted(weight_groups.keys())
+    mat_index = 0
+    for key in group_keys:
+        mats[mat_index].extend(weight_groups[key])
+        mat_index = (mat_index + 1) % CONFIG["NUM_MATS"]
 
     schedules = []
     last_slot = {}
     for mat_num, mat_bouts in enumerate(mats, 1):
+        if not mat_bouts: continue
         early_bouts = [b for b in mat_bouts if b["is_early"]]
         non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
         total_slots = len(mat_bouts)
@@ -462,7 +465,7 @@ if st.session_state.initialized:
                 "Wrestler": st.column_config.TextColumn("Wrestler"),
                 "Lvl": st.column_config.NumberColumn("Lvl"),
                 "Wt": st.column_config.NumberColumn("Wt"),
-                "vs_current": st.column_config.NumberColumn("vs_Current"),
+                "vs_Current": st.column_config.NumberColumn("vs_Current"),
                 "vs": st.column_config.TextColumn("vs"),
                 "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
                 "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
