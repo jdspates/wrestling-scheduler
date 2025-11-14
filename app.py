@@ -155,73 +155,74 @@ def generate_mat_schedule(bout_list, gap=None):
         start = end
 
     schedules = []
-    
+    mat_wrestler_slots = [{} for _ in range(CONFIG["NUM_MATS"])]  # per mat: w_id → list of slots
+
     for mat_num, mat_bouts in enumerate(mats, 1):
-        # Build schedule iteratively with gap enforcement
+        mat_idx = mat_num - 1
         remaining_bouts = list(mat_bouts)
         scheduled = []
-        mat_wrestler_slots = {}  # w_id → list of slots on this mat
-        
+
         while remaining_bouts:
             found = False
             for i, bout in enumerate(remaining_bouts):
                 w1 = bout["w1_id"]
                 w2 = bout["w2_id"]
                 slot = len(scheduled) + 1
-                
-                # Check gap for both wrestlers on this mat
-                w1_slots = mat_wrestler_slots.get(w1, [])
-                w2_slots = mat_wrestler_slots.get(w2, [])
-                
-                if w1_slots and slot - max(w1_slots) <= gap:
+
+                # Check ALL prior slots for both wrestlers
+                w1_slots = mat_wrestler_slots[mat_idx].get(w1, [])
+                w2_slots = mat_wrestler_slots[mat_idx].get(w2, [])
+
+                if any(slot - s <= gap for s in w1_slots):
                     continue
-                if w2_slots and slot - max(w2_slots) <= gap:
+                if any(slot - s <= gap for s in w2_slots):
                     continue
-                
-                # Valid bout - schedule it
+
+                # Valid bout
                 scheduled.append((slot, bout))
-                mat_wrestler_slots.setdefault(w1, []).append(slot)
-                mat_wrestler_slots.setdefault(w2, []).append(slot)
+                mat_wrestler_slots[mat_idx].setdefault(w1, []).append(slot)
+                mat_wrestler_slots[mat_idx].setdefault(w2, []).append(slot)
                 remaining_bouts.pop(i)
                 found = True
                 break
-            
+
             if not found and remaining_bouts:
-                # Fallback: take first remaining bout (may violate gap)
+                # Fallback: take first bout
                 bout = remaining_bouts.pop(0)
                 slot = len(scheduled) + 1
                 scheduled.append((slot, bout))
-                mat_wrestler_slots.setdefault(bout["w1_id"], []).append(slot)
-                mat_wrestler_slots.setdefault(bout["w2_id"], []).append(slot)
+                mat_wrestler_slots[mat_idx].setdefault(bout["w1_id"], []).append(slot)
+                mat_wrestler_slots[mat_idx].setdefault(bout["w2_id"], []).append(slot)
 
-        # Prioritize early matches in first half (post-process reorder)
-        early_slots = [s for s, b in scheduled if b["is_early"]]
-        non_early_slots = [s for s, b in scheduled if not b["is_early"]]
+        # Prioritize early matches in first half
+        early_scheduled = [b for s, b in scheduled if b["is_early"]]
+        non_early_scheduled = [b for s, b in scheduled if not b["is_early"]]
         first_half_size = (len(scheduled) + 1) // 2
-        
-        # Move early matches to first half
+        early_count = min(len(early_scheduled), first_half_size)
+
         new_scheduled = []
-        early_count = min(len(early_slots), first_half_size)
-        for i in range(first_half_size):
-            if i < early_count:
-                new_scheduled.append(early_slots[i])
+        early_idx = 0
+        non_early_idx = 0
+        for i in range(len(scheduled)):
+            if i < first_half_size and early_idx < early_count:
+                new_scheduled.append(early_scheduled[early_idx])
+                early_idx += 1
             else:
-                new_scheduled.append(non_early_slots[0])
-                non_early_slots.pop(0)
-        new_scheduled.extend(non_early_slots)
-        
+                new_scheduled.append(non_early_scheduled[non_early_idx])
+                non_early_idx += 1
+        new_scheduled.extend(non_early_scheduled[non_early_idx:])
+
         # Rebuild with new order
-        for new_slot, old_slot in enumerate(new_scheduled, 1):
-            old_bout = next(b for s, b in scheduled if s == old_slot)
+        for new_slot, bout in enumerate(new_scheduled, 1):
             schedules.append({
                 "mat": mat_num,
                 "slot": new_slot,
-                "bout_num": old_bout["bout_num"],
-                "w1": f"{old_bout['w1_name']} ({old_bout['w1_team']})",
-                "w2": f"{old_bout['w2_name']} ({old_bout['w2_team']})",
-                "w1_team": old_bout["w1_team"],
-                "w2_team": old_bout["w2_team"],
-                "is_early": old_bout["is_early"]
+                "bout_num": bout["bout_num"],
+                "w1": f"{bout['w1_name']} ({bout['w1_team']})",
+                "w2": f"{bout['w2_name']} ({bout['w2_team']})",
+                "w1_team": bout["w1_team"],
+                "w2_team": bout["w2_team"],
+                "is_early": bout["is_early"]
             })
 
     # ASSIGN MAT BOUT NUMBERS
@@ -588,7 +589,7 @@ if st.session_state.initialized:
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
-                            pd.DataFrame([["", "", ""]], columns=["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]).to_excel(writer, f"Mat {m}", index=False)
+                            pd.DataFrame([["", "", ""]], columns=["#","W}}$
                             continue
                         df = pd.DataFrame(data)[["mat_bout_num","w1","w2"]]
                         df.columns = ["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]
