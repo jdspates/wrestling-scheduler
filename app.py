@@ -11,6 +11,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 import json
 import os
+from collections import defaultdict
 
 # ---------- Safe PatternFill import ----------
 try:
@@ -141,18 +142,21 @@ def generate_mat_schedule(bout_list, gap=None):
         gap = CONFIG.get("REST_GAP", 4)
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
-    # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
-    valid.sort(key=lambda x: x["avg_weight"])
+    # 1. GROUP BY WEIGHT CLASS (round to nearest 5 lbs)
+    weight_groups = defaultdict(list)
+    for b in valid:
+        rounded = round(b["avg_weight"] / 5) * 5
+        weight_groups[rounded].append(b)
     
-    # 2. DISTRIBUTE ACROSS MATS (lightest → Mat 1)
-    per_mat = len(valid) // CONFIG["NUM_MATS"]
-    extra = len(valid) % CONFIG["NUM_MATS"]
-    mats = []
-    start = 0
-    for i in range(CONFIG["NUM_MATS"]):
-        end = start + per_mat + (1 if i < extra else 0)
-        mats.append(valid[start:end])
-        start = end
+    # 2. SORT GROUPS BY WEIGHT (lightest first)
+    sorted_groups = sorted(weight_groups.items())
+    
+    # 3. ASSIGN ENTIRE GROUPS TO MATS (keep same weight together)
+    mats = [[] for _ in range(CONFIG["NUM_MATS"])]
+    mat_index = 0
+    for weight, group in sorted_groups:
+        mats[mat_index].extend(group)
+        mat_index = (mat_index + 1) % CONFIG["NUM_MATS"]
 
     schedules = []
     mat_wrestler_slots = [{} for _ in range(CONFIG["NUM_MATS"])]  # per mat: w_id → list of slots
@@ -169,7 +173,7 @@ def generate_mat_schedule(bout_list, gap=None):
                 w2 = bout["w2_id"]
                 slot = len(scheduled) + 1
 
-                # Check ALL prior slots for both wrestlers
+                # Check ALL prior slots for both wrestlers on this mat
                 w1_slots = mat_wrestler_slots[mat_idx].get(w1, [])
                 w2_slots = mat_wrestler_slots[mat_idx].get(w2, [])
 
@@ -542,9 +546,9 @@ if st.session_state.initialized:
                     w2c = TEAM_COLORS.get(b["w2_team"], "#999")
                     col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
                     with col_up:
-                        st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
+                        st.button("Up", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
                     with col_down:
-                        st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
+                        st.button("Down", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
                     with col_del:
                         st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
                     with col_card:
@@ -560,7 +564,7 @@ if st.session_state.initialized:
                                 <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
                                     <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
                                     <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
-                                    <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
+                                    <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div
                                 </div>
                             </div>
                             <div style="font-size:0.8rem;color:#555;margin-top:4px;">
@@ -589,7 +593,7 @@ if st.session_state.initialized:
                     for m in range(1, CONFIG["NUM_MATS"]+1):
                         data = [e for e in st.session_state.mat_schedules if e["mat"] == m]
                         if not data:
-                            pd.DataFrame([["", "", ""]], columns=["#","W"])
+                            pd.DataFrame([["", "", ""]], columns=["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]).to_excel(writer, f"Mat {m}", index=False)
                             continue
                         df = pd.DataFrame(data)[["mat_bout_num","w1","w2"]]
                         df.columns = ["#","Wrestler 1 (Team)","Wrestler 2 (Team)"]
@@ -657,9 +661,3 @@ with col_pdf:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
