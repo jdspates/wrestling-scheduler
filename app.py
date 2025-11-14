@@ -371,14 +371,15 @@ with c1:
     new_mats = st.number_input("Number of Mats", 1, 10, CONFIG["NUM_MATS"], key="num_mats")
 with c2:
     new_level_diff = st.number_input("Max Level Difference", 0, 5, CONFIG["MAX_LEVEL_DIFF"], key="max_level_diff")
-    new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01,
-                                  format="%.2f", key="weight_factor")
     new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5,
                                      key="min_weight_diff")
 
 if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
+
+new_weight_factor = st.slider("Weight Diff % Factor", 0.0, 0.5, CONFIG["WEIGHT_DIFF_FACTOR"], 0.01,
+                                  format="%.2f", key="weight_factor")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Team Names & Colors")
@@ -653,4 +654,5 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
