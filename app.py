@@ -484,7 +484,7 @@ if st.session_state.initialized:
                       for _, row in edited.iterrows() if row["Add"]]
             for s in to_add:
                 w = next(w for w in raw_active if w["id"] == s["_w_id"])
-                o = next(o for o in raw_active if w["id"] == s["_o_id"])
+                o = next(o for o in raw_active if o["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]: w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]: o["match_ids"].append(w["id"])
                 new_bout = {
@@ -653,3 +653,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
