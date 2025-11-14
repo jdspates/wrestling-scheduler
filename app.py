@@ -31,6 +31,7 @@ COLOR_MAP = {
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2, "MAX_MATCHES": 4, "NUM_MATS": 4,
     "MAX_LEVEL_DIFF": 1, "WEIGHT_DIFF_FACTOR": 0.10, "MIN_WEIGHT_DIFF": 5.0,
+    "REST_GAP": 4,  # NEW: configurable rest gap
     "TEAMS": [
         {"name": "", "color": "red"}, {"name": "", "color": "blue"},
         {"name": "", "color": "green"}, {"name": "", "color": "yellow"},
@@ -131,7 +132,9 @@ def build_suggestions(active, bout_list):
             })
     return sugg
 
-def generate_mat_schedule(bout_list, gap=4):
+def generate_mat_schedule(bout_list, gap=None):
+    if gap is None:
+        gap = CONFIG["REST_GAP"]  # Use config value
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     
     # 1. SORT BY AVERAGE WEIGHT FIRST (lightest to heaviest)
@@ -266,7 +269,7 @@ def undo_last():
         w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
         if b["w2_id"] not in w1["match_ids"]: w1["match_ids"].append(b["w2_id"])
         if b["w1_id"] not in w2["match_ids"]: w2["match_ids"].append(w["w1_id"])
-        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
         st.session_state.mat_order = {}
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
@@ -345,7 +348,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+        st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
         st.session_state.initialized = True
         st.success("Roster loaded and matchups generated!")
     except Exception as e:
@@ -375,9 +378,22 @@ with c2:
                                   format="%.2f", key="weight_factor")
     new_min_weight = st.number_input("Min Weight Diff (lbs)", 0.0, 50.0, CONFIG["MIN_WEIGHT_DIFF"], 0.5,
                                      key="min_weight_diff")
+
+# NEW: REST GAP CONFIG
+st.sidebar.markdown("---")
+new_rest_gap = st.sidebar.slider(
+    "Rest Gap (matches)",
+    min_value=1,
+    max_value=10,
+    value=CONFIG["REST_GAP"],
+    help="Minimum matches between a wrestler's bouts",
+    key="rest_gap"
+)
+
 if new_min > new_max:
     st.sidebar.error("Min Matches cannot exceed Max Matches!")
     new_min = new_max
+
 st.sidebar.markdown("---")
 st.sidebar.subheader("Team Names & Colors")
 for i in range(5):
@@ -392,13 +408,19 @@ for i in range(5):
     )
     if new_name != team["name"]: team["name"], changed = new_name, True
     if new_color != team["color"]: team["color"], changed = new_color, True
+
+# SAVE CONFIG CHANGES
 if (new_min != CONFIG["MIN_MATCHES"] or new_max != CONFIG["MAX_MATCHES"] or
     new_mats != CONFIG["NUM_MATS"] or new_level_diff != CONFIG["MAX_LEVEL_DIFF"] or
-    new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"]):
-    CONFIG.update({"MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
-                   "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
-                   "MIN_WEIGHT_DIFF": new_min_weight})
+    new_weight_factor != CONFIG["WEIGHT_DIFF_FACTOR"] or new_min_weight != CONFIG["MIN_WEIGHT_DIFF"] or
+    new_rest_gap != CONFIG["REST_GAP"]):
+    CONFIG.update({
+        "MIN_MATCHES": new_min, "MAX_MATCHES": new_max, "NUM_MATS": new_mats,
+        "MAX_LEVEL_DIFF": new_level_diff, "WEIGHT_DIFF_FACTOR": new_weight_factor,
+        "MIN_WEIGHT_DIFF": new_min_weight, "REST_GAP": new_rest_gap
+    })
     changed = True
+
 st.sidebar.markdown("---")
 if st.sidebar.button("Reset", type="secondary"):
     CONFIG = DEFAULT_CONFIG.copy()
@@ -490,7 +512,7 @@ if st.session_state.initialized:
                     "is_early": w["early"] or o["early"], "manual": "Manually Added"
                 })
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list, gap=4)
+            st.session_state.mat_schedules = generate_mat_schedule(st.session_state.bout_list)
             st.session_state.mat_order = {}
             st.success("Matches added!")
             st.session_state.excel_bytes = None
@@ -592,7 +614,7 @@ if st.session_state.initialized:
                             for i, _ in df.iterrows():
                                 if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
                                     for c in range(1,4): ws.cell(row=i+2, column=c).fill = fill
-                st.session_state.excel_bytes = out.getvalue()
+                st.session_state.excel_bytes =  out.getvalue()
 
                 buf = io.BytesIO()
                 doc = SimpleDocTemplate(buf, pagesize=letter); elements = []; styles = getSampleStyleSheet()
