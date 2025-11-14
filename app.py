@@ -210,7 +210,7 @@ def generate_mat_schedule(bout_list):
                             placed = True
                             break
                     if not placed:
-                        # Fallback: first safe slot
+                        # Find next safe slot moving down
                         for s in range(total_slots):
                             if slots[s] is None and is_safe_slot(slots, s, wrestler_id, total_slots):
                                 slots[s] = bout
@@ -322,18 +322,18 @@ st.markdown("""
     .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
     h1 { margin-top:0 !important; }
     .main .stButton > button {
-        min-width: 30px;
-        height: 30px;
-        padding: 0;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        min-width: 30px
+        height: 30px
+        padding: 0
+        font-size: 14px
+        display: flex
+        align-items: center
+        justify-content: center
     }
     .stSidebar .stButton > button {
-        padding: 0.5rem 1rem !important;
-        height: auto !important;
-        min-width: auto !important;
+        padding: 0.5rem 1rem !important
+        height: auto !important
+        min-width: auto !important
     }
     .stTextInput > div > div > input { border-radius: 6px !important; }
     .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
