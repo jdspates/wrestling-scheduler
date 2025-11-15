@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – FINAL CLEAN VERSION - with fixes to exports, manual add/delete
+# app.py – Wrestling Scheduler – FINAL CLEAN VERSION - with drag-to-reorder mats
 import streamlit as st
 import pandas as pd
 import io
@@ -11,6 +11,8 @@ from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 import json
 import os
+
+from streamlit_sortables import sort_items  # <-- NEW
 
 # ---------- Safe PatternFill import ----------
 try:
@@ -520,52 +522,97 @@ if st.session_state.initialized:
     filtered_schedule = generate_mat_schedule(filtered_bout_list) if filtered_bout_list else []
     bout_to_mat = {entry["bout_num"]: entry["mat"] for entry in filtered_schedule}
 
+    # ---------- NEW DRAG-TO-REORDER PER MAT ----------
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [b for b in filtered_bout_list if bout_to_mat.get(b["bout_num"]) == mat]
         with st.expander(f"Mat {mat}", expanded=True):
             if not mat_bouts:
-                pass
+                continue
+
+            # keep mat_order in sync with bouts on this mat
+            bout_nums_in_mat = [b["bout_num"] for b in mat_bouts]
+            existing_order = st.session_state.mat_order.get(mat)
+            if not existing_order:
+                # first time: just use schedule order
+                st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
             else:
-                if mat not in st.session_state.mat_order:
-                    st.session_state.mat_order[mat] = [b["bout_num"] for b in mat_bouts]
-                ordered_bouts = []
-                for bout_num in st.session_state.mat_order[mat]:
-                    entry = next((e for e in filtered_schedule if e["bout_num"] == bout_num), None)
-                    if entry:
-                        ordered_bouts.append(entry)
-                for idx, m in enumerate(ordered_bouts):
-                    b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
-                    bg = "#fff3cd" if b["is_early"] else "#ffffff"
-                    w1c = TEAM_COLORS.get(b["w1_team"], "#999")
-                    w2c = TEAM_COLORS.get(b["w2_team"], "#999")
-                    col_up, col_down, col_del, col_card = st.columns([0.05, 0.05, 0.05, 1], gap="small")
-                    with col_up:
-                        st.button("↑", key=f"up_{mat}_{b['bout_num']}_{idx}", on_click=move_up, args=(mat, b['bout_num']), help="Move up")
-                    with col_down:
-                        st.button("↓", key=f"down_{mat}_{b['bout_num']}_{idx}", on_click=move_down, args=(mat, b['bout_num']), help="Move down")
-                    with col_del:
-                        st.button("X", key=f"del_{b['bout_num']}_{idx}", help="Remove match (Undo available)", on_click=remove_match, args=(b['bout_num'],))
-                    with col_card:
-                        st.markdown(f"""
-                        <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
-                            <div style="display:flex;align-items:center;gap:12px;">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
-                                    <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
-                                    <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
-                                </div>
-                                <div style="font-weight:700;">vs</div>
-                                <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
-                                    <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
-                                    <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
-                                    <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
-                                </div>
+                # drop bouts that aren't on this mat anymore
+                cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
+                # append any new bouts not tracked yet
+                for bn in bout_nums_in_mat:
+                    if bn not in cleaned:
+                        cleaned.append(bn)
+                st.session_state.mat_order[mat] = cleaned
+
+            # build sortable items: "bout_num|label"
+            sortable_items = []
+            for bout_num in st.session_state.mat_order[mat]:
+                b = next(x for x in mat_bouts if x["bout_num"] == bout_num)
+                label = f"{bout_num}|Bout {bout_num}: {b['w1_name']} vs {b['w2_name']}"
+                sortable_items.append(label)
+
+            # drag to reorder
+            sorted_items = sort_items(
+                sortable_items,
+                direction="vertical",
+                key=f"mat_{mat}_sortable"
+            )
+
+            # update mat_order from sorted_items
+            new_order = []
+            for item in sorted_items:
+                try:
+                    bn = int(item.split("|", 1)[0])
+                except (ValueError, IndexError):
+                    continue
+                if bn in bout_nums_in_mat and bn not in new_order:
+                    new_order.append(bn)
+            st.session_state.mat_order[mat] = new_order
+
+            # now render the cards in the new order
+            ordered_bouts = []
+            for bout_num in st.session_state.mat_order[mat]:
+                entry = next((e for e in filtered_schedule if e["bout_num"] == bout_num), None)
+                if entry:
+                    ordered_bouts.append(entry)
+
+            for idx, m in enumerate(ordered_bouts):
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == m["bout_num"])
+                bg = "#fff3cd" if b["is_early"] else "#ffffff"
+                w1c = TEAM_COLORS.get(b["w1_team"], "#999")
+                w2c = TEAM_COLORS.get(b["w2_team"], "#999")
+
+                col_del, col_card = st.columns([0.05, 1], gap="small")
+                with col_del:
+                    st.button(
+                        "X",
+                        key=f"del_{b['bout_num']}_{idx}",
+                        help="Remove match (Undo available)",
+                        on_click=remove_match,
+                        args=(b['bout_num'],)
+                    )
+                with col_card:
+                    st.markdown(f"""
+                    <div class="card-container" data-bout="{b['bout_num']}" style="background:{bg}; border:1px solid #ddd; padding:8px; border-radius:4px; margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div style="width:12px;height:12px;background:{w1c};border-radius:3px;"></div>
+                                <div style="font-weight:600;">{b['w1_name']} ({b['w1_team']})</div>
+                                <div style="font-size:0.85rem;color:#444;">{b['w1_grade']}/{b['w1_level']:.1f}/{b['w1_weight']:.0f}</div>
                             </div>
-                            <div style="font-size:0.8rem;color:#555;margin-top:4px;">
-                                Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                            <div style="font-weight:700;">vs</div>
+                            <div style="display:flex;flex-direction:row-reverse;align-items:center;gap:8px;">
+                                <div style="width:12px;height:12px;background:{w2c};border-radius:3px;"></div>
+                                <div style="font-size:0.85rem;color:#444;">{b['w2_grade']}/{b['w2_level']:.1f}/{b['w2_weight']:.0f}</div>
+                                <div style="font-weight:600;">{b['w2_name']} ({b['w2_team']})</div>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        <div style="font-size:0.8rem;color:#555;margin-top:4px;">
+                            Slot: {idx+1} | {"Early" if b['is_early'] else ""} | Score: {b['score']:.1f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    # ---------- END DRAG-TO-REORDER ----------
 
     if st.session_state.undo_stack:
         st.markdown("---")
@@ -653,7 +700,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
