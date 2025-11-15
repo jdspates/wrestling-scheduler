@@ -642,20 +642,9 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
 
-        # Build TEAMS from CSV teams so coaches only choose colors
-        roster_teams = sorted({str(w["team"]).strip() for w in wrestlers if str(w["team"]).strip()})
-        circle_color_names = list(COLOR_ICON.keys())
-        teams_cfg = []
-        for idx, team_name in enumerate(roster_teams):
-            color = circle_color_names[idx % len(circle_color_names)]
-            teams_cfg.append({"name": team_name, "color": color})
-
-        CONFIG["TEAMS"] = teams_cfg
-        st.session_state.CONFIG = CONFIG  # persist
-        st.session_state.sortable_version += 1  # force UI to refresh with new team/color mapping
-
         st.success(
-            f"Roster loaded ({len(wrestlers)} wrestlers, {len(roster_teams)} teams) and matchups generated!"
+            f"Roster loaded ({len(wrestlers)} wrestlers, "
+            f"{len({w['team'] for w in wrestlers})} teams) and matchups generated!"
         )
     except Exception as e:
         st.error(f"Error loading roster: {e}")
@@ -717,40 +706,45 @@ if new_min > new_max:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Team Colors")
 
-# Always pull latest TEAMS from CONFIG
-TEAMS = CONFIG.get("TEAMS", [])
 circle_color_names = list(COLOR_ICON.keys())
 
-# NEW: Auto-build TEAMS from roster if missing (fixes blank team names in existing sessions)
-if (not TEAMS) and st.session_state.get("roster"):
+# Rebuild TEAMS from the roster every run (if roster exists)
+if st.session_state.get("roster"):
     roster_teams = sorted({
         str(w["team"]).strip()
         for w in st.session_state.roster
         if str(w["team"]).strip()
     })
-    teams_cfg = []
-    for idx, team_name in enumerate(roster_teams):
-        color = circle_color_names[idx % len(circle_color_names)]
-        teams_cfg.append({"name": team_name, "color": color})
 
-    CONFIG["TEAMS"] = teams_cfg
+    prev_teams = CONFIG.get("TEAMS", [])
+    prev_color_by_name = {
+        t["name"]: t["color"] for t in prev_teams if t.get("name")
+    }
+
+    TEAMS = []
+    used_colors = set()
+
+    for team_name in roster_teams:
+        color = prev_color_by_name.get(team_name)
+        if color not in circle_color_names:
+            # pick first unused color, then wrap
+            for c in circle_color_names:
+                if c not in used_colors:
+                    color = c
+                    break
+            if color is None:
+                color = circle_color_names[0]
+        used_colors.add(color)
+        TEAMS.append({"name": team_name, "color": color})
+
+    CONFIG["TEAMS"] = TEAMS
     st.session_state.CONFIG = CONFIG
-    st.session_state.sortable_version += 1
-    TEAMS = teams_cfg
+else:
+    TEAMS = CONFIG.get("TEAMS", [])
 
 if TEAMS:
     for i, team in enumerate(TEAMS):
-        label = team["name"] or f"Team {i+1}"
-        st.sidebar.markdown(f"**{label}**")
-
-        # Name editable (if coach wants slightly different label)
-        new_name = st.sidebar.text_input(
-            "Team name",
-            value=team["name"],
-            key=f"team_name_{i}",
-            label_visibility="collapsed"
-        )
-
+        st.sidebar.markdown(f"**{team['name']}**")
         try:
             default_idx = circle_color_names.index(team["color"])
         except ValueError:
@@ -764,12 +758,6 @@ if TEAMS:
             key=f"color_{i}",
             label_visibility="collapsed"
         )
-
-        # If name or color changed, update config & bump sortable_version so mat previews refresh
-        if new_name != team["name"]:
-            team["name"] = new_name
-            changed = True
-            st.session_state.sortable_version += 1
 
         if new_color != team["color"]:
             team["color"] = new_color
@@ -1544,15 +1532,15 @@ if st.session_state.initialized:
             st.caption("No schedule yet. Go to **Match Builder** to create matchups.")
         else:
             mat_rows = []
-            for mat in range(1, CONFIG["NUM_MATS"] + 1):
-                mat_entries = [e for e in full_schedule if e["mat"] == mat]
+            for m in range(1, CONFIG["NUM_MATS"] + 1):
+                mat_entries = [e for e in full_schedule if e["mat"] == m]
                 count = len(mat_entries)
                 early_count = sum(
                     1 for e in mat_entries
                     if next(b for b in st.session_state.bout_list if b["bout_num"] == e["bout_num"])["is_early"]
                 )
                 mat_rows.append({
-                    "Mat": mat,
+                    "Mat": m,
                     "# Bouts": count,
                     "Early Matches": early_count
                 })
