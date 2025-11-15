@@ -570,31 +570,6 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
-# ---- HELP / HOW TO USE ----
-with st.expander("How to use this page"):
-    st.markdown("""
-1. **Step 1 – Download template**  
-   Download the roster template CSV and save a copy for your meet.
-
-2. **Step 2 – Upload roster.csv**  
-   Fill in your wrestlers, save as `roster.csv`, and upload it here.
-
-3. **Pre-Meet Scratches**  
-   Mark wrestlers who are not wrestling so they are removed from scheduling.
-
-4. **Suggested Matches**  
-   Review and optionally add suggested matches for wrestlers who need more bouts.
-
-5. **Manual Match Creator**  
-   Force specific matchups coaches want (even if the auto-matcher didn't create them).
-
-6. **Mat Previews**  
-   Drag matches to reorder and review rest-gap warnings.
-
-7. **Generate Matches**  
-   Download Excel + PDF bout sheets for the meet.
-    """)
-
 # ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
 st.markdown("### Step 1 – Download roster template (CSV)")
 st.markdown(
@@ -644,43 +619,9 @@ if uploaded and not st.session_state.initialized:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
-
+        st.success("Roster loaded and matchups generated!")
     except Exception as e:
-        st.error(f"Error loading roster: {e}")
-        st.stop()
-
-    # --- Roster preview + basic validation ---
-    st.success("Roster loaded and matchups generated!")
-
-    roster_df = pd.DataFrame(st.session_state.roster)
-    st.subheader("Roster preview")
-    st.dataframe(roster_df, use_container_width=True)
-
-    problems = []
-
-    # Duplicate IDs
-    if roster_df["id"].duplicated().any():
-        dups = roster_df.loc[roster_df["id"].duplicated(), "id"].unique().tolist()
-        problems.append(f"Duplicate wrestler IDs found: {dups}")
-
-    # Non-positive weights
-    if (roster_df["weight"] <= 0).any():
-        problems.append("Some wrestlers have weight ≤ 0. Check the weight column.")
-
-    # Grade sanity check
-    if ((roster_df["grade"] < 1) | (roster_df["grade"] > 12)).any():
-        problems.append("Some wrestlers have grade outside 1–12.")
-
-    # Missing names / teams
-    if roster_df["name"].isna().any() or (roster_df["name"].astype(str).str.strip() == "").any():
-        problems.append("Some wrestlers are missing a **name**.")
-    if roster_df["team"].isna().any() or (roster_df["team"].astype(str).str.strip() == "").any():
-        problems.append("Some wrestlers are missing a **team**.")
-
-    if problems:
-        st.warning("Please review these issues in your CSV (scheduling will still run):")
-        for p in problems:
-            st.markdown(f"- {p}")
+        st.error(f"Error: {e}")
 
 # ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
@@ -1108,386 +1049,456 @@ if st.session_state.initialized:
     rest_gap = CONFIG.get("REST_GAP", 4)
     conflicts_all = compute_rest_conflicts(full_schedule, rest_gap) if full_schedule else []
 
-    if search_term.strip():
-        visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
-    else:
-        visible_conflicts = conflicts_all
+    # ---------------- TABS: Mat view vs Summary ----------------
+    st.subheader("Meet Views")
+    tab_mats, tab_summary = st.tabs(["Mat Previews / Editing", "Meet Summary"])
 
-    st.subheader("Mat Previews")
-
-    if visible_conflicts:
-        st.warning(
-            f"Rest conflicts detected: **{len(visible_conflicts)}** (requires at least "
-            f"**{rest_gap}** matches between bouts for the same wrestler)."
-        )
-    else:
-        st.caption(f"No rest conflicts found (min gap: {rest_gap} matches).")
-
-    if not full_schedule:
-        st.caption("No bouts scheduled yet.")
-    else:
-        def bout_in_filtered(b):
-            return (
-                b["manual"] != "Manually Removed" and
-                (b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids)
-            )
-
-        # ---------- SEARCH MODE (read-only, HTML table) ----------
+    # ------------------------------------------------------------------
+    # TAB 1: Mat previews, drag/reorder, remove, undo, generate, download
+    # ------------------------------------------------------------------
+    with tab_mats:
         if search_term.strip():
-            for mat in range(1, CONFIG["NUM_MATS"] + 1):
-                mat_entries = [
-                    e for e in full_schedule
-                    if e["mat"] == mat and bout_in_filtered(
-                        next(
-                            b for b in st.session_state.bout_list
-                            if b["bout_num"] == e["bout_num"]
+            visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
+        else:
+            visible_conflicts = conflicts_all
+
+        if visible_conflicts:
+            st.warning(
+                f"Rest conflicts detected: **{len(visible_conflicts)}** "
+                f"(requires at least **{rest_gap}** matches between bouts for the same wrestler)."
+            )
+        else:
+            st.caption(f"No rest conflicts found (min gap: {rest_gap} matches).")
+
+        if not full_schedule:
+            st.caption("No bouts scheduled yet.")
+        else:
+            def bout_in_filtered(b):
+                return (
+                    b["manual"] != "Manually Removed" and
+                    (b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids)
+                )
+
+            # ---------- SEARCH MODE (read-only, HTML table) ----------
+            if search_term.strip():
+                for mat in range(1, CONFIG["NUM_MATS"] + 1):
+                    mat_entries = [
+                        e for e in full_schedule
+                        if e["mat"] == mat and bout_in_filtered(
+                            next(
+                                b for b in st.session_state.bout_list
+                                if b["bout_num"] == e["bout_num"]
+                            )
                         )
-                    )
-                ]
-                mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
-                with st.expander(mat_label, expanded=True):
-                    if not mat_entries:
-                        st.caption("No matches for the current filter on this mat.")
-                        continue
-
-                    # HTML table with colored dots
-                    table_rows = []
-                    for e in mat_entries:
-                        b = next(
-                            x for x in st.session_state.bout_list
-                            if x["bout_num"] == e["bout_num"]
-                        )
-                        early_flag = "⏰🔥 EARLY 🔥⏰" if b["is_early"] else ""
-                        color_name1 = team_color_for_roster.get(b["w1_team"])
-                        color_name2 = team_color_for_roster.get(b["w2_team"])
-                        dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
-                        dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
-
-                        table_rows.append(
-                            f"<tr>"
-                            f"<td>{e['mat_bout_num']}</td>"
-                            f"<td>{b['bout_num']}</td>"
-                            f"<td>{early_flag}</td>"
-                            f"<td>{dot1}{b['w1_name']} ({b['w1_team']})</td>"
-                            f"<td>{dot2}{b['w2_name']} ({b['w2_team']})</td>"
-                            f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
-                            f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
-                            f"<td>{b['score']:.1f}</td>"
-                            f"</tr>"
-                        )
-
-                    table_html = (
-                        "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;'>"
-                        "<thead>"
-                        "<tr style='background:#f0f0f0;'>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Bout</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Early</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 1</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 2</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Lvls</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Wts</th>"
-                        "<th style='border:1px solid #ddd;padding:4px;'>Score</th>"
-                        "</tr>"
-                        "</thead>"
-                        "<tbody>"
-                        + "".join(table_rows) +
-                        "</tbody>"
-                        "</table>"
-                    )
-
-                    st.markdown(table_html, unsafe_allow_html=True)
-
-                    # Per-mat rest warnings for visible wrestlers
-                    mat_conflicts = [
-                        c for c in visible_conflicts if c["mat"] == mat
                     ]
-                    if mat_conflicts:
-                        st.markdown("**Rest warnings on this mat (filtered wrestlers):**")
-                        for c in mat_conflicts:
-                            st.markdown(
-                                f"- {c['wrestler']} ({c['team']}): "
-                                f"Bout {c['bout1']} (Slot {c['slot1']}) → "
-                                f"Bout {c['bout2']} (Slot {c['slot2']}) "
-                                f"(gap {c['gap']} < required {rest_gap})"
+                    mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
+                    with st.expander(mat_label, expanded=True):
+                        if not mat_entries:
+                            st.caption("No matches for the current filter on this mat.")
+                            continue
+
+                        # HTML table with colored dots
+                        table_rows = []
+                        for e in mat_entries:
+                            b = next(
+                                x for x in st.session_state.bout_list
+                                if x["bout_num"] == e["bout_num"]
+                            )
+                            early_flag = "⏰🔥 EARLY 🔥⏰" if b["is_early"] else ""
+                            color_name1 = team_color_for_roster.get(b["w1_team"])
+                            color_name2 = team_color_for_roster.get(b["w2_team"])
+                            dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
+                            dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
+
+                            table_rows.append(
+                                f"<tr>"
+                                f"<td>{e['mat_bout_num']}</td>"
+                                f"<td>{b['bout_num']}</td>"
+                                f"<td>{early_flag}</td>"
+                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']})</td>"
+                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']})</td>"
+                                f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
+                                f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
+                                f"<td>{b['score']:.1f}</td>"
+                                f"</tr>"
                             )
 
-            st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
-
-        # ---------- EDIT MODE (drag + per-mat remove) ----------
-        else:
-            for mat in range(1, CONFIG["NUM_MATS"] + 1):
-                mat_entries = [e for e in full_schedule if e["mat"] == mat]
-                mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
-                with st.expander(mat_label, expanded=True):
-                    if not mat_entries:
-                        st.caption("No bouts on this mat.")
-                        continue
-
-                    bout_nums_in_mat = [e["bout_num"] for e in mat_entries]
-                    existing_order = st.session_state.mat_order.get(mat)
-                    if not existing_order:
-                        st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
-                    else:
-                        cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
-                        for bn in bout_nums_in_mat:
-                            if bn not in cleaned:
-                                cleaned.append(bn)
-                        st.session_state.mat_order[mat] = cleaned
-
-                    prev_order = st.session_state.mat_order[mat].copy()
-
-                    # Legend for teams on this mat (HTML dots)
-                    teams_on_mat = set()
-                    for e in mat_entries:
-                        b_for_legend = next(
-                            x for x in st.session_state.bout_list
-                            if x["bout_num"] == e["bout_num"]
-                        )
-                        teams_on_mat.add(b_for_legend["w1_team"])
-                        teams_on_mat.add(b_for_legend["w2_team"])
-                    legend_bits = []
-                    for t in sorted(teams_on_mat):
-                        hex_color = TEAM_COLORS.get(t, "#000000")
-                        dot = color_dot_hex(hex_color)
-                        legend_bits.append(f"{dot}{t}")
-                    if legend_bits:
-                        legend_html = " ".join(legend_bits)
-                        st.markdown(
-                            f"<div style='margin-bottom:4px;font-size:0.8rem;'>Teams on this mat: {legend_html}</div>",
-                            unsafe_allow_html=True,
+                        table_html = (
+                            "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;'>"
+                            "<thead>"
+                            "<tr style='background:#f0f0f0;'>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Bout</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Early</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 1</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 2</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Lvls</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Wts</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Score</th>"
+                            "</tr>"
+                            "</thead>"
+                            "<tbody>"
+                            + "".join(table_rows) +
+                            "</tbody>"
+                            "</table>"
                         )
 
-                    # Build drag labels (plain text, circle emojis)
-                    row_labels = []
-                    label_to_bout = {}
-                    for bn in st.session_state.mat_order[mat]:
-                        if bn not in bout_nums_in_mat:
+                        st.markdown(table_html, unsafe_allow_html=True)
+
+                        # Per-mat rest warnings for visible wrestlers
+                        mat_conflicts = [
+                            c for c in visible_conflicts if c["mat"] == mat
+                        ]
+                        if mat_conflicts:
+                            st.markdown("**Rest warnings on this mat (filtered wrestlers):**")
+                            for c in mat_conflicts:
+                                st.markdown(
+                                    f"- {c['wrestler']} ({c['team']}): "
+                                    f"Bout {c['bout1']} (Slot {c['slot1']}) → "
+                                    f"Bout {c['bout2']} (Slot {c['slot2']}) "
+                                    f"(gap {c['gap']} < required {rest_gap})"
+                                )
+
+                st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
+
+            # ---------- EDIT MODE (drag + per-mat remove) ----------
+            else:
+                for mat in range(1, CONFIG["NUM_MATS"] + 1):
+                    mat_entries = [e for e in full_schedule if e["mat"] == mat]
+                    mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
+                    with st.expander(mat_label, expanded=True):
+                        if not mat_entries:
+                            st.caption("No bouts on this mat.")
                             continue
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-                        early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+                        bout_nums_in_mat = [e["bout_num"] for e in mat_entries]
+                        existing_order = st.session_state.mat_order.get(mat)
+                        if not existing_order:
+                            st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
+                        else:
+                            cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
+                            for bn in bout_nums_in_mat:
+                                if bn not in cleaned:
+                                    cleaned.append(bn)
+                            st.session_state.mat_order[mat] = cleaned
 
-                        color_name1 = team_color_for_roster.get(b["w1_team"])
-                        color_name2 = team_color_for_roster.get(b["w2_team"])
-                        icon1 = COLOR_ICON.get(color_name1, "●")
-                        icon2 = COLOR_ICON.get(color_name2, "●")
+                        prev_order = st.session_state.mat_order[mat].copy()
 
-                        label = (
-                            f"{early_prefix}"
-                            f"Bout {bn:>3} | "
-                            f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
-                            f"{icon2} {b['w2_name']} ({b['w2_team']})"
-                            f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
-                            f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                            f"  |  Score {b['score']:.1f}"
-                        )
-                        row_labels.append(label)
-                        label_to_bout[label] = bn
-
-                    sorted_labels = sort_items(
-                        row_labels,
-                        direction="vertical",
-                        key=f"mat_{mat}_sortable_v{st.session_state.sortable_version}",
-                        custom_style=SORTABLE_STYLE,
-                    )
-
-                    new_order = []
-                    for label in sorted_labels:
-                        bn = label_to_bout.get(label)
-                        if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
-                            new_order.append(bn)
-
-                    if new_order != prev_order:
-                        # Save snapshot of current mat_order for drag undo
-                        snapshot = {
-                            m: order.copy() for m, order in st.session_state.mat_order.items()
-                        }
-                        st.session_state.mat_order_history.append(snapshot)
-
-                        st.session_state.mat_order[mat] = new_order
-                        st.session_state.sortable_version += 1
-                        st.rerun()
-                    else:
-                        st.session_state.mat_order[mat] = new_order
-
-                    st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
-
-                    # Per-mat remove
-                    bout_label_map = {}
-                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                        if bn not in bout_nums_in_mat:
-                            continue
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
-                        bout_label_map[bn] = (
-                            f"Slot {idx2} – Bout {bn}: "
-                            f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
-                        )
-
-                    valid_bouts = list(bout_label_map.keys())
-                    if not valid_bouts:
-                        st.caption("No bouts left on this mat.")
-                    else:
-                        selected_bout = st.selectbox(
-                            "Remove bout on this mat:",
-                            options=valid_bouts,
-                            format_func=lambda v: bout_label_map[v],
-                            key=f"remove_select_mat_{mat}"
-                        )
-                        if st.button(
-                            "Remove selected bout",
-                            key=f"remove_button_mat_{mat}",
-                            help="Removes the selected bout from this meet (Undo available at bottom)."
-                        ):
-                            remove_bout(selected_bout)
-
-                    # Per-mat rest warnings (all wrestlers)
-                    mat_conflicts = [
-                        c for c in visible_conflicts if c["mat"] == mat
-                    ]
-                    if mat_conflicts:
-                        st.markdown("**Rest warnings on this mat:**")
-                        for c in mat_conflicts:
+                        # Legend for teams on this mat (HTML dots)
+                        teams_on_mat = set()
+                        for e in mat_entries:
+                            b_for_legend = next(
+                                x for x in st.session_state.bout_list
+                                if x["bout_num"] == e["bout_num"]
+                            )
+                            teams_on_mat.add(b_for_legend["w1_team"])
+                            teams_on_mat.add(b_for_legend["w2_team"])
+                        legend_bits = []
+                        for t in sorted(teams_on_mat):
+                            hex_color = TEAM_COLORS.get(t, "#000000")
+                            dot = color_dot_hex(hex_color)
+                            legend_bits.append(f"{dot}{t}")
+                        if legend_bits:
+                            legend_html = " ".join(legend_bits)
                             st.markdown(
-                                f"- {c['wrestler']} ({c['team']}): "
-                                f"Bout {c['bout1']} (Slot {c['slot1']}) → "
-                                f"Bout {c['bout2']} (Slot {c['slot2']}) "
-                                f"(gap {c['gap']} < required {rest_gap})"
+                                f"<div style='margin-bottom:4px;font-size:0.8rem;'>Teams on this mat: {legend_html}</div>",
+                                unsafe_allow_html=True,
                             )
 
-    # ----- Undo -----
-    st.markdown("---")
-    col_undo_remove, col_undo_drag = st.columns(2)
-    with col_undo_remove:
-        if st.session_state.undo_stack:
-            if st.button("Undo Last Remove", help="Restore last removed match"):
-                undo_last()
-        else:
-            st.caption("No removals yet to undo.")
-    with col_undo_drag:
-        if st.session_state.mat_order_history:
-            if st.button("Undo Last Drag / Reorder", help="Undo last drag change to mat order"):
-                undo_last_drag()
-        else:
-            st.caption("No drag changes yet to undo.")
+                        # Build drag labels (plain text, circle emojis)
+                        row_labels = []
+                        label_to_bout = {}
+                        for bn in st.session_state.mat_order[mat]:
+                            if bn not in bout_nums_in_mat:
+                                continue
+                            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-    # ---- GENERATE MEET ----
-    if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
-        with st.spinner("Generating files..."):
-            try:
-                final_sched = apply_mat_order_to_global_schedule()
-                st.session_state.mat_schedules = final_sched
+                            early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
 
-                # Excel
-                out = io.BytesIO()
-                with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    roster_df = pd.DataFrame(st.session_state.active)
-                    roster_df.to_excel(writer, sheet_name='Roster', index=False)
+                            color_name1 = team_color_for_roster.get(b["w1_team"])
+                            color_name2 = team_color_for_roster.get(b["w2_team"])
+                            icon1 = COLOR_ICON.get(color_name1, "●")
+                            icon2 = COLOR_ICON.get(color_name2, "●")
 
-                    matchups_df = pd.DataFrame(st.session_state.bout_list)
-                    matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
+                            label = (
+                                f"{early_prefix}"
+                                f"Bout {bn:>3} | "
+                                f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']})"
+                                f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
+                                f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                                f"  |  Score {b['score']:.1f}"
+                            )
+                            row_labels.append(label)
+                            label_to_bout[label] = bn
 
-                    suggestions_df = pd.DataFrame(st.session_state.suggestions)
-                    suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
+                        sorted_labels = sort_items(
+                            row_labels,
+                            direction="vertical",
+                            key=f"mat_{mat}_sortable_v{st.session_state.sortable_version}",
+                            custom_style=SORTABLE_STYLE,
+                        )
 
+                        new_order = []
+                        for label in sorted_labels:
+                            bn = label_to_bout.get(label)
+                            if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
+                                new_order.append(bn)
+
+                        if new_order != prev_order:
+                            # Save snapshot of current mat_order for drag undo
+                            snapshot = {
+                                m: order.copy() for m, order in st.session_state.mat_order.items()
+                            }
+                            st.session_state.mat_order_history.append(snapshot)
+
+                            st.session_state.mat_order[mat] = new_order
+                            st.session_state.sortable_version += 1
+                            st.rerun()
+                        else:
+                            st.session_state.mat_order[mat] = new_order
+
+                        st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
+
+                        # Per-mat remove
+                        bout_label_map = {}
+                        for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                            if bn not in bout_nums_in_mat:
+                                continue
+                            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                            bout_label_map[bn] = (
+                                f"Slot {idx2} – Bout {bn}: "
+                                f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
+                            )
+
+                        valid_bouts = list(bout_label_map.keys())
+                        if not valid_bouts:
+                            st.caption("No bouts left on this mat.")
+                        else:
+                            selected_bout = st.selectbox(
+                                "Remove bout on this mat:",
+                                options=valid_bouts,
+                                format_func=lambda v: bout_label_map[v],
+                                key=f"remove_select_mat_{mat}"
+                            )
+                            if st.button(
+                                "Remove selected bout",
+                                key=f"remove_button_mat_{mat}",
+                                help="Removes the selected bout from this meet (Undo available at bottom)."
+                            ):
+                                remove_bout(selected_bout)
+
+                        # Per-mat rest warnings (all wrestlers)
+                        mat_conflicts = [
+                            c for c in visible_conflicts if c["mat"] == mat
+                        ]
+                        if mat_conflicts:
+                            st.markdown("**Rest warnings on this mat:**")
+                            for c in mat_conflicts:
+                                st.markdown(
+                                    f"- {c['wrestler']} ({c['team']}): "
+                                    f"Bout {c['bout1']} (Slot {c['slot1']}) → "
+                                    f"Bout {c['bout2']} (Slot {c['slot2']}) "
+                                    f"(gap {c['gap']} < required {rest_gap})"
+                                )
+
+        # ----- Undo -----
+        st.markdown("---")
+        col_undo_remove, col_undo_drag = st.columns(2)
+        with col_undo_remove:
+            if st.session_state.undo_stack:
+                if st.button("Undo Last Remove", help="Restore last removed match"):
+                    undo_last()
+            else:
+                st.caption("No removals yet to undo.")
+        with col_undo_drag:
+            if st.session_state.mat_order_history:
+                if st.button("Undo Last Drag / Reorder", help="Undo last drag change to mat order"):
+                    undo_last_drag()
+            else:
+                st.caption("No drag changes yet to undo.")
+
+        # ---- GENERATE MEET ----
+        if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
+            with st.spinner("Generating files..."):
+                try:
+                    final_sched = apply_mat_order_to_global_schedule()
+                    st.session_state.mat_schedules = final_sched
+
+                    # Excel
+                    out = io.BytesIO()
+                    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                        roster_df = pd.DataFrame(st.session_state.active)
+                        roster_df.to_excel(writer, sheet_name='Roster', index=False)
+
+                        matchups_df = pd.DataFrame(st.session_state.bout_list)
+                        matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
+
+                        suggestions_df = pd.DataFrame(st.session_state.suggestions)
+                        suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
+
+                        for m in range(1, CONFIG["NUM_MATS"] + 1):
+                            data = [e for e in final_sched if e["mat"] == m]
+                            if not data:
+                                pd.DataFrame(
+                                    [["", "", ""]],
+                                    columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
+                                ).to_excel(writer, f"Mat {m}", index=False)
+                                continue
+                            df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
+                            df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
+                            df.to_excel(writer, f"Mat {m}", index=False)
+                            if _EXCEL_AVAILABLE:
+                                ws = writer.book[f"Mat {m}"]
+                                fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                                for i, _ in df.iterrows():
+                                    if next(
+                                        b for b in st.session_state.bout_list
+                                        if b["bout_num"] == data[i]["bout_num"]
+                                    )["is_early"]:
+                                        for c in range(1, 4):
+                                            ws.cell(row=i + 2, column=c).fill = fill
+
+                    st.session_state.excel_bytes = out.getvalue()
+
+                    # PDF
+                    buf = io.BytesIO()
+                    doc = SimpleDocTemplate(buf, pagesize=letter)
+                    elements = []
+                    styles = getSampleStyleSheet()
                     for m in range(1, CONFIG["NUM_MATS"] + 1):
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
-                            pd.DataFrame(
-                                [["", "", ""]],
-                                columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
-                            ).to_excel(writer, f"Mat {m}", index=False)
+                            elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
+                            elements.append(PageBreak())
                             continue
-                        df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
-                        df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
-                        df.to_excel(writer, f"Mat {m}", index=False)
-                        if _EXCEL_AVAILABLE:
-                            ws = writer.book[f"Mat {m}"]
-                            fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-                            for i, _ in df.iterrows():
-                                if next(
-                                    b for b in st.session_state.bout_list
-                                    if b["bout_num"] == data[i]["bout_num"]
-                                )["is_early"]:
-                                    for c in range(1, 4):
-                                        ws.cell(row=i + 2, column=c).fill = fill
-
-                st.session_state.excel_bytes = out.getvalue()
-
-                # PDF
-                buf = io.BytesIO()
-                doc = SimpleDocTemplate(buf, pagesize=letter)
-                elements = []
-                styles = getSampleStyleSheet()
-                for m in range(1, CONFIG["NUM_MATS"] + 1):
-                    data = [e for e in final_sched if e["mat"] == m]
-                    if not data:
-                        elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
-                        elements.append(PageBreak())
-                        continue
-                    table = [["#", "Wrestler 1", "Wrestler 2"]]
-                    for e in data:
-                        b = next(
-                            x for x in st.session_state.bout_list
-                            if x["bout_num"] == e["bout_num"]
-                        )
-                        table.append([
-                            e["mat_bout_num"],
-                            Paragraph(
-                                f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}">'
-                                f'<b>{b["w1_name"]}</b></font> ({b["w1_team"]})',
-                                styles["Normal"]
-                            ),
-                            Paragraph(
-                                f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}">'
-                                f'<b>{b["w2_name"]}</b></font> ({b["w2_team"]})',
-                                styles["Normal"]
+                        table = [["#", "Wrestler 1", "Wrestler 2"]]
+                        for e in data:
+                            b = next(
+                                x for x in st.session_state.bout_list
+                                if x["bout_num"] == e["bout_num"]
                             )
+                            table.append([
+                                e["mat_bout_num"],
+                                Paragraph(
+                                    f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}">'
+                                    f'<b>{b["w1_name"]}</b></font> ({b["w1_team"]})',
+                                    styles["Normal"]
+                                ),
+                                Paragraph(
+                                    f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}">'
+                                    f'<b>{b["w2_name"]}</b></font> ({b["w2_team"]})',
+                                    styles["Normal"]
+                                )
+                            ])
+                        t = Table(table, colWidths=[0.5 * inch, 3 * inch, 3 * inch])
+                        s = TableStyle([
+                            ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
+                            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
                         ])
-                    t = Table(table, colWidths=[0.5 * inch, 3 * inch, 3 * inch])
-                    s = TableStyle([
-                        ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
-                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                        ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
-                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-                    ])
-                    for r, _ in enumerate(table[1:], 1):
-                        if next(
-                            b for b in st.session_state.bout_list
-                            if b["bout_num"] == data[r - 1]["bout_num"]
-                        )["is_early"]:
-                            s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
-                    t.setStyle(s)
-                    elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
-                    if m < CONFIG["NUM_MATS"]:
-                        elements.append(PageBreak())
-                doc.build(elements)
-                st.session_state.pdf_bytes = buf.getvalue()
-                st.toast("Files generated!")
-            except Exception as e:
-                st.error(f"Generation failed: {e}")
-                st.toast("Error – check console.")
+                        for r, _ in enumerate(table[1:], 1):
+                            if next(
+                                b for b in st.session_state.bout_list
+                                if b["bout_num"] == data[r - 1]["bout_num"]
+                            )["is_early"]:
+                                s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
+                        t.setStyle(s)
+                        elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
+                        if m < CONFIG["NUM_MATS"]:
+                            elements.append(PageBreak())
+                    doc.build(elements)
+                    st.session_state.pdf_bytes = buf.getvalue()
+                    st.toast("Files generated!")
+                except Exception as e:
+                    st.error(f"Generation failed: {e}")
+                    st.toast("Error – check console.")
 
-    col_ex, col_pdf = st.columns(2)
-    with col_ex:
-        if st.session_state.excel_bytes is not None:
-            st.download_button(
-                label="Download Excel",
-                data=st.session_state.excel_bytes,
-                file_name="meet_schedule.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+        col_ex, col_pdf = st.columns(2)
+        with col_ex:
+            if st.session_state.excel_bytes is not None:
+                st.download_button(
+                    label="Download Excel",
+                    data=st.session_state.excel_bytes,
+                    file_name="meet_schedule.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        with col_pdf:
+            if st.session_state.pdf_bytes is not None:
+                st.download_button(
+                    label="Download PDF",
+                    data=st.session_state.pdf_bytes,
+                    file_name="meet_schedule.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+    # ------------------------------------------------------------------
+    # TAB 2: Meet Summary (read-only)
+    # ------------------------------------------------------------------
+    with tab_summary:
+        if not full_schedule:
+            st.caption("No bouts scheduled yet.")
+        else:
+            total_bouts = len({e["bout_num"] for e in full_schedule})
+            total_mats = CONFIG["NUM_MATS"]
+            total_wrestlers = len(raw_active)
+            early_count = sum(
+                1 for b in st.session_state.bout_list
+                if b.get("manual") != "Manually Removed" and b["is_early"]
             )
-    with col_pdf:
-        if st.session_state.pdf_bytes is not None:
-            st.download_button(
-                label="Download PDF",
-                data=st.session_state.pdf_bytes,
-                file_name="meet_schedule.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+
+            st.markdown("### Meet Summary")
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Wrestlers (active)", total_wrestlers)
+            c2.metric("Total Bouts", total_bouts)
+            c3.metric("Early Matches", early_count)
+            c4.metric("Rest Conflicts", len(conflicts_all))
+
+            # Per-mat breakdown
+            mat_rows = []
+            for m in range(1, total_mats + 1):
+                mat_entries = [e for e in full_schedule if e["mat"] == m]
+                if not mat_entries:
+                    mat_rows.append({"Mat": m, "# Bouts": 0, "# Wrestlers": 0})
+                    continue
+
+                bout_nums = {e["bout_num"] for e in mat_entries}
+                wrestlers_on_mat = set()
+                for bn in bout_nums:
+                    b = next(bb for bb in st.session_state.bout_list if bb["bout_num"] == bn)
+                    wrestlers_on_mat.add(b["w1_name"])
+                    wrestlers_on_mat.add(b["w2_name"])
+
+                mat_rows.append({
+                    "Mat": m,
+                    "# Bouts": len(bout_nums),
+                    "# Wrestlers": len(wrestlers_on_mat)
+                })
+
+            st.markdown("#### Per-mat overview")
+            st.dataframe(pd.DataFrame(mat_rows), use_container_width=True)
+
+            # Rest-conflict detail (compact)
+            if conflicts_all:
+                st.markdown("#### Rest-gap issues (all wrestlers)")
+                conflict_rows = []
+                for c in conflicts_all:
+                    conflict_rows.append({
+                        "Wrestler": c["wrestler"],
+                        "Team": c["team"],
+                        "Mat": c["mat"],
+                        "From Bout (Slot)": f"{c['bout1']} ({c['slot1']})",
+                        "To Bout (Slot)": f"{c['bout2']} ({c['slot2']})",
+                        "Gap": c["gap"],
+                    })
+                st.dataframe(pd.DataFrame(conflict_rows), use_container_width=True)
+            else:
+                st.caption("No rest-gap issues detected for this meet.")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
