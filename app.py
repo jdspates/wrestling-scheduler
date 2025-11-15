@@ -27,28 +27,30 @@ except Exception:
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 
-# 20-color palette
+# 9-color palette that matches circle emojis
 COLOR_MAP = {
     "red": "#FF0000",
     "orange": "#FF7F00",
     "yellow": "#FFD700",
-    "lime": "#32CD32",
     "green": "#008000",
-    "teal": "#008080",
-    "cyan": "#00B7EB",
-    "light_blue": "#87CEFA",
     "blue": "#0000FF",
-    "navy": "#000080",
     "purple": "#800080",
-    "magenta": "#FF00FF",
-    "pink": "#FFC0CB",
-    "maroon": "#800000",
     "brown": "#8B4513",
-    "tan": "#D2B48C",
-    "gray": "#808080",
-    "silver": "#C0C0C0",
     "black": "#000000",
-    "white": "#FFFFFF"
+    "white": "#FFFFFF",
+}
+
+# Circle emojis – one per color, no duplicates
+COLOR_ICON = {
+    "red": "🔴",
+    "orange": "🟠",
+    "yellow": "🟡",
+    "green": "🟢",
+    "blue": "🔵",
+    "purple": "🟣",
+    "brown": "🟤",
+    "black": "⚫",
+    "white": "⚪",
 }
 
 DEFAULT_CONFIG = {
@@ -443,7 +445,7 @@ def compute_rest_conflicts(schedule, min_gap):
 # HELPERS
 # ----------------------------------------------------------------------
 def color_dot_hex(hex_color: str) -> str:
-    """Return a small HTML circle for the given hex color."""
+    """Return a small HTML circle for the given hex color (for legends / HTML tables)."""
     if not hex_color:
         return ""
     return (
@@ -643,14 +645,20 @@ if new_min > new_max:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Team Names & Colors")
+circle_color_names = list(COLOR_ICON.keys())
 for i in range(5):
     team = TEAMS[i]
     st.sidebar.markdown(f"**Team {i+1}**")
     new_name = st.sidebar.text_input("Name", team["name"], key=f"name_{i}", label_visibility="collapsed")
+    # Make sure index is valid even if config color isn't in COLOR_ICON
+    try:
+        default_idx = circle_color_names.index(team["color"])
+    except ValueError:
+        default_idx = 0
     new_color = st.sidebar.selectbox(
-        "Color", list(COLOR_MAP.keys()),
-        index=list(COLOR_MAP.keys()).index(team["color"]) if team["color"] in COLOR_MAP else 0,
-        format_func=lambda x: x.replace("_", " ").title(),
+        "Color", circle_color_names,
+        index=default_idx,
+        format_func=lambda x: x.capitalize(),
         key=f"color_{i}", label_visibility="collapsed"
     )
     if new_name != team["name"]:
@@ -697,9 +705,9 @@ if st.session_state.initialized:
     raw_active = st.session_state.active
     roster = st.session_state.roster
 
-    # Map each roster team to a color name (for HTML dots)
+    # Map each roster team to a color name (for icons + HTML)
     roster_teams = sorted({w["team"] for w in roster})
-    palette = list(COLOR_MAP.keys())
+    palette = circle_color_names
     team_color_for_roster = {}
 
     # First, use explicit config team colors
@@ -1033,7 +1041,7 @@ if st.session_state.initialized:
                 (b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids)
             )
 
-        # ---------- SEARCH MODE (read-only) ----------
+        # ---------- SEARCH MODE (read-only, HTML table) ----------
         if search_term.strip():
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
@@ -1051,7 +1059,7 @@ if st.session_state.initialized:
                         st.caption("No matches for the current filter on this mat.")
                         continue
 
-                    # HTML table with real color dots
+                    # HTML table with colored dots
                     table_rows = []
                     for e in mat_entries:
                         b = next(
@@ -1138,6 +1146,28 @@ if st.session_state.initialized:
 
                     prev_order = st.session_state.mat_order[mat].copy()
 
+                    # Legend for teams on this mat (HTML dots)
+                    teams_on_mat = set()
+                    for e in mat_entries:
+                        b_for_legend = next(
+                            x for x in st.session_state.bout_list
+                            if x["bout_num"] == e["bout_num"]
+                        )
+                        teams_on_mat.add(b_for_legend["w1_team"])
+                        teams_on_mat.add(b_for_legend["w2_team"])
+                    legend_bits = []
+                    for t in sorted(teams_on_mat):
+                        hex_color = TEAM_COLORS.get(t, "#000000")
+                        dot = color_dot_hex(hex_color)
+                        legend_bits.append(f"{dot}{t}")
+                    if legend_bits:
+                        legend_html = " ".join(legend_bits)
+                        st.markdown(
+                            f"<div style='margin-bottom:4px;font-size:0.8rem;'>Teams on this mat: {legend_html}</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    # Build drag labels (plain text, circle emojis)
                     row_labels = []
                     label_to_bout = {}
                     for bn in st.session_state.mat_order[mat]:
@@ -1146,18 +1176,17 @@ if st.session_state.initialized:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
                         early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+
                         color_name1 = team_color_for_roster.get(b["w1_team"])
                         color_name2 = team_color_for_roster.get(b["w2_team"])
-                        hex1 = COLOR_MAP.get(color_name1, "#000000") if color_name1 else "#000000"
-                        hex2 = COLOR_MAP.get(color_name2, "#000000") if color_name2 else "#000000"
-                        dot1 = color_dot_hex(hex1)
-                        dot2 = color_dot_hex(hex2)
+                        icon1 = COLOR_ICON.get(color_name1, "●")
+                        icon2 = COLOR_ICON.get(color_name2, "●")
 
                         label = (
                             f"{early_prefix}"
                             f"Bout {bn:>3} | "
-                            f"{dot1}{b['w1_name']} ({b['w1_team']})  vs  "
-                            f"{dot2}{b['w2_name']} ({b['w2_team']})"
+                            f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
+                            f"{icon2} {b['w2_name']} ({b['w2_team']})"
                             f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                             f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
                             f"  |  Score {b['score']:.1f}"
