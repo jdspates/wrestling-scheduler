@@ -120,8 +120,10 @@ def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
 
 def matchup_score(w1, w2):
-    return round(abs(w1["weight"] - w2["weight"]) +
-                 abs(w1["level"] - w2["level"]) * 10, 1)
+    return round(
+        abs(w1["weight"] - w2["weight"]) +
+        abs(w1["level"] - w2["level"]) * 10, 1
+    )
 
 def generate_initial_matchups(active):
     bouts = set()
@@ -713,10 +715,10 @@ if st.session_state.initialized:
             # Build labels for sortable list
             row_labels = []
             label_to_bout = {}
-            for idx, bn in enumerate(st.session_state.mat_order[mat]):
+            for idx2, bn in enumerate(st.session_state.mat_order[mat]):
                 if bn not in bout_nums_in_mat:
                     continue
-                slot = idx + 1
+                slot = idx2 + 1
                 b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
                 color_name1 = team_color_for_roster.get(b["w1_team"])
@@ -738,6 +740,7 @@ if st.session_state.initialized:
 
             drag_col, remove_col = st.columns([0.8, 0.2])
 
+            # LEFT: draggable list
             with drag_col:
                 sorted_labels = sort_items(
                     row_labels,
@@ -754,20 +757,20 @@ if st.session_state.initialized:
                     new_order.append(bn)
             st.session_state.mat_order[mat] = new_order
 
+            # RIGHT: aligned remove buttons (one per row, same order)
             with remove_col:
-                st.caption("Remove bout:")
-                for idx, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
                     if bn not in bout_nums_in_mat:
                         continue
                     st.button(
                         f"X {bn}",
-                        key=f"rm_{mat}_{bn}_{idx}",
+                        key=f"rm_{mat}_{bn}_{idx2}",
                         on_click=remove_bout,
                         args=(bn,),
                         help=f"Remove bout {bn} from this meet (Undo at bottom)",
                     )
 
-            st.caption("Drag left list to change order. Right column removes a bout.")
+            st.caption("Drag rows on the left to change order. Use X buttons to remove bouts.")
 
     # ----- Undo control -----
     st.markdown("---")
