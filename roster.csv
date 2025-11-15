@@ -1,2 +1,2 @@
 id,name,team,grade,level,weight,early_matches,scratch
-"(Remove this row - For early_match and scratch use ""Y"" or ""N"".)",,,,,,,
+"(Remove this row: ID should start with 1 and increment for each wrestler.   early_match and scratch use ""Y"" or ""N"".)",,,,,,,
