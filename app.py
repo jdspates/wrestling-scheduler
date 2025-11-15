@@ -1,10 +1,10 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (fixed add + remove visibility)
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (sortable refresh)
 import streamlit as st
 import pandas as pd
 import io
 import random
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
+from reportlab.plplatypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -112,6 +112,10 @@ for key in ["initialized", "bout_list", "mat_schedules", "suggestions",
             st.session_state[key] = {}
         else:
             st.session_state[key] = None
+
+# NEW: version bump for sortable widgets
+if "sortable_version" not in st.session_state:
+    st.session_state.sortable_version = 0
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -375,6 +379,10 @@ def remove_bout(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+
+    # bump sortable version so mat previews refresh
+    st.session_state.sortable_version += 1
+
     st.rerun()
 
 def undo_last():
@@ -397,6 +405,9 @@ def undo_last():
         st.success("Undo successful!")
         st.session_state.excel_bytes = None
         st.session_state.pdf_bytes = None
+
+        # bump sortable version so mat previews refresh
+        st.session_state.sortable_version += 1
     st.rerun()
 
 # ----------------------------------------------------------------------
@@ -690,6 +701,10 @@ if st.session_state.initialized:
             st.success("Matches added! Early matches placed at the top of their mat.")
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
+
+            # bump sortable version so mats refresh
+            st.session_state.sortable_version += 1
+
             st.rerun()
     else:
         st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
@@ -791,7 +806,7 @@ if st.session_state.initialized:
                     sorted_labels = sort_items(
                         row_labels,
                         direction="vertical",
-                        key=f"mat_{mat}_sortable",
+                        key=f"mat_{mat}_sortable_v{st.session_state.sortable_version}",  # include version
                         custom_style=SORTABLE_STYLE,
                     )
 
