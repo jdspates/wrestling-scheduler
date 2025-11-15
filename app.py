@@ -26,11 +26,31 @@ except Exception:
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
+
+# 20-color palette
 COLOR_MAP = {
-    "red": "#FF0000", "blue": "#0000FF", "green": "#008000",
-    "yellow": "#FFD700", "black": "#000000", "white": "#FFFFFF",
-    "purple": "#800080", "orange": "#FFA500"
+    "red": "#FF0000",
+    "orange": "#FF7F00",
+    "yellow": "#FFD700",
+    "lime": "#32CD32",
+    "green": "#008000",
+    "teal": "#008080",
+    "cyan": "#00B7EB",
+    "light_blue": "#87CEFA",
+    "blue": "#0000FF",
+    "navy": "#000080",
+    "purple": "#800080",
+    "magenta": "#FF00FF",
+    "pink": "#FFC0CB",
+    "maroon": "#800000",
+    "brown": "#8B4513",
+    "tan": "#D2B48C",
+    "gray": "#808080",
+    "silver": "#C0C0C0",
+    "black": "#000000",
+    "white": "#FFFFFF"
 }
+
 DEFAULT_CONFIG = {
     "MIN_MATCHES": 2,
     "MAX_MATCHES": 4,
@@ -121,7 +141,7 @@ for key in [
     if key not in st.session_state:
         if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
             st.session_state[key] = []
-        elif key in ["mat_order"]:
+        elif key == "mat_order":
             st.session_state[key] = {}
         elif key in ["roster", "mat_order_history"]:
             st.session_state[key] = []
@@ -422,6 +442,15 @@ def compute_rest_conflicts(schedule, min_gap):
 # ----------------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------------
+def color_dot_hex(hex_color: str) -> str:
+    """Return a small HTML circle for the given hex color."""
+    if not hex_color:
+        return ""
+    return (
+        "<span style='display:inline-block;width:12px;height:12px;"
+        f"border-radius:50%;background:{hex_color};margin-right:6px;'></span>"
+    )
+
 def remove_bout(bout_num: int):
     """Mark bout as manually removed, update wrestler match_ids, trim from mat_order."""
     try:
@@ -445,7 +474,7 @@ def remove_bout(bout_num: int):
         if bout_num in order:
             order.remove(bout_num)
 
-    # Removing a bout fundamentally changes mat layout; clear drag history
+    # removing a bout changes layout; clear drag history
     st.session_state.mat_order_history = []
 
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -484,7 +513,6 @@ def undo_last_drag():
     """Undo the last drag-based reorder across mats."""
     history = st.session_state.get("mat_order_history", [])
     if history:
-        # Restore last snapshot
         last_snapshot = history.pop()
         st.session_state.mat_order = last_snapshot
         st.session_state.excel_bytes = None
@@ -621,8 +649,8 @@ for i in range(5):
     new_name = st.sidebar.text_input("Name", team["name"], key=f"name_{i}", label_visibility="collapsed")
     new_color = st.sidebar.selectbox(
         "Color", list(COLOR_MAP.keys()),
-        index=list(COLOR_MAP.keys()).index(team["color"]),
-        format_func=lambda x: x.capitalize(),
+        index=list(COLOR_MAP.keys()).index(team["color"]) if team["color"] in COLOR_MAP else 0,
+        format_func=lambda x: x.replace("_", " ").title(),
         key=f"color_{i}", label_visibility="collapsed"
     )
     if new_name != team["name"]:
@@ -659,19 +687,8 @@ if changed:
     st.sidebar.success("Settings updated for this session. Refresh to apply.")
     st.rerun()
 
-TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
+TEAM_COLORS = {t["name"]: COLOR_MAP.get(t["color"], "#000000") for t in TEAMS if t["name"]}
 TEAM_COLOR_NAMES = {t["name"]: t["color"] for t in TEAMS if t["name"]}
-
-COLOR_EMOJI = {
-    "red": "🟥",
-    "blue": "🟦",
-    "green": "🟩",
-    "yellow": "🟨",
-    "black": "⬛",
-    "white": "⬜",
-    "purple": "🟪",
-    "orange": "🟧",
-}
 
 # ----------------------------------------------------------------------
 # MAIN APP – SCRATCHES + SEARCH + MATS
@@ -680,11 +697,12 @@ if st.session_state.initialized:
     raw_active = st.session_state.active
     roster = st.session_state.roster
 
-    # Map each roster team to an emoji color
+    # Map each roster team to a color name (for HTML dots)
     roster_teams = sorted({w["team"] for w in roster})
-    palette = list(COLOR_EMOJI.keys())
+    palette = list(COLOR_MAP.keys())
     team_color_for_roster = {}
 
+    # First, use explicit config team colors
     for team in roster_teams:
         cfg_color = TEAM_COLOR_NAMES.get(team)
         if cfg_color:
@@ -760,11 +778,10 @@ if st.session_state.initialized:
     # ----- Manual Match Creator -----
     st.subheader("Manual Match Creator")
 
-    # Show any stored manual-match warning (e.g., duplicate matchups) from last run
+    # Show any stored manual-match warning from last run
     manual_warning = st.session_state.get("manual_match_warning")
     if manual_warning:
         st.warning(manual_warning)
-        # Clear it so it only shows once
         st.session_state.manual_match_warning = ""
 
     active_ids = [w["id"] for w in raw_active]
@@ -1016,8 +1033,8 @@ if st.session_state.initialized:
                 (b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids)
             )
 
+        # ---------- SEARCH MODE (read-only) ----------
         if search_term.strip():
-            # READ-ONLY PREVIEW
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
@@ -1028,36 +1045,59 @@ if st.session_state.initialized:
                         )
                     )
                 ]
-                with st.expander(f"Mat {mat}", expanded=True):
-                    match_count = len(mat_entries)
-                    st.caption(
-                        f"{match_count} match{'es' if match_count != 1 else ''} "
-                        "in this mat preview."
-                    )
+                mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
+                with st.expander(mat_label, expanded=True):
                     if not mat_entries:
                         st.caption("No matches for the current filter on this mat.")
                         continue
 
-                    rows = []
+                    # HTML table with real color dots
+                    table_rows = []
                     for e in mat_entries:
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+                        b = next(
+                            x for x in st.session_state.bout_list
+                            if x["bout_num"] == e["bout_num"]
+                        )
+                        early_flag = "⏰🔥 EARLY 🔥⏰" if b["is_early"] else ""
                         color_name1 = team_color_for_roster.get(b["w1_team"])
                         color_name2 = team_color_for_roster.get(b["w2_team"])
-                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
-                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        early_flag = "⏰🔥 EARLY 🔥⏰" if b["is_early"] else ""
-                        rows.append({
-                            "Slot": e["mat_bout_num"],
-                            "Bout": b["bout_num"],
-                            "Early": early_flag,
-                            "Wrestler 1": f"{emoji1} {b['w1_name']} ({b['w1_team']})",
-                            "Wrestler 2": f"{emoji2} {b['w2_name']} ({b['w2_team']})",
-                            "Lvls": f"{b['w1_level']:.1f}/{b['w2_level']:.1f}",
-                            "Wts": f"{b['w1_weight']:.0f}/{b['w2_weight']:.0f}",
-                            "Score": f"{b['score']:.1f}",
-                        })
-                    df_mat = pd.DataFrame(rows)
-                    st.dataframe(df_mat, use_container_width=True, hide_index=True)
+                        dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
+                        dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
+
+                        table_rows.append(
+                            f"<tr>"
+                            f"<td>{e['mat_bout_num']}</td>"
+                            f"<td>{b['bout_num']}</td>"
+                            f"<td>{early_flag}</td>"
+                            f"<td>{dot1}{b['w1_name']} ({b['w1_team']})</td>"
+                            f"<td>{dot2}{b['w2_name']} ({b['w2_team']})</td>"
+                            f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
+                            f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
+                            f"<td>{b['score']:.1f}</td>"
+                            f"</tr>"
+                        )
+
+                    table_html = (
+                        "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;'>"
+                        "<thead>"
+                        "<tr style='background:#f0f0f0;'>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Bout</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Early</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 1</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 2</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Lvls</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Wts</th>"
+                        "<th style='border:1px solid #ddd;padding:4px;'>Score</th>"
+                        "</tr>"
+                        "</thead>"
+                        "<tbody>"
+                        + "".join(table_rows) +
+                        "</tbody>"
+                        "</table>"
+                    )
+
+                    st.markdown(table_html, unsafe_allow_html=True)
 
                     # Per-mat rest warnings for visible wrestlers
                     mat_conflicts = [
@@ -1074,16 +1114,13 @@ if st.session_state.initialized:
                             )
 
             st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
+
+        # ---------- EDIT MODE (drag + per-mat remove) ----------
         else:
-            # EDIT MODE: drag + per-mat remove
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [e for e in full_schedule if e["mat"] == mat]
-                with st.expander(f"Mat {mat}", expanded=True):
-                    match_count = len(mat_entries)
-                    st.caption(
-                        f"{match_count} match{'es' if match_count != 1 else ''} "
-                        "scheduled on this mat."
-                    )
+                mat_label = f"Mat {mat} ({len(mat_entries)} matches)"
+                with st.expander(mat_label, expanded=True):
                     if not mat_entries:
                         st.caption("No bouts on this mat.")
                         continue
@@ -1100,29 +1137,27 @@ if st.session_state.initialized:
                         st.session_state.mat_order[mat] = cleaned
 
                     prev_order = st.session_state.mat_order[mat].copy()
-                    # global snapshot of mat_order before applying any change for this mat
-                    mat_order_before = copy.deepcopy(st.session_state.mat_order)
 
                     row_labels = []
                     label_to_bout = {}
-                    # >>> Here we include dynamic Slot numbers in the draggable label <<<
-                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                    for bn in st.session_state.mat_order[mat]:
                         if bn not in bout_nums_in_mat:
                             continue
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
+                        early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
                         color_name1 = team_color_for_roster.get(b["w1_team"])
                         color_name2 = team_color_for_roster.get(b["w2_team"])
-                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
-                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+                        hex1 = COLOR_MAP.get(color_name1, "#000000") if color_name1 else "#000000"
+                        hex2 = COLOR_MAP.get(color_name2, "#000000") if color_name2 else "#000000"
+                        dot1 = color_dot_hex(hex1)
+                        dot2 = color_dot_hex(hex2)
 
                         label = (
-                            f"Slot {idx2:>2} | "
                             f"{early_prefix}"
                             f"Bout {bn:>3} | "
-                            f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
-                            f"{emoji2} {b['w2_name']} ({b['w2_team']})"
+                            f"{dot1}{b['w1_name']} ({b['w1_team']})  vs  "
+                            f"{dot2}{b['w2_name']} ({b['w2_team']})"
                             f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                             f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
                             f"  |  Score {b['score']:.1f}"
@@ -1144,8 +1179,12 @@ if st.session_state.initialized:
                             new_order.append(bn)
 
                     if new_order != prev_order:
-                        # record previous mat_order snapshot for drag undo
-                        st.session_state.mat_order_history.append(mat_order_before)
+                        # Save snapshot of current mat_order for drag undo
+                        snapshot = {
+                            m: order.copy() for m, order in st.session_state.mat_order.items()
+                        }
+                        st.session_state.mat_order_history.append(snapshot)
+
                         st.session_state.mat_order[mat] = new_order
                         st.session_state.sortable_version += 1
                         st.rerun()
@@ -1207,10 +1246,10 @@ if st.session_state.initialized:
             st.caption("No removals yet to undo.")
     with col_undo_drag:
         if st.session_state.mat_order_history:
-            if st.button("Undo Last Drag/Reorder", help="Restore previous mat order before last drag action"):
+            if st.button("Undo Last Drag / Reorder", help="Undo last drag change to mat order"):
                 undo_last_drag()
         else:
-            st.caption("No drags yet to undo.")
+            st.caption("No drag changes yet to undo.")
 
     # ---- GENERATE MEET ----
     if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
