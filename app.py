@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early highlight
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early emoji
 import streamlit as st
 import pandas as pd
 import io
@@ -727,7 +727,7 @@ if st.session_state.initialized:
             )
 
         if search_term.strip():
-            # READ-ONLY PREVIEW WITH YELLOW HIGHLIGHT FOR EARLY
+            # READ-ONLY PREVIEW (one list per mat, no duplication)
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
@@ -749,23 +749,19 @@ if st.session_state.initialized:
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        bg = "#fff9c4" if b["is_early"] else "#ffffff"
+                        early_tag = " ⏰ EARLY | " if b["is_early"] else ""
                         st.markdown(
-                            f"""
-<div style="background:{bg}; border:1px solid #ddd; border-radius:4px;
-            padding:4px 8px; margin-bottom:3px; font-size:0.85rem;">
-  <strong>Slot {e['mat_bout_num']} – Bout {b['bout_num']}</strong><br/>
-  {emoji1} {b['w1_name']} ({b['w1_team']}) vs {emoji2} {b['w2_name']} ({b['w2_team']})<br/>
-  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f} ·
-  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f} ·
-  Score {b['score']:.1f} · {'Early' if b['is_early'] else ''}
-</div>
-""",
-                            unsafe_allow_html=True,
+                            f"**Slot {e['mat_bout_num']} – Bout {b['bout_num']}**  "
+                            f"{early_tag}"
+                            f"{emoji1} {b['w1_name']} ({b['w1_team']}) vs "
+                            f"{emoji2} {b['w2_name']} ({b['w2_team']})  "
+                            f"*Lvl* {b['w1_level']:.1f}/{b['w2_level']:.1f} · "
+                            f"*Wt* {b['w1_weight']:.0f}/{b['w2_weight']:.0f} · "
+                            f"*Score* {b['score']:.1f}"
                         )
             st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
         else:
-            # EDIT MODE: drag + per-mat remove dropdown + preview with yellow highlight
+            # EDIT MODE: drag + per-mat remove dropdown (single list per mat)
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [e for e in full_schedule if e["mat"] == mat]
                 with st.expander(f"Mat {mat}", expanded=True):
@@ -784,7 +780,7 @@ if st.session_state.initialized:
                                 cleaned.append(bn)
                         st.session_state.mat_order[mat] = cleaned
 
-                    # Build labels for sortable list (no embedded slot numbers)
+                    # Build labels for sortable list (no duplication elsewhere)
                     row_labels = []
                     label_to_bout = {}
                     for bn in st.session_state.mat_order[mat]:
@@ -796,14 +792,15 @@ if st.session_state.initialized:
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
+                        early_prefix = "⏰ EARLY | " if b["is_early"] else ""
 
                         label = (
+                            f"{early_prefix}"
                             f"Bout {bn:>3} | "
                             f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
                             f"{emoji2} {b['w2_name']} ({b['w2_team']})"
                             f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                             f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                            f"  |  {'Early' if b['is_early'] else ''}"
                             f"  |  Score {b['score']:.1f}"
                         )
                         row_labels.append(label)
@@ -853,31 +850,6 @@ if st.session_state.initialized:
                             help="Removes the selected bout from this meet (Undo available at bottom)."
                         ):
                             remove_bout(selected_bout)
-
-                    # VISUAL PREVIEW WITH YELLOW HIGHLIGHT (matches draggable order)
-                    st.markdown("**Preview (yellow = early match):**")
-                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                        if bn not in bout_nums_in_mat:
-                            continue
-                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
-                        color_name1 = team_color_for_roster.get(b["w1_team"])
-                        color_name2 = team_color_for_roster.get(b["w2_team"])
-                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
-                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        bg = "#fff9c4" if b["is_early"] else "#ffffff"
-                        st.markdown(
-                            f"""
-<div style="background:{bg}; border:1px solid #ddd; border-radius:4px;
-            padding:4px 8px; margin-bottom:3px; font-size:0.85rem;">
-  <strong>Slot {idx2} – Bout {bn}</strong><br/>
-  {emoji1} {b['w1_name']} ({b['w1_team']}) vs {emoji2} {b['w2_name']} ({b['w2_team']})<br/>
-  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f} ·
-  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f} ·
-  Score {b['score']:.1f} · {'Early' if b['is_early'] else ''}
-</div>
-""",
-                            unsafe_allow_html=True,
-                        )
 
     # ----- Undo control -----
     st.markdown("---")
