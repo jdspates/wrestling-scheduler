@@ -570,6 +570,7 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
+# ---- HELP / HOW TO USE ----
 with st.expander("How to use this page"):
     st.markdown("""
 1. **Step 1 – Download template**  
@@ -585,7 +586,7 @@ with st.expander("How to use this page"):
    Review and optionally add suggested matches for wrestlers who need more bouts.
 
 5. **Manual Match Creator**  
-   Force specific matchups coaches want (even if auto-matcher didn't create them).
+   Force specific matchups coaches want (even if the auto-matcher didn't create them).
 
 6. **Mat Previews**  
    Drag matches to reorder and review rest-gap warnings.
@@ -643,44 +644,43 @@ if uploaded and not st.session_state.initialized:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
-        st.session_state.roster = wrestlers
-        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
-        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
-        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.session_state.initialized = True
 
-        st.success("Roster loaded and matchups generated!")
+    except Exception as e:
+        st.error(f"Error loading roster: {e}")
+        st.stop()
 
-        # --- Roster preview + basic validation ---
-        roster_df = pd.DataFrame(wrestlers)
-        st.subheader("Roster preview")
-        st.dataframe(roster_df, use_container_width=True)
+    # --- Roster preview + basic validation ---
+    st.success("Roster loaded and matchups generated!")
 
-        problems = []
+    roster_df = pd.DataFrame(st.session_state.roster)
+    st.subheader("Roster preview")
+    st.dataframe(roster_df, use_container_width=True)
 
-        # Duplicate IDs
-        if roster_df["id"].duplicated().any():
-            dups = roster_df.loc[roster_df["id"].duplicated(), "id"].unique().tolist()
-            problems.append(f"Duplicate wrestler IDs found: {dups}")
+    problems = []
 
-        # Non-positive weights
-        if (roster_df["weight"] <= 0).any():
-            problems.append("Some wrestlers have weight ≤ 0. Check weight column.")
+    # Duplicate IDs
+    if roster_df["id"].duplicated().any():
+        dups = roster_df.loc[roster_df["id"].duplicated(), "id"].unique().tolist()
+        problems.append(f"Duplicate wrestler IDs found: {dups}")
 
-        # Grade sanity check
-        if ((roster_df["grade"] < 5) | (roster_df["grade"] > 8)).any():
-            problems.append("Some wrestlers have grade outside 1–12.")
+    # Non-positive weights
+    if (roster_df["weight"] <= 0).any():
+        problems.append("Some wrestlers have weight ≤ 0. Check the weight column.")
 
-        # Missing names / teams
-        if roster_df["name"].isna().any() or (roster_df["name"].astype(str).str.strip() == "").any():
-            problems.append("Some wrestlers are missing a **name**.")
-        if roster_df["team"].isna().any() or (roster_df["team"].astype(str).str.strip() == "").any():
-            problems.append("Some wrestlers are missing a **team**.")
+    # Grade sanity check
+    if ((roster_df["grade"] < 1) | (roster_df["grade"] > 12)).any():
+        problems.append("Some wrestlers have grade outside 1–12.")
 
-        if problems:
-            st.warning("Please review these issues in your CSV (scheduling will still run):")
-            for p in problems:
-                st.markdown(f"- {p}")
+    # Missing names / teams
+    if roster_df["name"].isna().any() or (roster_df["name"].astype(str).str.strip() == "").any():
+        problems.append("Some wrestlers are missing a **name**.")
+    if roster_df["team"].isna().any() or (roster_df["team"].astype(str).str.strip() == "").any():
+        problems.append("Some wrestlers are missing a **team**.")
+
+    if problems:
+        st.warning("Please review these issues in your CSV (scheduling will still run):")
+        for p in problems:
+            st.markdown(f"- {p}")
 
 # ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
@@ -1491,9 +1491,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
