@@ -58,7 +58,10 @@ else:
 
 TEAMS = CONFIG["TEAMS"]
 
-# custom style for sortable rows (table-like)
+# ----------------------------------------------------------------------
+# STYLES
+# ----------------------------------------------------------------------
+# custom style for sortable rows (table-like) – FIXED HEIGHT
 SORTABLE_STYLE = """
 .sortable-component {
     background-color: transparent;
@@ -82,15 +85,20 @@ SORTABLE_STYLE = """
     color: #222 !important;   /* keep text dark */
     border-radius: 4px;
     border: 1px solid #ddd;
-    padding: 6px 8px;
+    padding: 0 8px;                 /* horizontal only */
     margin-bottom: 4px;
     font-size: 0.85rem;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     cursor: grab;
+
+    /* fixed-height flex row so text centers vertically */
+    height: 36px;
+    display: flex;
+    align-items: center;
 }
 .sortable-item:hover {
     background-color: #f7f7f7;
-    color: #222 !important;   /* override any theme hover color */
+    color: #222 !important;   /* override theme hover color */
 }
 """
 
@@ -431,11 +439,11 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.markdown("""
 <style>
 .remove-col .stButton {
-    margin-bottom: 4px !important;         /* match sortable row bottom margin */
+    margin-bottom: 4px !important;    /* match sortable row bottom margin */
 }
 .remove-col .stButton > button {
-    padding: 4px 10px !important;          /* compact buttons */
-    height: 32px !important;              /* close to row height */
+    padding: 0 10px !important;       /* horizontal only */
+    height: 36px !important;          /* SAME as .sortable-item height */
     min-width: 60px !important;
 }
 </style>
