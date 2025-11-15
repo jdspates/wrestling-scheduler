@@ -817,78 +817,79 @@ if st.session_state.initialized:
                     for b in st.session_state.bout_list
                 )
 
-                # Soft warnings for coaches – but still allow the match
-                warning_msgs = []
-                if w1["team"] == w2["team"]:
-                    warning_msgs.append("Same team matchup.")
-                if abs(w1["level"] - w2["level"]) > CONFIG["MAX_LEVEL_DIFF"]:
-                    warning_msgs.append("Large level difference.")
-                if abs(w1["weight"] - w2["weight"]) > max_weight_diff(w1["weight"]):
-                    warning_msgs.append("Large weight difference.")
-
-                # Store duplicate-match warning so it survives st.rerun()
                 if already_linked:
-                    st.session_state.manual_match_warning = (
+                    msg = (
                         f"{w1['name']} ({w1['team']}) and "
-                        f"{w2['name']} ({w2['team']}) already have at least one match together. "
-                        "This created an additional match between the same wrestlers."
+                        f"{w2['name']} ({w2['team']}) already have a match together. "
+                        "A new match will not be created."
                     )
+                    st.session_state.manual_match_warning = msg
+                    st.warning(msg)
+                else:
+                    # Soft warnings for coaches – but still allow the match
+                    warning_msgs = []
+                    if w1["team"] == w2["team"]:
+                        warning_msgs.append("Same team matchup.")
+                    if abs(w1["level"] - w2["level"]) > CONFIG["MAX_LEVEL_DIFF"]:
+                        warning_msgs.append("Large level difference.")
+                    if abs(w1["weight"] - w2["weight"]) > max_weight_diff(w1["weight"]):
+                        warning_msgs.append("Large weight difference.")
 
-                if warning_msgs:
-                    st.info(
-                        "Note: " + " ".join(
-                            f"• {msg}" for msg in warning_msgs
-                        ) + " (match will still be created)."
+                    if warning_msgs:
+                        st.info(
+                            "Note: " + " ".join(
+                                f"• {msg}" for msg in warning_msgs
+                            ) + " (match will still be created)."
+                        )
+
+                    # Link in match_ids if not already present
+                    if w2["id"] not in w1["match_ids"]:
+                        w1["match_ids"].append(w2["id"])
+                    if w1["id"] not in w2["match_ids"]:
+                        w2["match_ids"].append(w1["id"])
+
+                    new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
+                        if st.session_state.bout_list else 1
+
+                    new_score = matchup_score(w1, w2)
+                    new_bout = {
+                        "bout_num": new_bout_num,
+                        "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
+                        "w1_level": w1["level"], "w1_weight": w1["weight"],
+                        "w1_grade": w1["grade"], "w1_early": w1["early"],
+                        "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
+                        "w2_level": w2["level"], "w2_weight": w2["weight"],
+                        "w2_grade": w2["grade"], "w2_early": w2["early"],
+                        "score": new_score,
+                        "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+                        "is_early": w1["early"] or w2["early"],
+                        "manual": "Coach Manual Match",
+                    }
+
+                    st.session_state.bout_list.append(new_bout)
+
+                    # Keep bouts sorted by avg_weight so base scheduler behaves
+                    st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+
+                    # Clear manual mat order so the new match gets placed, then coach can drag it
+                    st.session_state.mat_order = {}
+                    st.session_state.mat_order_history = []
+
+                    # Rebuild suggestions based on new counts
+                    st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
+
+                    # Invalidate exports
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
+
+                    # Refresh drag widgets
+                    st.session_state.sortable_version += 1
+
+                    st.success(
+                        f"Manual match created: {w1['name']} ({w1['team']}) vs {w2['name']} ({w2['team']}). "
+                        "You can now drag it to the desired mat and slot."
                     )
-
-                # Link in match_ids if not already present
-                if w2["id"] not in w1["match_ids"]:
-                    w1["match_ids"].append(w2["id"])
-                if w1["id"] not in w2["match_ids"]:
-                    w2["match_ids"].append(w1["id"])
-
-                new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
-                    if st.session_state.bout_list else 1
-
-                new_score = matchup_score(w1, w2)
-                new_bout = {
-                    "bout_num": new_bout_num,
-                    "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
-                    "w1_level": w1["level"], "w1_weight": w1["weight"],
-                    "w1_grade": w1["grade"], "w1_early": w1["early"],
-                    "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
-                    "w2_level": w2["level"], "w2_weight": w2["weight"],
-                    "w2_grade": w2["grade"], "w2_early": w2["early"],
-                    "score": new_score,
-                    "avg_weight": (w1["weight"] + w2["weight"]) / 2,
-                    "is_early": w1["early"] or w2["early"],
-                    "manual": "Coach Manual Match",
-                }
-
-                st.session_state.bout_list.append(new_bout)
-
-                # Keep bouts sorted by avg_weight so base scheduler behaves
-                st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-
-                # Clear manual mat order so the new match gets placed, then coach can drag it
-                st.session_state.mat_order = {}
-                st.session_state.mat_order_history = []
-
-                # Rebuild suggestions based on new counts
-                st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-
-                # Invalidate exports
-                st.session_state.excel_bytes = None
-                st.session_state.pdf_bytes = None
-
-                # Refresh drag widgets
-                st.session_state.sortable_version += 1
-
-                st.success(
-                    f"Manual match created: {w1['name']} ({w1['team']}) vs {w2['name']} ({w2['team']}). "
-                    "You can now drag it to the desired mat and slot."
-                )
-                st.rerun()
+                    st.rerun()
 
     # ----- Suggested Matches -----
     st.subheader("Suggested Matches")
