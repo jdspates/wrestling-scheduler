@@ -1105,7 +1105,8 @@ if st.session_state.initialized:
 
                     row_labels = []
                     label_to_bout = {}
-                    for bn in st.session_state.mat_order[mat]:
+                    # >>> Here we include dynamic Slot numbers in the draggable label <<<
+                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
                         if bn not in bout_nums_in_mat:
                             continue
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
@@ -1117,6 +1118,7 @@ if st.session_state.initialized:
                         early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
 
                         label = (
+                            f"Slot {idx2:>2} | "
                             f"{early_prefix}"
                             f"Bout {bn:>3} | "
                             f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
