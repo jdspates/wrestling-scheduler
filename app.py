@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early emoji
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early emoji, no duplicate lists
 import streamlit as st
 import pandas as pd
 import io
@@ -727,7 +727,7 @@ if st.session_state.initialized:
             )
 
         if search_term.strip():
-            # READ-ONLY PREVIEW (one list per mat, no duplication)
+            # READ-ONLY PREVIEW (table-like, no drag, no duplicate)
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
@@ -743,22 +743,26 @@ if st.session_state.initialized:
                         st.caption("No matches for the current filter on this mat.")
                         continue
 
+                    rows = []
                     for e in mat_entries:
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
                         color_name1 = team_color_for_roster.get(b["w1_team"])
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        early_tag = " ⏰ EARLY | " if b["is_early"] else ""
-                        st.markdown(
-                            f"**Slot {e['mat_bout_num']} – Bout {b['bout_num']}**  "
-                            f"{early_tag}"
-                            f"{emoji1} {b['w1_name']} ({b['w1_team']}) vs "
-                            f"{emoji2} {b['w2_name']} ({b['w2_team']})  "
-                            f"*Lvl* {b['w1_level']:.1f}/{b['w2_level']:.1f} · "
-                            f"*Wt* {b['w1_weight']:.0f}/{b['w2_weight']:.0f} · "
-                            f"*Score* {b['score']:.1f}"
-                        )
+                        early_flag = "⏰" if b["is_early"] else ""
+                        rows.append({
+                            "Slot": e["mat_bout_num"],
+                            "Bout": b["bout_num"],
+                            "Early": early_flag,
+                            "Wrestler 1": f"{emoji1} {b['w1_name']} ({b['w1_team']})",
+                            "Wrestler 2": f"{emoji2} {b['w2_name']} ({b['w2_team']})",
+                            "Lvls": f"{b['w1_level']:.1f}/{b['w2_level']:.1f}",
+                            "Wts": f"{b['w1_weight']:.0f}/{b['w2_weight']:.0f}",
+                            "Score": f"{b['score']:.1f}",
+                        })
+                    df_mat = pd.DataFrame(rows)
+                    st.dataframe(df_mat, use_container_width=True, hide_index=True)
             st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
         else:
             # EDIT MODE: drag + per-mat remove dropdown (single list per mat)
@@ -780,7 +784,7 @@ if st.session_state.initialized:
                                 cleaned.append(bn)
                         st.session_state.mat_order[mat] = cleaned
 
-                    # Build labels for sortable list (no duplication elsewhere)
+                    # Build labels for sortable list (only list for this mat)
                     row_labels = []
                     label_to_bout = {}
                     for bn in st.session_state.mat_order[mat]:
