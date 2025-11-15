@@ -668,7 +668,7 @@ if uploaded and not st.session_state.initialized:
             problems.append("Some wrestlers have weight ≤ 0. Check weight column.")
 
         # Grade sanity check
-        if ((roster_df["grade"] < 1) | (roster_df["grade"] > 12)).any():
+        if ((roster_df["grade"] < 5) | (roster_df["grade"] > 8)).any():
             problems.append("Some wrestlers have grade outside 1–12.")
 
         # Missing names / teams
@@ -1491,6 +1491,7 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
