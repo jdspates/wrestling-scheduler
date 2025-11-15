@@ -643,9 +643,44 @@ if uploaded and not st.session_state.initialized:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
+                st.session_state.roster = wrestlers
+        st.session_state.active = [w for w in wrestlers if not w["scratch"]]
+        st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
+        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+        st.session_state.initialized = True
+
         st.success("Roster loaded and matchups generated!")
-    except Exception as e:
-        st.error(f"Error: {e}")
+
+        # --- Roster preview + basic validation ---
+        roster_df = pd.DataFrame(wrestlers)
+        st.subheader("Roster preview")
+        st.dataframe(roster_df, use_container_width=True)
+
+        problems = []
+
+        # Duplicate IDs
+        if roster_df["id"].duplicated().any():
+            dups = roster_df.loc[roster_df["id"].duplicated(), "id"].unique().tolist()
+            problems.append(f"Duplicate wrestler IDs found: {dups}")
+
+        # Non-positive weights
+        if (roster_df["weight"] <= 0).any():
+            problems.append("Some wrestlers have weight ≤ 0. Check weight column.")
+
+        # Grade sanity check
+        if ((roster_df["grade"] < 1) | (roster_df["grade"] > 12)).any():
+            problems.append("Some wrestlers have grade outside 1–12.")
+
+        # Missing names / teams
+        if roster_df["name"].isna().any() or (roster_df["name"].astype(str).str.strip() == "").any():
+            problems.append("Some wrestlers are missing a **name**.")
+        if roster_df["team"].isna().any() or (roster_df["team"].astype(str).str.strip() == "").any():
+            problems.append("Some wrestlers are missing a **team**.")
+
+        if problems:
+            st.warning("Please review these issues in your CSV (scheduling will still run):")
+            for p in problems:
+                st.markdown(f"- {p}")
 
 # ---- SETTINGS ----
 st.sidebar.header("Meet Settings")
@@ -1456,6 +1491,7 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
