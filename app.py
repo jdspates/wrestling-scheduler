@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + inline remove + undo
+# app.py – Wrestling Scheduler – drag rows + per-mat remove dropdown + undo
 import streamlit as st
 import pandas as pd
 import io
@@ -435,20 +435,6 @@ st.markdown(
 # Sortable CSS
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
-# Extra CSS for remove-column buttons to align visually with rows
-st.markdown("""
-<style>
-.remove-col .stButton {
-    margin-bottom: 4px !important;    /* match sortable row bottom margin */
-}
-.remove-col .stButton > button {
-    padding: 0 10px !important;       /* horizontal only */
-    height: 36px !important;          /* SAME as .sortable-item height */
-    min-width: 60px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
@@ -636,7 +622,7 @@ if st.session_state.initialized:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
             w = next(w for w in filtered_active if w["id"] == s["_w_id"])
-            o = next(o for o in filtered_active if o["id"] == s["_o_id"])
+            o = next(o for o in filtered_active if w and o["id"] == s["_o_id"])
             sugg_data.append({
                 "Add": False,
                 "Current": f"{len(w['match_ids'])}",
@@ -678,7 +664,7 @@ if st.session_state.initialized:
             ]
             for s in to_add:
                 w = next(w for w in raw_active if w["id"] == s["_w_id"])
-                o = next(o for o in raw_active if o["id"] == s["_o_id"])
+                o = next(o for w in raw_active if o["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]:
                     w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]:
@@ -707,7 +693,7 @@ if st.session_state.initialized:
     else:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- Mat Previews (draggable rows + inline remove buttons) -----
+    # ----- Mat Previews (draggable rows + per-mat remove dropdown) -----
     st.subheader("Mat Previews")
     filtered_ids = {w["id"] for w in filtered_active}
     filtered_bout_list = [
@@ -760,16 +746,13 @@ if st.session_state.initialized:
                 row_labels.append(label)
                 label_to_bout[label] = bn
 
-            drag_col, remove_col = st.columns([0.8, 0.2])
-
-            # LEFT: draggable list
-            with drag_col:
-                sorted_labels = sort_items(
-                    row_labels,
-                    direction="vertical",
-                    key=f"mat_{mat}_sortable",
-                    custom_style=SORTABLE_STYLE,
-                )
+            # DRAGGABLE LIST
+            sorted_labels = sort_items(
+                row_labels,
+                direction="vertical",
+                key=f"mat_{mat}_sortable",
+                custom_style=SORTABLE_STYLE,
+            )
 
             # Update mat_order based on drag result
             new_order = []
@@ -779,22 +762,36 @@ if st.session_state.initialized:
                     new_order.append(bn)
             st.session_state.mat_order[mat] = new_order
 
-            # RIGHT: aligned remove buttons (one per row, same order)
-            with remove_col:
-                st.markdown('<div class="remove-col">', unsafe_allow_html=True)
-                for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                    if bn not in bout_nums_in_mat:
-                        continue
-                    st.button(
-                        f"X {bn}",
-                        key=f"rm_{mat}_{bn}_{idx2}",
-                        on_click=remove_bout,
-                        args=(bn,),
-                        help=f"Remove bout {bn} from this meet (Undo at bottom)",
-                    )
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.caption("Drag rows above to change order.")
 
-            st.caption("Drag rows on the left to change order. Use X buttons to remove bouts.")
+            # PER-MAT REMOVE SELECTOR
+            # Build mapping from bout_num -> label for display
+            bout_label_map = {}
+            for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                if bn not in bout_nums_in_mat:
+                    continue
+                b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                bout_label_map[bn] = (
+                    f"Slot {idx2} – Bout {bn}: "
+                    f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
+                )
+
+            valid_bouts = list(bout_label_map.keys())
+            if not valid_bouts:
+                st.caption("No bouts left on this mat.")
+            else:
+                selected_bout = st.selectbox(
+                    "Remove bout on this mat:",
+                    options=valid_bouts,
+                    format_func=lambda v: bout_label_map[v],
+                    key=f"remove_select_mat_{mat}"
+                )
+                if st.button(
+                    "Remove selected bout",
+                    key=f"remove_button_mat_{mat}",
+                    help="Removes the selected bout from this meet (Undo available at bottom)."
+                ):
+                    remove_bout(selected_bout)
 
     # ----- Undo control -----
     st.markdown("---")
