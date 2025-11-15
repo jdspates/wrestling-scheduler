@@ -12,7 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 
-from streamlit_sortables import sort_items  # <-- NEW
+from streamlit_sortables import sort_items  # drag-and-drop component
 
 # ---------- Safe PatternFill import ----------
 try:
@@ -57,6 +57,39 @@ else:
         json.dump(CONFIG, f, indent=4)
 
 TEAMS = CONFIG["TEAMS"]
+
+# custom style for the sortable drag bar (neutral, non-red)
+SORTABLE_STYLE = """
+.sortable-component {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+}
+.sortable-container {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+.sortable-container-header {
+    display: none;
+}
+.sortable-container-body {
+    background-color: transparent;
+    padding: 0;
+}
+.sortable-item {
+    background-color: #f1f3f5;
+    color: #333;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-bottom: 4px;
+    font-size: 0.75rem;
+    cursor: grab;
+}
+.sortable-item:hover {
+    background-color: #e0e4e8;
+}
+"""
 
 # ----------------------------------------------------------------------
 # SESSION STATE
@@ -295,14 +328,14 @@ def move_down(mat, bout_num):
 # STREAMLIT APP
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
-st.markdown("""
+st.markdown(f"""
 <style>
-    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
-    .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
-    .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
-    h1 { margin-top:0 !important; }
-    .main .stButton > button {
+    div[data-testid="stExpander"] > div > div {{ padding:0 !important; margin:0 !important; }}
+    div[data-testid="stVerticalBlock"] > div {{ gap:0 !important; }}
+    .block-container {{ padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }}
+    .main .block-container {{ padding-left:2rem !important; padding-right:2rem !important; }}
+    h1 {{ margin-top:0 !important; }}
+    .main .stButton > button {{
         min-width: 30px;
         height: 30px;
         padding: 0;
@@ -310,15 +343,18 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
-    }
-    .stSidebar .stButton > button {
+    }}
+    .stSidebar .stButton > button {{
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
-    }
-    .stTextInput > div > div > input { border-radius: 6px !important; }
-    .stTextInput > div > div > button { background: transparent !important; border: none !important; color: #888 !important; }
-    .stButton > button[key^="del_"] { line-height: 30px !important; font-size: 18px !important; }
+    }}
+    .stTextInput > div > div > input {{ border-radius: 6px !important; }}
+    .stTextInput > div > div > button {{ background: transparent !important; border: none !important; color: #888 !important; }}
+    .stButton > button[key^="del_"] {{ line-height: 30px !important; font-size: 18px !important; }}
+
+    /* sortable styles */
+    {SORTABLE_STYLE}
 </style>
 """, unsafe_allow_html=True)
 
@@ -522,7 +558,7 @@ if st.session_state.initialized:
     filtered_schedule = generate_mat_schedule(filtered_bout_list) if filtered_bout_list else []
     bout_to_mat = {entry["bout_num"]: entry["mat"] for entry in filtered_schedule}
 
-    # ---------- NEW DRAG-TO-REORDER PER MAT ----------
+    # ---------- DRAG-TO-REORDER PER MAT ----------
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_bouts = [b for b in filtered_bout_list if bout_to_mat.get(b["bout_num"]) == mat]
         with st.expander(f"Mat {mat}", expanded=True):
@@ -544,32 +580,32 @@ if st.session_state.initialized:
                         cleaned.append(bn)
                 st.session_state.mat_order[mat] = cleaned
 
-            # build sortable items: "bout_num|label"
+            # build sortable items (labels only, no "89|")
             sortable_items = []
+            label_to_bout = {}
             for bout_num in st.session_state.mat_order[mat]:
                 b = next(x for x in mat_bouts if x["bout_num"] == bout_num)
-                label = f"{bout_num}|Bout {bout_num}: {b['w1_name']} vs {b['w2_name']}"
+                label = f"Bout {bout_num}: {b['w1_name']} vs {b['w2_name']}"
+                label_to_bout[label] = bout_num
                 sortable_items.append(label)
 
             # drag to reorder
             sorted_items = sort_items(
                 sortable_items,
                 direction="vertical",
-                key=f"mat_{mat}_sortable"
+                key=f"mat_{mat}_sortable",
+                custom_style=SORTABLE_STYLE
             )
 
-            # update mat_order from sorted_items
+            # update mat_order from sorted labels
             new_order = []
-            for item in sorted_items:
-                try:
-                    bn = int(item.split("|", 1)[0])
-                except (ValueError, IndexError):
-                    continue
-                if bn in bout_nums_in_mat and bn not in new_order:
+            for label in sorted_items:
+                bn = label_to_bout.get(label)
+                if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
                     new_order.append(bn)
             st.session_state.mat_order[mat] = new_order
 
-            # now render the cards in the new order
+            # render original cards in the new order
             ordered_bouts = []
             for bout_num in st.session_state.mat_order[mat]:
                 entry = next((e for e in filtered_schedule if e["bout_num"] == bout_num), None)
