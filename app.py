@@ -11,6 +11,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 import json
 import os
+import copy
 
 from streamlit_sortables import sort_items  # drag-and-drop component
 
@@ -47,23 +48,19 @@ DEFAULT_CONFIG = {
     ]
 }
 
-# Safe config load
+# Load base config once (read-only default, e.g. from repo)
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r") as f:
-            CONFIG = json.load(f)
-            if not isinstance(CONFIG, dict):
-                raise ValueError
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                BASE_CONFIG = loaded
+            else:
+                BASE_CONFIG = DEFAULT_CONFIG
     except Exception:
-        CONFIG = DEFAULT_CONFIG.copy()
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(CONFIG, f, indent=4)
+        BASE_CONFIG = DEFAULT_CONFIG
 else:
-    CONFIG = DEFAULT_CONFIG.copy()
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-
-TEAMS = CONFIG["TEAMS"]
+    BASE_CONFIG = DEFAULT_CONFIG
 
 # ----------------------------------------------------------------------
 # STYLES
@@ -110,6 +107,12 @@ SORTABLE_STYLE = """
 # ----------------------------------------------------------------------
 # SESSION STATE
 # ----------------------------------------------------------------------
+# Per-session CONFIG, cloned from BASE_CONFIG once
+if "CONFIG" not in st.session_state:
+    st.session_state.CONFIG = copy.deepcopy(BASE_CONFIG)
+
+CONFIG = st.session_state.CONFIG  # convenience reference
+
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
     "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
@@ -128,6 +131,8 @@ for key in [
 # version bump for sortable widgets so they refresh on add/remove/undo/scratches
 if "sortable_version" not in st.session_state:
     st.session_state.sortable_version = 0
+
+TEAMS = CONFIG["TEAMS"]
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -369,7 +374,6 @@ def compute_rest_conflicts(schedule, min_gap):
     find wrestlers who have matches too close together (slot difference < min_gap).
     Returns a list of dicts with details for display.
     """
-    # wrestler_id -> { "name": str, "team": str, "matches": [(mat, slot, bout_num)] }
     appearances = {}
 
     for e in schedule:
@@ -406,6 +410,8 @@ def compute_rest_conflicts(schedule, min_gap):
                         "mat": mat,
                         "slot1": slot1,
                         "slot2": slot2,
+                        "bout1": bout1,
+                        "bout2": bout2,
                         "gap": gap,
                     })
 
@@ -618,16 +624,14 @@ if (
 
 st.sidebar.markdown("---")
 if st.sidebar.button("Reset", type="secondary"):
-    CONFIG = DEFAULT_CONFIG.copy()
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Reset! Refresh to apply.")
+    # Reset CONFIG to BASE_CONFIG for this browser session only
+    st.session_state.CONFIG = copy.deepcopy(BASE_CONFIG)
+    CONFIG = st.session_state.CONFIG
+    st.sidebar.success("Reset settings for this session. Refresh to apply.")
     st.rerun()
 
 if changed:
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(CONFIG, f, indent=4)
-    st.sidebar.success("Settings saved! Refresh to apply.")
+    st.sidebar.success("Settings updated for this session. Refresh to apply.")
     st.rerun()
 
 TEAM_COLORS = {t["name"]: COLOR_MAP[t["color"]] for t in TEAMS if t["name"]}
@@ -894,7 +898,9 @@ if st.session_state.initialized:
                         st.markdown("**Rest warnings on this mat (filtered wrestlers):**")
                         for c in mat_conflicts:
                             st.markdown(
-                                f"- {c['wrestler']} ({c['team']}): Slot {c['slot1']} → Slot {c['slot2']} "
+                                f"- {c['wrestler']} ({c['team']}): "
+                                f"Bout {c['bout1']} (Slot {c['slot1']}) → "
+                                f"Bout {c['bout2']} (Slot {c['slot2']}) "
                                 f"(gap {c['gap']} < required {rest_gap})"
                             )
 
@@ -918,6 +924,8 @@ if st.session_state.initialized:
                             if bn not in cleaned:
                                 cleaned.append(bn)
                         st.session_state.mat_order[mat] = cleaned
+
+                    prev_order = st.session_state.mat_order[mat].copy()
 
                     row_labels = []
                     label_to_bout = {}
@@ -956,7 +964,13 @@ if st.session_state.initialized:
                         bn = label_to_bout.get(label)
                         if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
                             new_order.append(bn)
-                    st.session_state.mat_order[mat] = new_order
+
+                    if new_order != prev_order:
+                        st.session_state.mat_order[mat] = new_order
+                        st.session_state.sortable_version += 1
+                        st.rerun()
+                    else:
+                        st.session_state.mat_order[mat] = new_order
 
                     st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
 
@@ -996,7 +1010,9 @@ if st.session_state.initialized:
                         st.markdown("**Rest warnings on this mat:**")
                         for c in mat_conflicts:
                             st.markdown(
-                                f"- {c['wrestler']} ({c['team']}): Slot {c['slot1']} → Slot {c['slot2']} "
+                                f"- {c['wrestler']} ({c['team']}): "
+                                f"Bout {c['bout1']} (Slot {c['slot1']}) → "
+                                f"Bout {c['bout2']} (Slot {c['slot2']}) "
                                 f"(gap {c['gap']} < required {rest_gap})"
                             )
 
