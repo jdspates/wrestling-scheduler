@@ -643,7 +643,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
-                st.session_state.roster = wrestlers
+        st.session_state.roster = wrestlers
         st.session_state.active = [w for w in wrestlers if not w["scratch"]]
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
@@ -1491,6 +1491,7 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
