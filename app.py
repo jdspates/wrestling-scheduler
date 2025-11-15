@@ -70,6 +70,18 @@ DEFAULT_CONFIG = {
     ]
 }
 
+# ----------------------------------------------------------------------
+# ROSTER TEMPLATE (for new coaches)
+# ----------------------------------------------------------------------
+# Columns MUST match what the app expects below:
+# ["id", "name", "team", "grade", "level", "weight", "early_matches", "scratch"]
+TEMPLATE_CSV = """id,name,team,grade,level,weight,early_matches,scratch
+1,John Doe,Stillwater Gold,3,1.0,70,Y,N
+2,Jane Smith,Stillwater Gold,4,1.5,75,N,N
+3,Ben Carter,Stillwater Purple,5,2.0,80,N,N
+4,Ava Johnson,Stillwater Purple,3,1.0,68,Y,N
+"""
+
 # Load base config once (read-only default, e.g. from repo)
 if os.path.exists(CONFIG_FILE):
     try:
@@ -558,9 +570,26 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
-# ---- UPLOAD ----
+# ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
+st.markdown("### Step 1 – Download roster template (CSV)")
+st.markdown(
+    "Download the example file, add your wrestlers, save it as a `.csv`, "
+    "then upload it in Step 2 below."
+)
+
+st.download_button(
+    label="⬇️ Download roster template CSV",
+    data=TEMPLATE_CSV.encode("utf-8"),
+    file_name="roster_template.csv",
+    mime="text/csv",
+    use_container_width=False,
+)
+
+st.markdown("---")
+
+# ---- STEP 2: UPLOAD ROSTER ----
 uploaded = st.file_uploader(
-    "Upload `roster.csv`",
+    "Step 2 – Upload your completed `roster.csv`",
     type="csv",
     key="roster_csv_uploader"  # unique key to avoid duplicate element ID
 )
