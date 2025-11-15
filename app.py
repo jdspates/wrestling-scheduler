@@ -76,10 +76,10 @@ DEFAULT_CONFIG = {
 # Columns MUST match what the app expects below:
 # ["id", "name", "team", "grade", "level", "weight", "early_matches", "scratch"]
 TEMPLATE_CSV = """id,name,team,grade,level,weight,early_matches,scratch
-1,John Doe,Stillwater Gold,3,1.0,70,Y,N
-2,Jane Smith,Stillwater Gold,4,1.5,75,N,N
-3,Ben Carter,Stillwater Purple,5,2.0,80,N,N
-4,Ava Johnson,Stillwater Purple,3,1.0,68,Y,N
+1,John Doe,Stillwater,7,1.0,70,Y,N
+2,Jane Smith,Hastings,8,1.5,75,N,N
+3,Ben Carter,Cottage Grove,6,2.0,80,N,N
+4,Ava Johnson,Woodbury,7,1.0,68,Y,N
 """
 
 # Load base config once (read-only default, e.g. from repo)
@@ -1429,3 +1429,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
