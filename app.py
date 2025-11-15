@@ -116,15 +116,17 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
     "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-    "roster", "mat_order_history"
+    "roster", "mat_order_history", "manual_match_warning"
 ]:
     if key not in st.session_state:
         if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
             st.session_state[key] = []
-        elif key == "mat_order":
+        elif key in ["mat_order"]:
             st.session_state[key] = {}
         elif key in ["roster", "mat_order_history"]:
             st.session_state[key] = []
+        elif key == "manual_match_warning":
+            st.session_state[key] = ""
         else:
             st.session_state[key] = None
 
@@ -758,6 +760,13 @@ if st.session_state.initialized:
     # ----- Manual Match Creator -----
     st.subheader("Manual Match Creator")
 
+    # Show any stored manual-match warning (e.g., duplicate matchups) from last run
+    manual_warning = st.session_state.get("manual_match_warning")
+    if manual_warning:
+        st.warning(manual_warning)
+        # Clear it so it only shows once
+        st.session_state.manual_match_warning = ""
+
     active_ids = [w["id"] for w in raw_active]
 
     if len(active_ids) < 2:
@@ -801,12 +810,11 @@ if st.session_state.initialized:
                 w1 = next(w for w in raw_active if w["id"] == manual_w1_id)
                 w2 = next(w for w in raw_active if w["id"] == manual_w2_id)
 
-                # Check if they already have a match together
+                # Check if they already have a match together (any bout between these two)
                 already_linked = any(
                     (b["w1_id"] == w1["id"] and b["w2_id"] == w2["id"]) or
                     (b["w1_id"] == w2["id"] and b["w2_id"] == w1["id"])
                     for b in st.session_state.bout_list
-                    if b.get("manual") != "Manually Removed"
                 )
 
                 # Soft warnings for coaches – but still allow the match
@@ -818,11 +826,12 @@ if st.session_state.initialized:
                 if abs(w1["weight"] - w2["weight"]) > max_weight_diff(w1["weight"]):
                     warning_msgs.append("Large weight difference.")
 
-                # NEW: explicit message when this is a duplicate matchup
+                # Store duplicate-match warning so it survives st.rerun()
                 if already_linked:
-                    st.warning(
-                        "These wrestlers already have at least one match together. "
-                        "This will create an additional match between the same wrestlers."
+                    st.session_state.manual_match_warning = (
+                        f"{w1['name']} ({w1['team']}) and "
+                        f"{w2['name']} ({w2['team']}) already have at least one match together. "
+                        "This created an additional match between the same wrestlers."
                     )
 
                 if warning_msgs:
