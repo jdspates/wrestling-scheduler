@@ -817,8 +817,13 @@ if st.session_state.initialized:
                     warning_msgs.append("Large level difference.")
                 if abs(w1["weight"] - w2["weight"]) > max_weight_diff(w1["weight"]):
                     warning_msgs.append("Large weight difference.")
+
+                # NEW: explicit message when this is a duplicate matchup
                 if already_linked:
-                    warning_msgs.append("These two already have a match together.")
+                    st.warning(
+                        "These wrestlers already have at least one match together. "
+                        "This will create an additional match between the same wrestlers."
+                    )
 
                 if warning_msgs:
                     st.info(
