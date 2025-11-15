@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove dropdown + undo
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + fixed suggestions/search
 import streamlit as st
 import pandas as pd
 import io
@@ -321,7 +321,7 @@ def generate_mat_schedule(bout_list, gap=4):
 def apply_mat_order_to_global_schedule():
     """
     Take the base schedule, then reorder each mat according to st.session_state.mat_order,
-    and recompute slot + mat_bout_num so exports match the dragged order.
+    and recompute slot + mat_bout_num so exports and previews match the dragged order.
     """
     base = generate_mat_schedule(st.session_state.bout_list)
     schedules = []
@@ -474,10 +474,11 @@ search_term = st.sidebar.text_input(
     value="",
     placeholder="e.g. Smith or Red",
     key="wrestler_search",
-    help="Live filter – shows all matches for matching wrestlers in Mat Previews"
+    help="Search affects Mat Previews only (edit disabled while searching)."
 )
 st.sidebar.caption(
-    "**Note:** This search filters **Mat Previews only**. Suggested Matches show all under-matched wrestlers."
+    "**Note:** Suggested Matches still consider all under-matched wrestlers. "
+    "Mat Previews show whatever matches involve the filtered wrestlers."
 )
 
 changed = False
@@ -622,7 +623,7 @@ if st.session_state.initialized:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
             w = next(w for w in filtered_active if w["id"] == s["_w_id"])
-            o = next(o for o in filtered_active if w and o["id"] == s["_o_id"])
+            o = next(o for o in filtered_active if o["id"] == s["_o_id"])
             sugg_data.append({
                 "Add": False,
                 "Current": f"{len(w['match_ids'])}",
@@ -664,7 +665,7 @@ if st.session_state.initialized:
             ]
             for s in to_add:
                 w = next(w for w in raw_active if w["id"] == s["_w_id"])
-                o = next(o for w in raw_active if o["id"] == s["_o_id"])
+                o = next(o for o in raw_active if o["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]:
                     w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]:
@@ -691,107 +692,141 @@ if st.session_state.initialized:
             st.session_state.pdf_bytes = None
             st.rerun()
     else:
-        st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
+        st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
 
-    # ----- Mat Previews (draggable rows + per-mat remove dropdown) -----
+    # ----- Global schedule (with current ordering) -----
+    full_schedule = apply_mat_order_to_global_schedule() if st.session_state.bout_list else []
+
+    # ----- Mat Previews -----
     st.subheader("Mat Previews")
-    filtered_ids = {w["id"] for w in filtered_active}
-    filtered_bout_list = [
-        b for b in st.session_state.bout_list
-        if b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids
-    ]
-    filtered_schedule_base = generate_mat_schedule(filtered_bout_list) if filtered_bout_list else []
 
-    for mat in range(1, CONFIG["NUM_MATS"] + 1):
-        mat_entries = [e for e in filtered_schedule_base if e["mat"] == mat]
-        with st.expander(f"Mat {mat}", expanded=True):
-            if not mat_entries:
-                st.caption("No bouts on this mat for the current filter.")
-                continue
+    if not full_schedule:
+        st.caption("No bouts scheduled yet.")
+    else:
+        # Build once for filtering
+        filtered_ids = {w["id"] for w in filtered_active}
+        filtered_bout_nums = {
+            b["bout_num"] for b in st.session_state.bout_list
+            if b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids
+        }
 
-            bout_nums_in_mat = [e["bout_num"] for e in mat_entries]
-            existing_order = st.session_state.mat_order.get(mat)
-            if not existing_order:
-                st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
-            else:
-                cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
-                for bn in bout_nums_in_mat:
-                    if bn not in cleaned:
-                        cleaned.append(bn)
-                st.session_state.mat_order[mat] = cleaned
+        if search_term.strip():
+            # READ-ONLY view (no drag / remove) using the true global schedule
+            for mat in range(1, CONFIG["NUM_MATS"] + 1):
+                mat_entries = [
+                    e for e in full_schedule
+                    if e["mat"] == mat and e["bout_num"] in filtered_bout_nums
+                ]
+                with st.expander(f"Mat {mat}", expanded=True):
+                    if not mat_entries:
+                        st.caption("No matches for the current filter on this mat.")
+                        continue
 
-            # Build labels for sortable list
-            row_labels = []
-            label_to_bout = {}
-            for idx2, bn in enumerate(st.session_state.mat_order[mat]):
-                if bn not in bout_nums_in_mat:
-                    continue
-                slot = idx2 + 1
-                b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                    for e in mat_entries:
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+                        color_name1 = team_color_for_roster.get(b["w1_team"])
+                        color_name2 = team_color_for_roster.get(b["w2_team"])
+                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
+                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
+                        st.markdown(
+                            f"**Slot {e['mat_bout_num']} – Bout {b['bout_num']}**  "
+                            f"{emoji1} {b['w1_name']} ({b['w1_team']}) vs "
+                            f"{emoji2} {b['w2_name']} ({b['w2_team']})  "
+                            f"*Lvl* {b['w1_level']:.1f}/{b['w2_level']:.1f} · "
+                            f"*Wt* {b['w1_weight']:.0f}/{b['w2_weight']:.0f} · "
+                            f"*Score* {b['score']:.1f} · "
+                            f"{'Early' if b['is_early'] else ''}"
+                        )
+            st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
+        else:
+            # EDIT MODE: drag + per-mat remove dropdown
+            for mat in range(1, CONFIG["NUM_MATS"] + 1):
+                mat_entries = [e for e in full_schedule if e["mat"] == mat]
+                with st.expander(f"Mat {mat}", expanded=True):
+                    if not mat_entries:
+                        st.caption("No bouts on this mat.")
+                        continue
 
-                color_name1 = team_color_for_roster.get(b["w1_team"])
-                color_name2 = team_color_for_roster.get(b["w2_team"])
-                emoji1 = COLOR_EMOJI.get(color_name1, "▪")
-                emoji2 = COLOR_EMOJI.get(color_name2, "▪")
+                    bout_nums_in_mat = [e["bout_num"] for e in mat_entries]
+                    existing_order = st.session_state.mat_order.get(mat)
+                    if not existing_order:
+                        st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
+                    else:
+                        cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
+                        for bn in bout_nums_in_mat:
+                            if bn not in cleaned:
+                                cleaned.append(bn)
+                        st.session_state.mat_order[mat] = cleaned
 
-                label = (
-                    f"{slot:>3} | Bout {bn:>3} | "
-                    f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
-                    f"{emoji2} {b['w2_name']} ({b['w2_team']})"
-                    f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
-                    f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                    f"  |  {'Early' if b['is_early'] else ''}"
-                    f"  |  Score {b['score']:.1f}"
-                )
-                row_labels.append(label)
-                label_to_bout[label] = bn
+                    # Build labels for sortable list
+                    row_labels = []
+                    label_to_bout = {}
+                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                        if bn not in bout_nums_in_mat:
+                            continue
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-            # DRAGGABLE LIST
-            sorted_labels = sort_items(
-                row_labels,
-                direction="vertical",
-                key=f"mat_{mat}_sortable",
-                custom_style=SORTABLE_STYLE,
-            )
+                        color_name1 = team_color_for_roster.get(b["w1_team"])
+                        color_name2 = team_color_for_roster.get(b["w2_team"])
+                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
+                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
 
-            # Update mat_order based on drag result
-            new_order = []
-            for label in sorted_labels:
-                bn = label_to_bout.get(label)
-                if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
-                    new_order.append(bn)
-            st.session_state.mat_order[mat] = new_order
+                        label = (
+                            f"{idx2:>3} | Bout {bn:>3} | "
+                            f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
+                            f"{emoji2} {b['w2_name']} ({b['w2_team']})"
+                            f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
+                            f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                            f"  |  {'Early' if b['is_early'] else ''}"
+                            f"  |  Score {b['score']:.1f}"
+                        )
+                        row_labels.append(label)
+                        label_to_bout[label] = bn
 
-            st.caption("Drag rows above to change order.")
+                    sorted_labels = sort_items(
+                        row_labels,
+                        direction="vertical",
+                        key=f"mat_{mat}_sortable",
+                        custom_style=SORTABLE_STYLE,
+                    )
 
-            # PER-MAT REMOVE SELECTOR
-            # Build mapping from bout_num -> label for display
-            bout_label_map = {}
-            for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                if bn not in bout_nums_in_mat:
-                    continue
-                b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
-                bout_label_map[bn] = (
-                    f"Slot {idx2} – Bout {bn}: "
-                    f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
-                )
+                    # Update mat_order based on drag result
+                    new_order = []
+                    for label in sorted_labels:
+                        bn = label_to_bout.get(label)
+                        if bn is not None and bn in bout_nums_in_mat and bn not in new_order:
+                            new_order.append(bn)
+                    st.session_state.mat_order[mat] = new_order
 
-            valid_bouts = list(bout_label_map.keys())
-            if not valid_bouts:
-                st.caption("No bouts left on this mat.")
-            else:
-                selected_bout = st.selectbox(
-                    "Remove bout on this mat:",
-                    options=valid_bouts,
-                    format_func=lambda v: bout_label_map[v],
-                    key=f"remove_select_mat_{mat}"
-                )
-                if st.button(
-                    "Remove selected bout",
-                    key=f"remove_button_mat_{mat}",
-                    help="Removes the selected bout from this meet (Undo available at bottom)."
-                ):
-                    remove_bout(selected_bout)
+                    st.caption("Drag rows above to change order for this mat.")
+
+                    # Per-mat remove selector
+                    bout_label_map = {}
+                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                        if bn not in bout_nums_in_mat:
+                            continue
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                        bout_label_map[bn] = (
+                            f"Slot {idx2} – Bout {bn}: "
+                            f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
+                        )
+
+                    valid_bouts = list(bout_label_map.keys())
+                    if not valid_bouts:
+                        st.caption("No bouts left on this mat.")
+                    else:
+                        selected_bout = st.selectbox(
+                            "Remove bout on this mat:",
+                            options=valid_bouts,
+                            format_func=lambda v: bout_label_map[v],
+                            key=f"remove_select_mat_{mat}"
+                        )
+                        if st.button(
+                            "Remove selected bout",
+                            key=f"remove_button_mat_{mat}",
+                            help="Removes the selected bout from this meet (Undo available at bottom)."
+                        ):
+                            remove_bout(selected_bout)
 
     # ----- Undo control -----
     st.markdown("---")
