@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – Drag rows (slot + bout + team colors + inline remove + undo)
+# app.py – Wrestling Scheduler – drag rows + inline remove + undo
 import streamlit as st
 import pandas as pd
 import io
@@ -427,6 +427,20 @@ st.markdown(
 # Sortable CSS
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
+# Extra CSS for remove-column buttons to align visually with rows
+st.markdown("""
+<style>
+.remove-col .stButton {
+    margin-bottom: 4px !important;         /* match sortable row bottom margin */
+}
+.remove-col .stButton > button {
+    padding: 4px 10px !important;          /* compact buttons */
+    height: 32px !important;              /* close to row height */
+    min-width: 60px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
@@ -759,6 +773,7 @@ if st.session_state.initialized:
 
             # RIGHT: aligned remove buttons (one per row, same order)
             with remove_col:
+                st.markdown('<div class="remove-col">', unsafe_allow_html=True)
                 for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
                     if bn not in bout_nums_in_mat:
                         continue
@@ -769,6 +784,7 @@ if st.session_state.initialized:
                         args=(bn,),
                         help=f"Remove bout {bn} from this meet (Undo at bottom)",
                     )
+                st.markdown('</div>', unsafe_allow_html=True)
 
             st.caption("Drag rows on the left to change order. Use X buttons to remove bouts.")
 
