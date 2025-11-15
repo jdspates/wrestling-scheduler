@@ -810,11 +810,14 @@ if st.session_state.initialized:
                 w1 = next(w for w in raw_active if w["id"] == manual_w1_id)
                 w2 = next(w for w in raw_active if w["id"] == manual_w2_id)
 
-                # Check if they already have a match together (any bout between these two)
+                # Check if they already have a match together (ignore Manually Removed bouts)
                 already_linked = any(
-                    (b["w1_id"] == w1["id"] and b["w2_id"] == w2["id"]) or
-                    (b["w1_id"] == w2["id"] and b["w2_id"] == w1["id"])
+                    (
+                        (b["w1_id"] == w1["id"] and b["w2_id"] == w2["id"]) or
+                        (b["w1_id"] == w2["id"] and b["w2_id"] == w1["id"])
+                    )
                     for b in st.session_state.bout_list
+                    if b.get("manual") != "Manually Removed"
                 )
 
                 if already_linked:
