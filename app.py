@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – Drag rows (slot + bout + team colors + per-row remove + undo)
+# app.py – Wrestling Scheduler – Drag rows (slot + bout + team colors + inline remove + undo)
 import streamlit as st
 import pandas as pd
 import io
@@ -200,7 +200,7 @@ def build_suggestions(active, bout_list):
     return sugg
 
 def generate_mat_schedule(bout_list, gap=4):
-    """Base scheduling algorithm (ignores manual reordering, respects manual removals)."""
+    """Base scheduling algorithm (ignores manual ordering, respects manual removals)."""
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
     valid = sorted(valid, key=lambda x: x["avg_weight"])  # Light to heavy
 
@@ -299,7 +299,7 @@ def generate_mat_schedule(bout_list, gap=4):
                 "is_early": b["is_early"]
             })
 
-    # mat_bout_num will be recomputed later after reordering
+    # mat_bout_num will be recomputed after manual reordering
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [m for m in schedules if m["mat"] == mat_num]
         mat_entries.sort(key=lambda x: x["slot"])
@@ -310,9 +310,8 @@ def generate_mat_schedule(bout_list, gap=4):
 
 def apply_mat_order_to_global_schedule():
     """
-    Take the base auto-generated schedule, then reorder each mat
-    according to st.session_state.mat_order (if present).
-    Recomputes slot + mat_bout_num so exports match the dragged order.
+    Take the base schedule, then reorder each mat according to st.session_state.mat_order,
+    and recompute slot + mat_bout_num so exports match the dragged order.
     """
     base = generate_mat_schedule(st.session_state.bout_list)
     schedules = []
@@ -322,7 +321,6 @@ def apply_mat_order_to_global_schedule():
         order = st.session_state.mat_order.get(mat)
 
         if order:
-            # sort entries by the index in order; unmatched go to the end
             entries_sorted = sorted(
                 entries,
                 key=lambda e: (
@@ -334,7 +332,6 @@ def apply_mat_order_to_global_schedule():
         else:
             entries_sorted = sorted(entries, key=lambda e: e["slot"])
 
-        # recalc slot + mat_bout_num after ordering
         for idx, e in enumerate(entries_sorted, start=1):
             e["slot"] = idx
             e["mat_bout_num"] = idx
@@ -369,7 +366,6 @@ def remove_bout(bout_num: int):
         if bout_num in order:
             order.remove(bout_num)
 
-    # Rebuild suggestions; ordering will be honored by apply_mat_order_to_global_schedule()
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
@@ -390,8 +386,7 @@ def undo_last():
         if b["w1_id"] not in w2["match_ids"]:
             w2["match_ids"].append(b["w1_id"])
         st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-        # Clearing mat_order so fresh schedule is applied; user can re-drag
-        st.session_state.mat_order = {}
+        st.session_state.mat_order = {}  # reset manual ordering after undo
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
         st.session_state.excel_bytes = None
@@ -688,7 +683,7 @@ if st.session_state.initialized:
     else:
         st.info("All filtered wrestlers have 2+ matches. No suggestions needed.")
 
-    # ----- Mat Previews (draggable rows + per-row remove) -----
+    # ----- Mat Previews (draggable rows + inline remove buttons) -----
     st.subheader("Mat Previews")
     filtered_ids = {w["id"] for w in filtered_active}
     filtered_bout_list = [
@@ -696,7 +691,6 @@ if st.session_state.initialized:
         if b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids
     ]
     filtered_schedule_base = generate_mat_schedule(filtered_bout_list) if filtered_bout_list else []
-    bout_to_mat_filtered = {entry["bout_num"]: entry["mat"] for entry in filtered_schedule_base}
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [e for e in filtered_schedule_base if e["mat"] == mat]
@@ -708,17 +702,15 @@ if st.session_state.initialized:
             bout_nums_in_mat = [e["bout_num"] for e in mat_entries]
             existing_order = st.session_state.mat_order.get(mat)
             if not existing_order:
-                # first time: initialize order for this mat from filtered entries
                 st.session_state.mat_order[mat] = bout_nums_in_mat.copy()
             else:
-                # keep only those still in this mat; add any new ones at the end
                 cleaned = [bn for bn in existing_order if bn in bout_nums_in_mat]
                 for bn in bout_nums_in_mat:
                     if bn not in cleaned:
                         cleaned.append(bn)
                 st.session_state.mat_order[mat] = cleaned
 
-            # Build row labels for the draggable list
+            # Build labels for sortable list
             row_labels = []
             label_to_bout = {}
             for idx, bn in enumerate(st.session_state.mat_order[mat]):
@@ -744,14 +736,17 @@ if st.session_state.initialized:
                 row_labels.append(label)
                 label_to_bout[label] = bn
 
-            sorted_labels = sort_items(
-                row_labels,
-                direction="vertical",
-                key=f"mat_{mat}_sortable",
-                custom_style=SORTABLE_STYLE,
-            )
+            drag_col, remove_col = st.columns([0.8, 0.2])
 
-            # Update mat_order from sorted labels
+            with drag_col:
+                sorted_labels = sort_items(
+                    row_labels,
+                    direction="vertical",
+                    key=f"mat_{mat}_sortable",
+                    custom_style=SORTABLE_STYLE,
+                )
+
+            # Update mat_order based on drag result
             new_order = []
             for label in sorted_labels:
                 bn = label_to_bout.get(label)
@@ -759,37 +754,20 @@ if st.session_state.initialized:
                     new_order.append(bn)
             st.session_state.mat_order[mat] = new_order
 
-            st.caption("Drag rows to change bout order on this mat. Click Remove to drop a bout.")
-
-            # Show a simple list with per-row Remove buttons reflecting current order
-            for idx, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                if bn not in bout_nums_in_mat:
-                    continue
-                b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
-                color_name1 = team_color_for_roster.get(b["w1_team"])
-                color_name2 = team_color_for_roster.get(b["w2_team"])
-                emoji1 = COLOR_EMOJI.get(color_name1, "▪")
-                emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                row_text = (
-                    f"Slot {idx} | Bout {bn} | "
-                    f"{emoji1} {b['w1_name']} ({b['w1_team']}) vs "
-                    f"{emoji2} {b['w2_name']} ({b['w2_team']}) "
-                    f"[Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}, "
-                    f"Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}, "
-                    f"{'Early' if b['is_early'] else 'Std'}, "
-                    f"Score {b['score']:.1f}]"
-                )
-                c_btn, c_txt = st.columns([0.12, 0.88])
-                with c_btn:
+            with remove_col:
+                st.caption("Remove bout:")
+                for idx, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                    if bn not in bout_nums_in_mat:
+                        continue
                     st.button(
-                        "Remove",
+                        f"X {bn}",
                         key=f"rm_{mat}_{bn}_{idx}",
                         on_click=remove_bout,
                         args=(bn,),
-                        help="Remove this bout (Undo available at bottom)",
+                        help=f"Remove bout {bn} from this meet (Undo at bottom)",
                     )
-                with c_txt:
-                    st.write(row_text)
+
+            st.caption("Drag left list to change order. Right column removes a bout.")
 
     # ----- Undo control -----
     st.markdown("---")
@@ -803,9 +781,8 @@ if st.session_state.initialized:
     if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
         with st.spinner("Generating files..."):
             try:
-                # Build final schedule based on current mat_order + manual removals
                 final_sched = apply_mat_order_to_global_schedule()
-                st.session_state.mat_schedules = final_sched  # optional, for inspection
+                st.session_state.mat_schedules = final_sched
 
                 # Excel
                 out = io.BytesIO()
