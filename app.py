@@ -663,12 +663,11 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         ]:
             st.session_state.pop(key, None)
 
-        # Clear uploader contents so the coach can pick a new file
-        st.session_state.pop("roster_csv_uploader", None)
+        # Clear uploader so the file name + X disappear
+        st.session_state["roster_csv_uploader"] = None
 
         st.success("Meet reset. You can upload a new roster file.")
         st.rerun()
-
 
 # ----------------------------------------------------------------------
 # SIDEBAR SETTINGS
@@ -1709,4 +1708,5 @@ else:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
