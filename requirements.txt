@@ -2,3 +2,4 @@ streamlit>=1.38.0
 pandas
 openpyxl
 reportlab==4.0.9
+streamlit-sortables
