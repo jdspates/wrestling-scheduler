@@ -615,6 +615,7 @@ uploaded = st.file_uploader(
     key="roster_csv_uploader"
 )
 
+# Process upload once per meet
 if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
@@ -648,6 +649,24 @@ if uploaded and not st.session_state.initialized:
         )
     except Exception as e:
         st.error(f"Error loading roster: {e}")
+
+# NEW: Start-over / load new roster button, right under the uploader
+if st.button(
+    "🔄 Start Over / Load New Roster",
+    help="Clear current roster and matches so you can upload a new file."
+):
+    for key in [
+        "initialized", "bout_list", "mat_schedules", "suggestions",
+        "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
+        "roster", "mat_order_history", "manual_match_warning"
+    ]:
+        st.session_state.pop(key, None)
+
+    # Clear uploader contents so the coach can pick a new file
+    st.session_state.pop("roster_csv_uploader", None)
+
+    st.success("Meet reset. You can upload a new roster file.")
+    st.rerun()
 
 # ----------------------------------------------------------------------
 # SIDEBAR SETTINGS
@@ -1524,6 +1543,55 @@ if st.session_state.initialized:
         c1.metric("Active Wrestlers", num_wrestlers)
         c2.metric("Total Bouts", total_bouts)
         c3.metric("Avg Matches / Wrestler", f"{avg_matches:.2f}")
+
+        st.markdown("---")
+
+        # NEW: Wrestler match counts with below/OK/above min/max flags
+        st.markdown("#### Wrestler Match Counts")
+
+        valid_bouts = [
+            b for b in st.session_state.bout_list
+            if b["manual"] != "Manually Removed"
+        ]
+
+        if not valid_bouts:
+            st.caption("No bouts yet. Generate or add matches in **Match Builder**.")
+        else:
+            match_counts = {}  # keyed by wrestler id
+
+            for b in valid_bouts:
+                for side in ("w1", "w2"):
+                    wid = b[f"{side}_id"]
+                    name = b[f"{side}_name"]
+                    team = b[f"{side}_team"]
+
+                    if wid not in match_counts:
+                        match_counts[wid] = {
+                            "Wrestler": name,
+                            "Team": team,
+                            "Matches": 0,
+                        }
+                    match_counts[wid]["Matches"] += 1
+
+            rows = list(match_counts.values())
+            df_wc = pd.DataFrame(rows)
+
+            min_m = CONFIG["MIN_MATCHES"]
+            max_m = CONFIG["MAX_MATCHES"]
+
+            def status_fn(m):
+                if m < min_m:
+                    return "Below Min"
+                if m > max_m:
+                    return "Above Max"
+                return "OK"
+
+            df_wc["Status"] = df_wc["Matches"].apply(status_fn)
+
+            # Sort by team then name
+            df_wc = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
+
+            st.dataframe(df_wc, use_container_width=True)
 
         st.markdown("---")
 
