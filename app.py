@@ -721,6 +721,23 @@ st.sidebar.subheader("Team Colors")
 TEAMS = CONFIG.get("TEAMS", [])
 circle_color_names = list(COLOR_ICON.keys())
 
+# NEW: Auto-build TEAMS from roster if missing (fixes blank team names in existing sessions)
+if (not TEAMS) and st.session_state.get("roster"):
+    roster_teams = sorted({
+        str(w["team"]).strip()
+        for w in st.session_state.roster
+        if str(w["team"]).strip()
+    })
+    teams_cfg = []
+    for idx, team_name in enumerate(roster_teams):
+        color = circle_color_names[idx % len(circle_color_names)]
+        teams_cfg.append({"name": team_name, "color": color})
+
+    CONFIG["TEAMS"] = teams_cfg
+    st.session_state.CONFIG = CONFIG
+    st.session_state.sortable_version += 1
+    TEAMS = teams_cfg
+
 if TEAMS:
     for i, team in enumerate(TEAMS):
         label = team["name"] or f"Team {i+1}"
@@ -803,7 +820,7 @@ if st.session_state.initialized:
     tab_build, tab_summary, tab_help = st.tabs(["Match Builder", "Meet Summary", "Help"])
 
     # ==========================================================
-    # TAB 1 – MATCH BUILDER (existing main workflow)
+    # TAB 1 – MATCH BUILDER
     # ==========================================================
     with tab_build:
         # Map each roster team to a color name (for icons + HTML)
