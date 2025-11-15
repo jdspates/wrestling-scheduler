@@ -570,6 +570,30 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.title("Wrestling Meet Scheduler")
 st.caption("Upload roster to Generate to Edit to Download. **No data stored.**")
 
+with st.expander("How to use this page"):
+    st.markdown("""
+1. **Step 1 – Download template**  
+   Download the roster template CSV and save a copy for your meet.
+
+2. **Step 2 – Upload roster.csv**  
+   Fill in your wrestlers, save as `roster.csv`, and upload it here.
+
+3. **Pre-Meet Scratches**  
+   Mark wrestlers who are not wrestling so they are removed from scheduling.
+
+4. **Suggested Matches**  
+   Review and optionally add suggested matches for wrestlers who need more bouts.
+
+5. **Manual Match Creator**  
+   Force specific matchups coaches want (even if auto-matcher didn't create them).
+
+6. **Mat Previews**  
+   Drag matches to reorder and review rest-gap warnings.
+
+7. **Generate Matches**  
+   Download Excel + PDF bout sheets for the meet.
+    """)
+
 # ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
 st.markdown("### Step 1 – Download roster template (CSV)")
 st.markdown(
@@ -1432,5 +1456,6 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
