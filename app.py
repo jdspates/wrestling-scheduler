@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + fixed suggestions/search
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (fixed add + slots)
 import streamlit as st
 import pandas as pd
 import io
@@ -61,7 +61,6 @@ TEAMS = CONFIG["TEAMS"]
 # ----------------------------------------------------------------------
 # STYLES
 # ----------------------------------------------------------------------
-# custom style for sortable rows (table-like) – FIXED HEIGHT
 SORTABLE_STYLE = """
 .sortable-component {
     background-color: transparent;
@@ -82,23 +81,22 @@ SORTABLE_STYLE = """
 }
 .sortable-item {
     background-color: #ffffff;
-    color: #222 !important;   /* keep text dark */
+    color: #222 !important;
     border-radius: 4px;
     border: 1px solid #ddd;
-    padding: 0 8px;                 /* horizontal only */
+    padding: 0 8px;
     margin-bottom: 4px;
     font-size: 0.85rem;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     cursor: grab;
 
-    /* fixed-height flex row so text centers vertically */
     height: 36px;
     display: flex;
     align-items: center;
 }
 .sortable-item:hover {
     background-color: #f7f7f7;
-    color: #222 !important;   /* override theme hover color */
+    color: #222 !important;
 }
 """
 
@@ -309,7 +307,6 @@ def generate_mat_schedule(bout_list, gap=4):
                 "is_early": b["is_early"]
             })
 
-    # mat_bout_num will be recomputed after manual reordering
     for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [m for m in schedules if m["mat"] == mat_num]
         mat_entries.sort(key=lambda x: x["slot"])
@@ -371,7 +368,6 @@ def remove_bout(bout_num: int):
 
     st.session_state.undo_stack.append(bout_num)
 
-    # Remove this bout from mat_order for all mats
     for mat, order in st.session_state.mat_order.items():
         if bout_num in order:
             order.remove(bout_num)
@@ -408,7 +404,6 @@ def undo_last():
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
-# Base layout CSS
 st.markdown(
     """
 <style>
@@ -432,7 +427,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-# Sortable CSS
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
 st.title("Wrestling Meet Scheduler")
@@ -477,7 +471,7 @@ search_term = st.sidebar.text_input(
     help="Search affects Mat Previews only (edit disabled while searching)."
 )
 st.sidebar.caption(
-    "**Note:** Suggested Matches still consider all under-matched wrestlers. "
+    "**Note:** Suggested Matches use the filtered wrestlers. "
     "Mat Previews show whatever matches involve the filtered wrestlers."
 )
 
@@ -569,18 +563,16 @@ COLOR_EMOJI = {
 if st.session_state.initialized:
     raw_active = st.session_state.active
 
-    # Build dynamic team->color mapping for emojis (based on actual roster teams)
+    # Map each roster team to an emoji color
     roster_teams = sorted({w["team"] for w in raw_active})
     palette = list(COLOR_EMOJI.keys())
     team_color_for_roster = {}
 
-    # 1) use configured colors when team names match
     for team in roster_teams:
         cfg_color = TEAM_COLOR_NAMES.get(team)
         if cfg_color:
             team_color_for_roster[team] = cfg_color
 
-    # 2) assign remaining teams round-robin from palette
     used_colors = set(team_color_for_roster.values())
     idx = 0
     for team in roster_teams:
@@ -686,6 +678,7 @@ if st.session_state.initialized:
                 st.session_state.bout_list.append(new_bout)
 
             st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+            st.session_state.mat_order = {}  # <<< ensure mats rebuild with new bouts
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.success("Matches added! Early matches placed at the top of their mat.")
             st.session_state.excel_bytes = None
@@ -703,7 +696,6 @@ if st.session_state.initialized:
     if not full_schedule:
         st.caption("No bouts scheduled yet.")
     else:
-        # Build once for filtering
         filtered_ids = {w["id"] for w in filtered_active}
         filtered_bout_nums = {
             b["bout_num"] for b in st.session_state.bout_list
@@ -711,7 +703,7 @@ if st.session_state.initialized:
         }
 
         if search_term.strip():
-            # READ-ONLY view (no drag / remove) using the true global schedule
+            # READ-ONLY view (no drag / remove)
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
@@ -758,10 +750,10 @@ if st.session_state.initialized:
                                 cleaned.append(bn)
                         st.session_state.mat_order[mat] = cleaned
 
-                    # Build labels for sortable list
+                    # Build labels for sortable list (no embedded slot numbers)
                     row_labels = []
                     label_to_bout = {}
-                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                    for bn in st.session_state.mat_order[mat]:
                         if bn not in bout_nums_in_mat:
                             continue
                         b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
@@ -772,7 +764,7 @@ if st.session_state.initialized:
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
 
                         label = (
-                            f"{idx2:>3} | Bout {bn:>3} | "
+                            f"Bout {bn:>3} | "
                             f"{emoji1} {b['w1_name']} ({b['w1_team']})  vs  "
                             f"{emoji2} {b['w2_name']} ({b['w2_team']})"
                             f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
@@ -798,7 +790,7 @@ if st.session_state.initialized:
                             new_order.append(bn)
                     st.session_state.mat_order[mat] = new_order
 
-                    st.caption("Drag rows above to change order for this mat.")
+                    st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
 
                     # Per-mat remove selector
                     bout_label_map = {}
@@ -934,7 +926,6 @@ if st.session_state.initialized:
                 st.error(f"Generation failed: {e}")
                 st.toast("Error – check console.")
 
-    # ---- DOWNLOADS ----
     col_ex, col_pdf = st.columns(2)
     with col_ex:
         if st.session_state.excel_bytes is not None:
