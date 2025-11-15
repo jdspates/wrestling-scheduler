@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (fixed add + slots)
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (fixed add + remove visibility)
 import streamlit as st
 import pandas as pd
 import io
@@ -471,8 +471,7 @@ search_term = st.sidebar.text_input(
     help="Search affects Mat Previews only (edit disabled while searching)."
 )
 st.sidebar.caption(
-    "**Note:** Suggested Matches use the filtered wrestlers. "
-    "Mat Previews show whatever matches involve the filtered wrestlers."
+    "**Note:** Suggested Matches are based on all wrestlers; Mat Previews show only matches involving filtered wrestlers."
 )
 
 changed = False
@@ -600,9 +599,16 @@ if st.session_state.initialized:
         filtered_active = raw_active
         st.info(f"Showing **all {len(filtered_active)}** wrestlers.")
 
+    filtered_ids = {w["id"] for w in filtered_active}
+
     # ----- Suggested Matches -----
     st.subheader("Suggested Matches")
-    current_suggestions = build_suggestions(filtered_active, st.session_state.bout_list)
+
+    # Build suggestions from ALL active wrestlers
+    all_suggestions = build_suggestions(raw_active, st.session_state.bout_list)
+    # Filter suggestions for display: only those whose under-matched wrestler is in filtered set
+    current_suggestions = [s for s in all_suggestions if s["_w_id"] in filtered_ids]
+
     under_count = len([
         w for w in filtered_active
         if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]
@@ -614,8 +620,9 @@ if st.session_state.initialized:
     if current_suggestions:
         sugg_data = []
         for i, s in enumerate(current_suggestions):
+            # display uses filtered_active for nicer rows
             w = next(w for w in filtered_active if w["id"] == s["_w_id"])
-            o = next(o for o in filtered_active if o["id"] == s["_o_id"])
+            o = next(w for w in raw_active if w["id"] == s["_o_id"])  # opponent might be outside filter
             sugg_data.append({
                 "Add": False,
                 "Current": f"{len(w['match_ids'])}",
@@ -657,7 +664,7 @@ if st.session_state.initialized:
             ]
             for s in to_add:
                 w = next(w for w in raw_active if w["id"] == s["_w_id"])
-                o = next(o for o in raw_active if o["id"] == s["_o_id"])
+                o = next(w for w in raw_active if w["id"] == s["_o_id"])
                 if o["id"] not in w["match_ids"]:
                     w["match_ids"].append(o["id"])
                 if w["id"] not in o["match_ids"]:
@@ -678,7 +685,7 @@ if st.session_state.initialized:
                 st.session_state.bout_list.append(new_bout)
 
             st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-            st.session_state.mat_order = {}  # <<< ensure mats rebuild with new bouts
+            st.session_state.mat_order = {}  # ensure mats rebuild with new bouts
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.success("Matches added! Early matches placed at the top of their mat.")
             st.session_state.excel_bytes = None
@@ -696,18 +703,24 @@ if st.session_state.initialized:
     if not full_schedule:
         st.caption("No bouts scheduled yet.")
     else:
-        filtered_ids = {w["id"] for w in filtered_active}
-        filtered_bout_nums = {
-            b["bout_num"] for b in st.session_state.bout_list
-            if b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids
-        }
+        # For search mode, only consider bouts where wrestlers are in filtered_ids
+        # and NOT manually removed
+        def bout_in_filtered(b):
+            return (
+                b["manual"] != "Manually Removed" and
+                (b["w1_id"] in filtered_ids or b["w2_id"] in filtered_ids)
+            )
 
         if search_term.strip():
-            # READ-ONLY view (no drag / remove)
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
-                    if e["mat"] == mat and e["bout_num"] in filtered_bout_nums
+                    if e["mat"] == mat and bout_in_filtered(
+                        next(
+                            b for b in st.session_state.bout_list
+                            if b["bout_num"] == e["bout_num"]
+                        )
+                    )
                 ]
                 with st.expander(f"Mat {mat}", expanded=True):
                     if not mat_entries:
