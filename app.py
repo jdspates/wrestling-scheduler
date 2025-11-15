@@ -4,7 +4,7 @@ import pandas as pd
 import io
 import random
 from reportlab.lib.pagesizes import letter
-from reportlab.plplatypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -976,3 +976,4 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
