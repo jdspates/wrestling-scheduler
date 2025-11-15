@@ -651,22 +651,24 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error loading roster: {e}")
 
 # NEW: Start-over / load new roster button, right under the uploader
-if st.button(
-    "🔄 Start Over / Load New Roster",
-    help="Clear current roster and matches so you can upload a new file."
-):
-    for key in [
-        "initialized", "bout_list", "mat_schedules", "suggestions",
-        "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-        "roster", "mat_order_history", "manual_match_warning"
-    ]:
-        st.session_state.pop(key, None)
+if st.session_state.get("initialized") and st.session_state.get("roster"):
+    if st.button(
+        "🔄 Start Over / Load New Roster",
+        help="Clear current roster and matches so you can upload a new file."
+    ):
+        for key in [
+            "initialized", "bout_list", "mat_schedules", "suggestions",
+            "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
+            "roster", "mat_order_history", "manual_match_warning"
+        ]:
+            st.session_state.pop(key, None)
 
-    # Clear uploader contents so the coach can pick a new file
-    st.session_state.pop("roster_csv_uploader", None)
+        # Clear uploader contents so the coach can pick a new file
+        st.session_state.pop("roster_csv_uploader", None)
 
-    st.success("Meet reset. You can upload a new roster file.")
-    st.rerun()
+        st.success("Meet reset. You can upload a new roster file.")
+        st.rerun()
+
 
 # ----------------------------------------------------------------------
 # SIDEBAR SETTINGS
@@ -1707,3 +1709,4 @@ else:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
