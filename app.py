@@ -116,14 +116,14 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
     "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-    "roster"
+    "roster", "mat_order_history"
 ]:
     if key not in st.session_state:
         if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
             st.session_state[key] = []
         elif key == "mat_order":
             st.session_state[key] = {}
-        elif key == "roster":
+        elif key in ["roster", "mat_order_history"]:
             st.session_state[key] = []
         else:
             st.session_state[key] = None
@@ -168,7 +168,7 @@ def generate_initial_matchups(active):
                     and o["id"] != w["id"]
                     and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
                     and is_compatible(w, o)
-                    and abs(w["weight"] - o["weight"]) <=
+                    and abs(w["weight"] - o["weight"]) <= \
                         min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
                     and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
                 ]
@@ -209,7 +209,7 @@ def build_suggestions(active, bout_list):
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         opps = [
             o for o in opps
-            if abs(w["weight"] - o["weight"]) <=
+            if abs(w["weight"] - o["weight"]) <= \
                 min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
             and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
         ]
@@ -443,6 +443,9 @@ def remove_bout(bout_num: int):
         if bout_num in order:
             order.remove(bout_num)
 
+    # Removing a bout fundamentally changes mat layout; clear drag history
+    st.session_state.mat_order_history = []
+
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
@@ -466,6 +469,7 @@ def undo_last():
             w2["match_ids"].append(b["w1_id"])
         st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
         st.session_state.mat_order = {}
+        st.session_state.mat_order_history = []  # reset drag history after structural change
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.success("Undo successful!")
         st.session_state.excel_bytes = None
@@ -473,6 +477,21 @@ def undo_last():
 
         st.session_state.sortable_version += 1
     st.rerun()
+
+def undo_last_drag():
+    """Undo the last drag-based reorder across mats."""
+    history = st.session_state.get("mat_order_history", [])
+    if history:
+        # Restore last snapshot
+        last_snapshot = history.pop()
+        st.session_state.mat_order = last_snapshot
+        st.session_state.excel_bytes = None
+        st.session_state.pdf_bytes = None
+        st.session_state.sortable_version += 1
+        st.success("Last drag/reorder undone.")
+        st.rerun()
+    else:
+        st.info("No drag operations to undo yet.")
 
 # ----------------------------------------------------------------------
 # STREAMLIT APP
@@ -709,6 +728,7 @@ if st.session_state.initialized:
             st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
             st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
             st.session_state.mat_order = {}
+            st.session_state.mat_order_history = []  # reset drag history
             st.session_state.undo_stack = []
             st.session_state.excel_bytes = None
             st.session_state.pdf_bytes = None
@@ -838,6 +858,7 @@ if st.session_state.initialized:
 
                 # Clear manual mat order so the new match gets placed, then coach can drag it
                 st.session_state.mat_order = {}
+                st.session_state.mat_order_history = []
 
                 # Rebuild suggestions based on new counts
                 st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
@@ -937,6 +958,7 @@ if st.session_state.initialized:
 
             st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
             st.session_state.mat_order = {}
+            st.session_state.mat_order_history = []
             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
             st.success("Matches added! Early matches placed at the top of their mat.")
             st.session_state.excel_bytes = None
@@ -1060,6 +1082,8 @@ if st.session_state.initialized:
                         st.session_state.mat_order[mat] = cleaned
 
                     prev_order = st.session_state.mat_order[mat].copy()
+                    # global snapshot of mat_order before applying any change for this mat
+                    mat_order_before = copy.deepcopy(st.session_state.mat_order)
 
                     row_labels = []
                     label_to_bout = {}
@@ -1100,6 +1124,8 @@ if st.session_state.initialized:
                             new_order.append(bn)
 
                     if new_order != prev_order:
+                        # record previous mat_order snapshot for drag undo
+                        st.session_state.mat_order_history.append(mat_order_before)
                         st.session_state.mat_order[mat] = new_order
                         st.session_state.sortable_version += 1
                         st.rerun()
@@ -1152,11 +1178,19 @@ if st.session_state.initialized:
 
     # ----- Undo -----
     st.markdown("---")
-    if st.session_state.undo_stack:
-        if st.button("Undo Last Remove", help="Restore last removed match"):
-            undo_last()
-    else:
-        st.caption("No removals yet to undo.")
+    col_undo_remove, col_undo_drag = st.columns(2)
+    with col_undo_remove:
+        if st.session_state.undo_stack:
+            if st.button("Undo Last Remove", help="Restore last removed match"):
+                undo_last()
+        else:
+            st.caption("No removals yet to undo.")
+    with col_undo_drag:
+        if st.session_state.mat_order_history:
+            if st.button("Undo Last Drag/Reorder", help="Restore previous mat order before last drag action"):
+                undo_last_drag()
+        else:
+            st.caption("No drags yet to undo.")
 
     # ---- GENERATE MEET ----
     if st.button("Generate Matches", type="primary", help="Download Excel + PDF"):
