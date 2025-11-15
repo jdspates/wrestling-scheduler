@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches
+# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
 import streamlit as st
 import pandas as pd
 import io
@@ -730,6 +730,126 @@ if st.session_state.initialized:
         st.info(f"Showing **all {len(filtered_active)}** active wrestlers.")
 
     filtered_ids = {w["id"] for w in filtered_active}
+
+    # ----- Manual Match Creator -----
+    st.subheader("Manual Match Creator")
+
+    active_ids = [w["id"] for w in raw_active]
+
+    if len(active_ids) < 2:
+        st.caption("Not enough active wrestlers to create a manual match.")
+    else:
+        col_m1, col_m2, col_m_btn = st.columns([3, 3, 1])
+
+        with col_m1:
+            manual_w1_id = st.selectbox(
+                "Wrestler 1",
+                options=active_ids,
+                format_func=lambda wid: next(
+                    f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
+                    for w in raw_active if w["id"] == wid
+                ),
+                key="manual_match_w1",
+            )
+
+        with col_m2:
+            manual_w2_id = st.selectbox(
+                "Wrestler 2",
+                options=[wid for wid in active_ids if wid != manual_w1_id],
+                format_func=lambda wid: next(
+                    f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
+                    for w in raw_active if w["id"] == wid
+                ),
+                key="manual_match_w2",
+            )
+
+        with col_m_btn:
+            create_manual = st.button(
+                "Create Match",
+                help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                key="manual_match_create_btn",
+            )
+
+        if create_manual:
+            if manual_w1_id == manual_w2_id:
+                st.warning("Please choose two different wrestlers.")
+            else:
+                w1 = next(w for w in raw_active if w["id"] == manual_w1_id)
+                w2 = next(w for w in raw_active if w["id"] == manual_w2_id)
+
+                # Check if they already have a match together
+                already_linked = any(
+                    (b["w1_id"] == w1["id"] and b["w2_id"] == w2["id"]) or
+                    (b["w1_id"] == w2["id"] and b["w2_id"] == w1["id"])
+                    for b in st.session_state.bout_list
+                    if b.get("manual") != "Manually Removed"
+                )
+
+                # Soft warnings for coaches – but still allow the match
+                warning_msgs = []
+                if w1["team"] == w2["team"]:
+                    warning_msgs.append("Same team matchup.")
+                if abs(w1["level"] - w2["level"]) > CONFIG["MAX_LEVEL_DIFF"]:
+                    warning_msgs.append("Large level difference.")
+                if abs(w1["weight"] - w2["weight"]) > max_weight_diff(w1["weight"]):
+                    warning_msgs.append("Large weight difference.")
+                if already_linked:
+                    warning_msgs.append("These two already have a match together.")
+
+                if warning_msgs:
+                    st.info(
+                        "Note: " + " ".join(
+                            f"• {msg}" for msg in warning_msgs
+                        ) + " (match will still be created)."
+                    )
+
+                # Link in match_ids if not already present
+                if w2["id"] not in w1["match_ids"]:
+                    w1["match_ids"].append(w2["id"])
+                if w1["id"] not in w2["match_ids"]:
+                    w2["match_ids"].append(w1["id"])
+
+                new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
+                    if st.session_state.bout_list else 1
+
+                new_score = matchup_score(w1, w2)
+                new_bout = {
+                    "bout_num": new_bout_num,
+                    "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
+                    "w1_level": w1["level"], "w1_weight": w1["weight"],
+                    "w1_grade": w1["grade"], "w1_early": w1["early"],
+                    "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
+                    "w2_level": w2["level"], "w2_weight": w2["weight"],
+                    "w2_grade": w2["grade"], "w2_early": w2["early"],
+                    "score": new_score,
+                    "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+                    "is_early": w1["early"] or w2["early"],
+                    "manual": "Coach Manual Match",
+                }
+
+                st.session_state.bout_list.append(new_bout)
+
+                # Keep bouts sorted by avg_weight so base scheduler behaves
+                st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+
+                # Clear manual mat order so the new match gets placed, then coach can drag it
+                st.session_state.mat_order = {}
+
+                # Rebuild suggestions based on new counts
+                st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
+
+                # Invalidate exports
+                st.session_state.excel_bytes = None
+                st.session_state.pdf_bytes = None
+
+                # Refresh drag widgets
+                st.session_state.sortable_version += 1
+
+                st.success(
+                    f"Manual match created: {w1['name']} ({w1['team']}) vs {w2['name']} ({w2['team']}). "
+                    "You can now drag it to the desired mat and slot."
+                )
+                st.rerun()
 
     # ----- Suggested Matches -----
     st.subheader("Suggested Matches")
