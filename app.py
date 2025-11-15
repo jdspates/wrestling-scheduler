@@ -163,6 +163,10 @@ for key in [
 if "sortable_version" not in st.session_state:
     st.session_state.sortable_version = 0
 
+# versioned key for file_uploader so we can reset it cleanly
+if "roster_uploader_version" not in st.session_state:
+    st.session_state.roster_uploader_version = 0
+
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
@@ -612,7 +616,7 @@ st.markdown("### Step 2 – Upload your completed `roster.csv`")
 uploaded = st.file_uploader(
     "Upload your roster.csv file",
     type="csv",
-    key="roster_csv_uploader"
+    key=f"roster_csv_uploader_v{st.session_state.roster_uploader_version}",
 )
 
 # Process upload once per meet
@@ -650,7 +654,7 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error loading roster: {e}")
 
-# NEW: Start-over / load new roster button, right under the uploader
+# Start-over / load new roster button, right under the uploader
 if st.session_state.get("initialized") and st.session_state.get("roster"):
     if st.button(
         "🔄 Start Over / Load New Roster",
@@ -663,8 +667,8 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         ]:
             st.session_state.pop(key, None)
 
-        # Clear uploader so the file name + X disappear
-        st.session_state["roster_csv_uploader"] = None
+        # Bump uploader version so Streamlit creates a fresh, empty uploader
+        st.session_state.roster_uploader_version += 1
 
         st.success("Meet reset. You can upload a new roster file.")
         st.rerun()
@@ -1708,5 +1712,3 @@ else:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
