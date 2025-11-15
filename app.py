@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early emoji, no duplicate lists
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + bold early markers
 import streamlit as st
 import pandas as pd
 import io
@@ -750,7 +750,8 @@ if st.session_state.initialized:
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        early_flag = "⏰" if b["is_early"] else ""
+                        # loud early marker in table
+                        early_flag = "⏰🔥 EARLY 🔥⏰" if b["is_early"] else ""
                         rows.append({
                             "Slot": e["mat_bout_num"],
                             "Bout": b["bout_num"],
@@ -796,7 +797,8 @@ if st.session_state.initialized:
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
-                        early_prefix = "⏰ EARLY | " if b["is_early"] else ""
+                        # loud early marker in draggable rows
+                        early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
 
                         label = (
                             f"{early_prefix}"
