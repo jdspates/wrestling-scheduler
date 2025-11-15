@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo (sortable refresh)
+# app.py – Wrestling Scheduler – drag rows + per-mat remove + undo + early highlight
 import streamlit as st
 import pandas as pd
 import io
@@ -113,7 +113,7 @@ for key in ["initialized", "bout_list", "mat_schedules", "suggestions",
         else:
             st.session_state[key] = None
 
-# NEW: version bump for sortable widgets
+# version bump for sortable widgets so they refresh on add/remove/undo
 if "sortable_version" not in st.session_state:
     st.session_state.sortable_version = 0
 
@@ -727,6 +727,7 @@ if st.session_state.initialized:
             )
 
         if search_term.strip():
+            # READ-ONLY PREVIEW WITH YELLOW HIGHLIGHT FOR EARLY
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [
                     e for e in full_schedule
@@ -748,18 +749,23 @@ if st.session_state.initialized:
                         color_name2 = team_color_for_roster.get(b["w2_team"])
                         emoji1 = COLOR_EMOJI.get(color_name1, "▪")
                         emoji2 = COLOR_EMOJI.get(color_name2, "▪")
+                        bg = "#fff9c4" if b["is_early"] else "#ffffff"
                         st.markdown(
-                            f"**Slot {e['mat_bout_num']} – Bout {b['bout_num']}**  "
-                            f"{emoji1} {b['w1_name']} ({b['w1_team']}) vs "
-                            f"{emoji2} {b['w2_name']} ({b['w2_team']})  "
-                            f"*Lvl* {b['w1_level']:.1f}/{b['w2_level']:.1f} · "
-                            f"*Wt* {b['w1_weight']:.0f}/{b['w2_weight']:.0f} · "
-                            f"*Score* {b['score']:.1f} · "
-                            f"{'Early' if b['is_early'] else ''}"
+                            f"""
+<div style="background:{bg}; border:1px solid #ddd; border-radius:4px;
+            padding:4px 8px; margin-bottom:3px; font-size:0.85rem;">
+  <strong>Slot {e['mat_bout_num']} – Bout {b['bout_num']}</strong><br/>
+  {emoji1} {b['w1_name']} ({b['w1_team']}) vs {emoji2} {b['w2_name']} ({b['w2_team']})<br/>
+  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f} ·
+  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f} ·
+  Score {b['score']:.1f} · {'Early' if b['is_early'] else ''}
+</div>
+""",
+                            unsafe_allow_html=True,
                         )
             st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
         else:
-            # EDIT MODE: drag + per-mat remove dropdown
+            # EDIT MODE: drag + per-mat remove dropdown + preview with yellow highlight
             for mat in range(1, CONFIG["NUM_MATS"] + 1):
                 mat_entries = [e for e in full_schedule if e["mat"] == mat]
                 with st.expander(f"Mat {mat}", expanded=True):
@@ -806,7 +812,7 @@ if st.session_state.initialized:
                     sorted_labels = sort_items(
                         row_labels,
                         direction="vertical",
-                        key=f"mat_{mat}_sortable_v{st.session_state.sortable_version}",  # include version
+                        key=f"mat_{mat}_sortable_v{st.session_state.sortable_version}",
                         custom_style=SORTABLE_STYLE,
                     )
 
@@ -847,6 +853,31 @@ if st.session_state.initialized:
                             help="Removes the selected bout from this meet (Undo available at bottom)."
                         ):
                             remove_bout(selected_bout)
+
+                    # VISUAL PREVIEW WITH YELLOW HIGHLIGHT (matches draggable order)
+                    st.markdown("**Preview (yellow = early match):**")
+                    for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                        if bn not in bout_nums_in_mat:
+                            continue
+                        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                        color_name1 = team_color_for_roster.get(b["w1_team"])
+                        color_name2 = team_color_for_roster.get(b["w2_team"])
+                        emoji1 = COLOR_EMOJI.get(color_name1, "▪")
+                        emoji2 = COLOR_EMOJI.get(color_name2, "▪")
+                        bg = "#fff9c4" if b["is_early"] else "#ffffff"
+                        st.markdown(
+                            f"""
+<div style="background:{bg}; border:1px solid #ddd; border-radius:4px;
+            padding:4px 8px; margin-bottom:3px; font-size:0.85rem;">
+  <strong>Slot {idx2} – Bout {bn}</strong><br/>
+  {emoji1} {b['w1_name']} ({b['w1_team']}) vs {emoji2} {b['w2_name']} ({b['w2_team']})<br/>
+  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f} ·
+  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f} ·
+  Score {b['score']:.1f} · {'Early' if b['is_early'] else ''}
+</div>
+""",
+                            unsafe_allow_html=True,
+                        )
 
     # ----- Undo control -----
     st.markdown("---")
@@ -976,4 +1007,3 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
