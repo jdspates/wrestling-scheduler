@@ -588,11 +588,14 @@ st.download_button(
 st.markdown("---")
 
 # ---- STEP 2: UPLOAD ROSTER ----
+st.markdown("### Step 2 – Upload your completed `roster.csv`")
+
 uploaded = st.file_uploader(
-    "Step 2 – Upload your completed `roster.csv`",
+    "Upload your roster.csv file",
     type="csv",
-    key="roster_csv_uploader"  # unique key to avoid duplicate element ID
+    key="roster_csv_uploader"
 )
+
 if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
@@ -1429,4 +1432,5 @@ if st.session_state.initialized:
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
