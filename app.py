@@ -15,6 +15,13 @@ import copy
 
 from streamlit_sortables import sort_items  # drag-and-drop component
 
+# Optional JS eval for browser autosave (localStorage)
+try:
+    from streamlit_js_eval import streamlit_js_eval
+    _JS_EVAL_AVAILABLE = True
+except Exception:
+    _JS_EVAL_AVAILABLE = False
+
 # ---------- Safe PatternFill import ----------
 try:
     from openpyxl.styles import PatternFill
@@ -26,6 +33,7 @@ except Exception:
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
+AUTOSAVE_KEY = "wrestling_scheduler_autosave_v1"
 
 # 9-color palette that matches circle emojis
 COLOR_MAP = {
@@ -561,6 +569,56 @@ def validate_roster_df(df: pd.DataFrame):
     return errors
 
 # ----------------------------------------------------------------------
+# STATE SNAPSHOT HELPERS (JSON + browser autosave)
+# ----------------------------------------------------------------------
+STATE_KEYS_TO_SAVE = [
+    "CONFIG",
+    "initialized",
+    "roster",
+    "active",
+    "bout_list",
+    "suggestions",
+    "mat_schedules",
+    "mat_order",
+    "mat_order_history",
+    "undo_stack",
+    "manual_match_warning",
+]
+
+def build_meet_state():
+    """Build a JSON-serializable snapshot of the current meet state."""
+    state = {"version": 1}
+    for k in STATE_KEYS_TO_SAVE:
+        if k in st.session_state:
+            state[k] = st.session_state[k]
+    return state
+
+def load_meet_state(state: dict):
+    """Restore meet state from a previously saved snapshot."""
+    global CONFIG
+
+    if not isinstance(state, dict):
+        raise ValueError("Saved state must be a JSON object (dict).")
+
+    for k in STATE_KEYS_TO_SAVE:
+        if k in state:
+            st.session_state[k] = state[k]
+        else:
+            st.session_state.pop(k, None)
+
+    # Re-wire CONFIG reference
+    if "CONFIG" in st.session_state:
+        st.session_state.CONFIG = state.get("CONFIG", st.session_state.CONFIG)
+        CONFIG = st.session_state.CONFIG
+
+    # Generated files are no longer valid
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+
+    # Force drag widgets to refresh
+    st.session_state.sortable_version = st.session_state.get("sortable_version", 0) + 1
+
+# ----------------------------------------------------------------------
 # STREAMLIT APP LAYOUT
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
@@ -591,7 +649,7 @@ st.markdown(
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
+st.caption("Upload roster → Generate → Edit → Download. **No data stored on a server.**")
 
 # ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
 st.markdown("### Step 1 – Download roster template (CSV)")
@@ -670,8 +728,76 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         # Bump uploader version so Streamlit creates a fresh, empty uploader
         st.session_state.roster_uploader_version += 1
 
+        # Clear browser autosave too (if available)
+        if _JS_EVAL_AVAILABLE:
+            streamlit_js_eval(
+                js_code=f"window.localStorage.removeItem('{AUTOSAVE_KEY}');",
+                key="clear_autosave_on_reset",
+            )
+
         st.success("Meet reset. You can upload a new roster file.")
         st.rerun()
+
+# ---- STEP 3: SAVE / RESTORE MEET STATE ----
+st.markdown("### Step 3 – Optional: Save or restore meet state")
+
+col_save_file, col_load_file, col_autosave = st.columns([1.1, 1.1, 1])
+
+with col_save_file:
+    if st.session_state.get("initialized"):
+        snapshot = build_meet_state()
+        json_blob = json.dumps(snapshot, indent=2)
+        st.download_button(
+            "💾 Download meet state (.json)",
+            data=json_blob.encode("utf-8"),
+            file_name="wrestling_meet_state.json",
+            mime="application/json",
+            use_container_width=True,
+            help="Save the current meet to a local JSON file so you can restore it later."
+        )
+    else:
+        st.caption("Upload a roster first to enable saving meet state.")
+
+with col_load_file:
+    saved_state_file = st.file_uploader(
+        "Restore meet from .json",
+        type="json",
+        key="meet_state_uploader",
+        help="Load a previously downloaded meet_state JSON file."
+    )
+    if saved_state_file is not None:
+        try:
+            saved_state = json.load(saved_state_file)
+            load_meet_state(saved_state)
+            st.success("Meet state restored from file.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Could not load saved meet: {e}")
+
+with col_autosave:
+    if _JS_EVAL_AVAILABLE:
+        if st.button(
+            "Restore from browser autosave",
+            help="Restore the last autosaved meet stored in this browser."
+        ):
+            saved_json = streamlit_js_eval(
+                js_code=f"window.localStorage.getItem('{AUTOSAVE_KEY}')",
+                key="read_autosave",
+            )
+            if saved_json:
+                try:
+                    state = json.loads(saved_json)
+                    load_meet_state(state)
+                    st.success("Meet restored from browser autosave.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Autosave data is invalid or corrupted: {e}")
+            else:
+                st.info("No autosaved meet found in this browser yet.")
+    else:
+        st.caption("Browser autosave available if `streamlit-js-eval` is installed.")
+
+st.markdown("---")
 
 # ----------------------------------------------------------------------
 # SIDEBAR SETTINGS
@@ -1711,4 +1837,21 @@ else:
     st.info("Upload a roster CSV in **Step 2** to unlock Match Builder, Meet Summary, and Help tabs.")
 
 st.markdown("---")
-st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+st.caption("**Privacy**: Your roster is processed in your browser session. Nothing is stored on a backend database.")
+
+# ----------------------------------------------------------------------
+# BROWSER AUTOSAVE (write snapshot to localStorage every run)
+# ----------------------------------------------------------------------
+if st.session_state.get("initialized") and _JS_EVAL_AVAILABLE:
+    try:
+        autosave_state = build_meet_state()
+        snapshot_json = json.dumps(autosave_state)
+        # Escape for safe embedding in JS single-quoted string
+        snapshot_json_escaped = snapshot_json.replace("\\", "\\\\").replace("'", "\\'")
+        streamlit_js_eval(
+            js_code=f"window.localStorage.setItem('{AUTOSAVE_KEY}', '{snapshot_json_escaped}');",
+            key="autosave_writer",
+        )
+    except Exception:
+        # Fail silently for autosave; core app should still work
+        pass
