@@ -164,9 +164,13 @@ for key in [
 if "sortable_version" not in st.session_state:
     st.session_state.sortable_version = 0
 
-# versioned key for file_uploader so we can reset it cleanly
+# versioned keys for file_uploaders so we can reset them cleanly
 if "roster_uploader_version" not in st.session_state:
     st.session_state.roster_uploader_version = 0
+
+# NEW: versioned key for JSON meet uploader (so Start Over can clear it)
+if "state_json_uploader_version" not in st.session_state:
+    st.session_state.state_json_uploader_version = 0
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -709,8 +713,9 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         ]:
             st.session_state.pop(key, None)
 
-        # Bump uploader version so Streamlit creates a fresh, empty uploader
+        # Bump uploader versions so Streamlit creates fresh, empty uploaders
         st.session_state.roster_uploader_version += 1
+        st.session_state.state_json_uploader_version += 1  # clears JSON file selection
 
         st.success("Meet reset. You can upload a new roster file.")
         st.rerun()
@@ -737,7 +742,7 @@ if st.session_state.get("initialized"):
 uploaded_state = st.file_uploader(
     "📂 Load saved meet (.json)",
     type="json",
-    key="state_json_uploader"
+    key=f"state_json_uploader_v{st.session_state.state_json_uploader_version}",
 )
 
 if uploaded_state is not None:
