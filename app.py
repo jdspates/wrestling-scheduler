@@ -702,17 +702,37 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         "🔄 Start Over / Load New Roster",
         help="Clear current roster and matches so you can upload a new file."
     ):
+        # Clear all meet-related state (including anything restored from JSON)
         for key in [
-            "initialized", "bout_list", "mat_schedules", "suggestions",
-            "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-            "roster", "mat_order_history", "manual_match_warning"
+            "initialized",
+            "bout_list",
+            "mat_schedules",
+            "suggestions",
+            "active",
+            "undo_stack",
+            "mat_order",
+            "excel_bytes",
+            "pdf_bytes",
+            "roster",
+            "mat_order_history",
+            "manual_match_warning",
+            # 🔽 add any JSON-related keys you use
+            "restored_from_state_json",
+            "loaded_state_json",
         ]:
             st.session_state.pop(key, None)
 
-        # Bump uploader version so Streamlit creates a fresh, empty uploader
+        # Bump CSV uploader version so it fully resets
         st.session_state.roster_uploader_version += 1
 
-        st.success("Meet reset. You can upload a new roster file.")
+        # 🔽 If you have a JSON state uploader, bump its version too
+        if "state_uploader_version" in st.session_state:
+            st.session_state.state_uploader_version += 1
+
+        # (Optional) if you added a separate flag like "state_json_uploader"
+        # st.session_state.pop("state_json_uploader", None)
+
+        st.success("Meet reset. You can upload a new roster or load a saved JSON file.")
         st.rerun()
 
 # ----------------------------------------------------------------------
@@ -1809,3 +1829,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
