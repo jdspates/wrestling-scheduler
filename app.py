@@ -26,6 +26,7 @@ except Exception:
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
+AUTOSAVE_FILE = "autosave_meet.json"  # server-side autosave file
 
 # 9-color palette that matches circle emojis
 COLOR_MAP = {
@@ -591,6 +592,16 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.initialized = bool(st.session_state.roster)
     st.session_state.sortable_version += 1  # refresh drag widgets
 
+def autosave_meet():
+    """Write current meet to a server-side autosave file."""
+    try:
+        snapshot = build_meet_snapshot()
+        with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f)
+    except Exception:
+        # Don't crash the app if autosave fails
+        pass
+
 # ----------------------------------------------------------------------
 # STREAMLIT APP LAYOUT
 # ----------------------------------------------------------------------
@@ -738,6 +749,18 @@ if uploaded_state is not None:
             st.rerun()
         except Exception as e:
             st.error(f"Could not load saved meet: {e}")
+
+# Restore from server-side autosave file (if present)
+if os.path.exists(AUTOSAVE_FILE):
+    if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
+        try:
+            with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            restore_meet_from_snapshot(data)
+            st.success("Meet restored from autosave.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Could not restore autosave: {e}")
 
 st.markdown("---")
 
@@ -1777,6 +1800,12 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
 
 else:
     st.info("Upload a roster CSV in **Step 2** to unlock Match Builder, Meet Summary, and Help tabs.")
+
+# ----------------------------------------------------------------------
+# AUTOSAVE AT END OF RUN
+# ----------------------------------------------------------------------
+if st.session_state.get("initialized"):
+    autosave_meet()
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
