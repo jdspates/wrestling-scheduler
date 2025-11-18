@@ -764,15 +764,16 @@ else:
     autosave_state = None
 
 if autosave_state:
-    if st.button("⏪ Restore from autosave (this browser)", help="Restore last autosaved meet from this browser only."):
+    if st.button(
+        "⏪ Restore from autosave (this browser)",
+        help="Restore last autosaved meet from this browser only.",
+    ):
         for k in STATE_SAVE_KEYS:
             if k in autosave_state:
                 st.session_state[k] = autosave_state[k]
         st.session_state.initialized = autosave_state.get("initialized", False)
         st.success("Autosaved meet restored.")
         st.rerun()
-else:
-    st.caption("No autosaved meet found in this browser yet.")
 
 st.markdown("---")
 
@@ -1832,3 +1833,4 @@ try:
 except Exception:
     # Fail silently if autosave has any issues – core app should still work.
     pass
+
