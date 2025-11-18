@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches + JSON save/load + autosave
+# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
 import streamlit as st
 import pandas as pd
 import io
@@ -14,7 +14,6 @@ import os
 import copy
 
 from streamlit_sortables import sort_items  # drag-and-drop component
-from streamlit_javascript import st_javascript  # for localStorage autosave
 
 # ---------- Safe PatternFill import ----------
 try:
@@ -27,20 +26,7 @@ except Exception:
 # CONFIG & COLOR MAP
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
-AUTOSAVE_STORAGE_KEY = "wrestling_meet_autosave_v1"
-
-# Keys that we persist to JSON / autosave
-STATE_SAVE_KEYS = [
-    "CONFIG",
-    "initialized",
-    "roster",
-    "active",
-    "bout_list",
-    "suggestions",
-    "mat_order",
-    "mat_order_history",
-    "undo_stack",
-]
+AUTOSAVE_FILE = "autosave_meet.json"  # server-side autosave file
 
 # 9-color palette that matches circle emojis
 COLOR_MAP = {
@@ -178,12 +164,9 @@ for key in [
 if "sortable_version" not in st.session_state:
     st.session_state.sortable_version = 0
 
-# versioned key for file_uploaders so we can reset them cleanly
+# versioned key for file_uploader so we can reset it cleanly
 if "roster_uploader_version" not in st.session_state:
     st.session_state.roster_uploader_version = 0
-
-if "meet_json_uploader_version" not in st.session_state:
-    st.session_state.meet_json_uploader_version = 0
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -578,13 +561,46 @@ def validate_roster_df(df: pd.DataFrame):
 
     return errors
 
-def build_state_snapshot():
-    """Collect the subset of session_state we want for JSON save / autosave."""
-    snapshot = {}
-    for key in STATE_SAVE_KEYS:
-        if key in st.session_state:
-            snapshot[key] = st.session_state[key]
-    return snapshot
+# ----------------------------------------------------------------------
+# SNAPSHOT SAVE / LOAD HELPERS (JSON)
+# ----------------------------------------------------------------------
+def build_meet_snapshot():
+    """Return a JSON-serializable snapshot of the current meet."""
+    return {
+        "CONFIG": st.session_state.CONFIG,
+        "roster": st.session_state.get("roster", []),
+        "active": st.session_state.get("active", []),
+        "bout_list": st.session_state.get("bout_list", []),
+        "suggestions": st.session_state.get("suggestions", []),
+        "mat_order": st.session_state.get("mat_order", {}),
+        "mat_order_history": st.session_state.get("mat_order_history", []),
+        "undo_stack": st.session_state.get("undo_stack", []),
+    }
+
+def restore_meet_from_snapshot(data: dict):
+    """Restore a meet snapshot into session_state."""
+    st.session_state.CONFIG = data.get("CONFIG", DEFAULT_CONFIG)
+    st.session_state.roster = data.get("roster", [])
+    st.session_state.active = data.get("active", [])
+    st.session_state.bout_list = data.get("bout_list", [])
+    st.session_state.suggestions = data.get("suggestions", [])
+    st.session_state.mat_order = data.get("mat_order", {})
+    st.session_state.mat_order_history = data.get("mat_order_history", [])
+    st.session_state.undo_stack = data.get("undo_stack", [])
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.initialized = bool(st.session_state.roster)
+    st.session_state.sortable_version += 1  # refresh drag widgets
+
+def autosave_meet():
+    """Write current meet to a server-side autosave file."""
+    try:
+        snapshot = build_meet_snapshot()
+        with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f)
+    except Exception:
+        # Don't crash the app if autosave fails
+        pass
 
 # ----------------------------------------------------------------------
 # STREAMLIT APP LAYOUT
@@ -617,7 +633,7 @@ st.markdown(
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
 st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored on a server; autosave stays in this browser.**")
+st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
 
 # ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
 st.markdown("### Step 1 – Download roster template (CSV)")
@@ -693,87 +709,58 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
         ]:
             st.session_state.pop(key, None)
 
-        # Bump uploader versions so Streamlit creates fresh, empty uploaders
+        # Bump uploader version so Streamlit creates a fresh, empty uploader
         st.session_state.roster_uploader_version += 1
-        st.session_state.meet_json_uploader_version += 1
 
-        # Clear browser autosave
-        st_javascript(f"window.localStorage.removeItem('{AUTOSAVE_STORAGE_KEY}');")
-
-        st.success("Meet reset. You can upload a new roster file or load a saved meet.")
+        st.success("Meet reset. You can upload a new roster file.")
         st.rerun()
 
-# ---- STEP 2b: SAVE / LOAD MEET STATE (.json) + AUTOSAVE RESTORE ----
-st.markdown("### Save / Load meet")
+# ----------------------------------------------------------------------
+# SAVE / LOAD MEET (JSON SNAPSHOT)
+# ----------------------------------------------------------------------
+st.markdown("### Save / Load Meet")
 
-col_save_json, col_load_json = st.columns(2)
+# Export current meet to JSON
+if st.session_state.get("initialized"):
+    snapshot = build_meet_snapshot()
+    json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
 
-with col_save_json:
-    if st.session_state.get("initialized"):
-        snapshot = build_state_snapshot()
-        json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
-        st.download_button(
-            "💾 Download current meet (.json)",
-            data=json_bytes,
-            file_name="wrestling_meet_state.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-    else:
-        st.caption("Load a roster first to enable saving meet state.")
-
-with col_load_json:
-    json_upload = st.file_uploader(
-        "Load saved meet (.json)",
-        type="json",
-        key=f"meet_json_uploader_v{st.session_state.meet_json_uploader_version}",
+    st.download_button(
+        "💾 Download meet as JSON",
+        data=json_bytes,
+        file_name="wrestling_meet_state.json",
+        mime="application/json",
+        use_container_width=False,
     )
 
-    if json_upload is not None:
-        try:
-            loaded_state = json.load(json_upload)
-            if not isinstance(loaded_state, dict):
-                raise ValueError("JSON root must be an object/dict.")
-            # Restore all known keys from the saved state
-            for k in STATE_SAVE_KEYS:
-                if k in loaded_state:
-                    st.session_state[k] = loaded_state[k]
-            st.session_state.initialized = loaded_state.get("initialized", False)
-
-            st.success("Saved meet loaded from JSON.")
-            # Bump uploader version so the file clears and we don't reload it
-            st.session_state.meet_json_uploader_version += 1
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error loading saved meet: {e}")
-
-# Autosave restore area (browser-local)
-autosave_raw = st_javascript(
-    f"""
-    const raw = window.localStorage.getItem('{AUTOSAVE_STORAGE_KEY}');
-    return raw;
-    """
+# Import meet from JSON (manual load – avoids infinite restore loop)
+uploaded_state = st.file_uploader(
+    "📂 Load saved meet (.json)",
+    type="json",
+    key="state_json_uploader"
 )
 
-if autosave_raw:
-    try:
-        autosave_state = json.loads(autosave_raw)
-    except Exception:
-        autosave_state = None
-else:
-    autosave_state = None
+if uploaded_state is not None:
+    if st.button("Load this saved meet", key="load_state_button"):
+        try:
+            data = json.load(uploaded_state)
+            restore_meet_from_snapshot(data)
+            st.success("Meet restored from JSON.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Could not load saved meet: {e}")
 
-if autosave_state:
-    if st.button(
-        "⏪ Restore from autosave (this browser)",
-        help="Restore last autosaved meet from this browser only.",
-    ):
-        for k in STATE_SAVE_KEYS:
-            if k in autosave_state:
-                st.session_state[k] = autosave_state[k]
-        st.session_state.initialized = autosave_state.get("initialized", False)
-        st.success("Autosaved meet restored.")
-        st.rerun()
+# Restore from server-side autosave file (if present)
+if os.path.exists(AUTOSAVE_FILE):
+    if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
+        try:
+            with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            restore_meet_from_snapshot(data)
+            st.success("Meet restored from autosave.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Could not restore autosave: {e}")
 
 st.markdown("---")
 
@@ -856,7 +843,6 @@ if st.session_state.get("roster"):
         color = prev_color_by_name.get(team_name)
         if color not in circle_color_names:
             # pick first unused color, then wrap
-            color = None
             for c in circle_color_names:
                 if c not in used_colors:
                     color = c
@@ -1444,10 +1430,10 @@ if st.session_state.initialized:
 
                         if new_order != prev_order:
                             # Save snapshot of current mat_order for drag undo
-                            snapshot_mats = {
+                            snapshot = {
                                 m: order.copy() for m, order in st.session_state.mat_order.items()
                             }
-                            st.session_state.mat_order_history.append(snapshot_mats)
+                            st.session_state.mat_order_history.append(snapshot)
 
                             st.session_state.mat_order[mat] = new_order
                             st.session_state.sortable_version += 1
@@ -1656,7 +1642,7 @@ if st.session_state.initialized:
 
         st.markdown("---")
 
-        # Wrestler match counts with below/OK/above min/max flags
+        # NEW: Wrestler match counts with below/OK/above min/max flags
         st.markdown("#### Wrestler Match Counts")
 
         valid_bouts = [
@@ -1768,8 +1754,8 @@ Your CSV **must** include these columns:
 | `grade`         | Numeric grade (5–8, etc)                             | `7`          |
 | `level`         | Level / experience (float, e.g. 1.0, 1.5, 2.0)       | `1.5`        |
 | `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?              | `Y`          |
-| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?               | `N`          |
+| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
+| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
 
 Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
@@ -1815,22 +1801,11 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
 else:
     st.info("Upload a roster CSV in **Step 2** to unlock Match Builder, Meet Summary, and Help tabs.")
 
+# ----------------------------------------------------------------------
+# AUTOSAVE AT END OF RUN
+# ----------------------------------------------------------------------
+if st.session_state.get("initialized"):
+    autosave_meet()
+
 st.markdown("---")
-st.caption("**Privacy**: Your roster and meet state stay in this browser and your Streamlit session. Autosave is stored only in this browser’s localStorage.")
-
-# ----------------------------------------------------------------------
-# AUTOSAVE TO BROWSER LOCALSTORAGE ON EVERY RUN
-# ----------------------------------------------------------------------
-try:
-    snapshot = build_state_snapshot()
-    snapshot_json = json.dumps(snapshot)
-    st_javascript(
-        f"""
-        window.localStorage.setItem('{AUTOSAVE_STORAGE_KEY}', {json.dumps(snapshot_json)});
-        return null;
-        """
-    )
-except Exception:
-    # Fail silently if autosave has any issues – core app should still work.
-    pass
-
+st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
