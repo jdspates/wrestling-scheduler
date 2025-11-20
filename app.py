@@ -12,6 +12,7 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 import copy
+from streamlit_js_eval import streamlit_js_eval
 from datetime import datetime  # NEW: for autosave timestamp
 
 from streamlit_sortables import sort_items  # drag-and-drop component
@@ -691,16 +692,20 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.action_history = []  # clear undo history on restore
 
 def autosave_meet():
-    """Write current meet to a server-side autosave file."""
     try:
         snapshot = build_meet_snapshot()
         with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
             json.dump(snapshot, f)
-        # Store a human-readable time for the UI
-        ts = datetime.now().strftime("%I:%M %p").lstrip("0")
-        st.session_state["last_autosave_time"] = ts
+
+        local_time = streamlit_js_eval(
+            js_expressions="new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})",
+            key="local_time_key"
+        )
+
+        if local_time:
+            st.session_state["last_autosave_time"] = local_time
+
     except Exception:
-        # Don't crash the app if autosave fails
         pass
 
 # ----------------------------------------------------------------------
@@ -2010,4 +2015,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
