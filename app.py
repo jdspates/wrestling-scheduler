@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
 # ----------------------------------------------------------------------
 # Columns MUST match what the app expects below:
 # ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
-# Internal IDs are generated automatically after upload.
+# Internal numeric IDs are generated automatically after upload.
 TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch
 John Doe,Stillwater,7,1.0,70,Y,N
 Jane Smith,Hastings,8,1.5,75,N,N
@@ -83,12 +83,11 @@ Ava Johnson,Woodbury,7,1.0,68,Y,N
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r") as f:
-            with open(CONFIG_FILE, "r") as f:
-                loaded = json.load(f)
-            if isinstance(loaded, dict):
-                BASE_CONFIG = loaded
-            else:
-                BASE_CONFIG = DEFAULT_CONFIG
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            BASE_CONFIG = loaded
+        else:
+            BASE_CONFIG = DEFAULT_CONFIG
     except Exception:
         BASE_CONFIG = DEFAULT_CONFIG
 else:
@@ -147,15 +146,15 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
-    "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-    "roster", "mat_order_history", "manual_match_warning"
+    "active", "mat_order", "excel_bytes", "pdf_bytes",
+    "roster", "manual_match_warning", "action_history"
 ]:
     if key not in st.session_state:
-        if key in ["bout_list", "mat_schedules", "suggestions", "active", "undo_stack"]:
+        if key in ["bout_list", "mat_schedules", "suggestions", "active", "action_history"]:
             st.session_state[key] = []
         elif key == "mat_order":
             st.session_state[key] = {}
-        elif key in ["roster", "mat_order_history"]:
+        elif key in ["roster"]:
             st.session_state[key] = []
         elif key == "manual_match_warning":
             st.session_state[key] = ""
@@ -458,7 +457,7 @@ def compute_rest_conflicts(schedule, min_gap):
     return conflicts
 
 # ----------------------------------------------------------------------
-# HELPERS
+# HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
 def color_dot_hex(hex_color: str) -> str:
     """Return a small HTML circle for the given hex color (for legends / HTML tables)."""
@@ -468,6 +467,137 @@ def color_dot_hex(hex_color: str) -> str:
         "<span style='display:inline-block;width:12px;height:12px;"
         f"border-radius:50%;background:{hex_color};margin-right:6px;'></span>"
     )
+
+def push_action(action: dict):
+    """Record an action so it can be undone later."""
+    if "action_history" not in st.session_state:
+        st.session_state.action_history = []
+    st.session_state.action_history.append(action)
+
+def _undo_remove(bout_num: int):
+    """Undo a previously removed bout."""
+    try:
+        b = next(
+            x for x in st.session_state.bout_list
+            if x["bout_num"] == bout_num and x.get("manual") == "Manually Removed"
+        )
+    except StopIteration:
+        st.info("Removed bout not found; nothing to undo.")
+        return
+
+    b["manual"] = ""
+    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+
+    if b["w2_id"] not in w1["match_ids"]:
+        w1["match_ids"].append(b["w2_id"])
+    if b["w1_id"] not in w2["match_ids"]:
+        w2["match_ids"].append(b["w1_id"])
+
+    st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+    st.session_state.mat_order = {}   # keep behavior: layout recalculated
+    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: restored last removed bout.")
+
+def _undo_drag(previous_mat_order: dict):
+    """Undo a drag/reorder by restoring previous mat_order snapshot."""
+    st.session_state.mat_order = {
+        m: order.copy() for m, order in previous_mat_order.items()
+    }
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: last drag / reorder reverted.")
+
+def _undo_manual_add(bout_num: int):
+    """Undo a manually-added match."""
+    try:
+        b = next(x for x in st.session_state.bout_list if x["bout_num"] == bout_num)
+    except StopIteration:
+        st.info("Manual match already removed; nothing to undo.")
+        return
+
+    w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+    w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+
+    if b["w2_id"] in w1["match_ids"]:
+        w1["match_ids"].remove(b["w2_id"])
+    if b["w1_id"] in w2["match_ids"]:
+        w2["match_ids"].remove(b["w1_id"])
+
+    # Remove bout from bout_list
+    st.session_state.bout_list = [
+        x for x in st.session_state.bout_list if x["bout_num"] != bout_num
+    ]
+
+    # Strip from any mat_order lists
+    for mat, order in st.session_state.mat_order.items():
+        st.session_state.mat_order[mat] = [bn for bn in order if bn != bout_num]
+
+    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: manual match removed.")
+
+def _undo_suggest_add(bout_nums: list[int]):
+    """Undo a batch of suggested matches that were added at once."""
+    bout_nums_set = set(bout_nums)
+
+    # Clean wrestler match_ids
+    for b in list(st.session_state.bout_list):
+        if b["bout_num"] in bout_nums_set:
+            w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
+            w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
+
+            if b["w2_id"] in w1["match_ids"]:
+                w1["match_ids"].remove(b["w2_id"])
+            if b["w1_id"] in w2["match_ids"]:
+                w2["match_ids"].remove(b["w1_id"])
+
+    # Remove bouts
+    st.session_state.bout_list = [
+        x for x in st.session_state.bout_list if x["bout_num"] not in bout_nums_set
+    ]
+
+    # Strip from mat_order
+    for mat, order in st.session_state.mat_order.items():
+        st.session_state.mat_order[mat] = [
+            bn for bn in order if bn not in bout_nums_set
+        ]
+
+    st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: suggested matches removed.")
+
+def undo_last_action():
+    """Pop the last action off the history and undo it."""
+    history = st.session_state.get("action_history", [])
+    if not history:
+        st.info("No actions to undo yet.")
+        return
+
+    action = history.pop()
+    t = action.get("type")
+
+    if t == "remove":
+        _undo_remove(action["bout_num"])
+    elif t == "drag":
+        _undo_drag(action["previous_mat_order"])
+    elif t == "manual_add":
+        _undo_manual_add(action["bout_num"])
+    elif t == "suggest_add":
+        _undo_suggest_add(action["bout_nums"])
+    else:
+        st.info("Nothing to undo.")
+        return
+
+    st.rerun()
 
 def remove_bout(bout_num: int):
     """Mark bout as manually removed, update wrestler match_ids, trim from mat_order."""
@@ -486,14 +616,13 @@ def remove_bout(bout_num: int):
     if b["w1_id"] in w2["match_ids"]:
         w2["match_ids"].remove(b["w1_id"])
 
-    st.session_state.undo_stack.append(bout_num)
+    # Push remove action to history
+    push_action({"type": "remove", "bout_num": bout_num})
 
+    # Remove bout from any mat orders
     for mat, order in st.session_state.mat_order.items():
         if bout_num in order:
             order.remove(bout_num)
-
-    # removing a bout changes layout; clear drag history
-    st.session_state.mat_order_history = []
 
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
@@ -502,51 +631,10 @@ def remove_bout(bout_num: int):
     st.session_state.sortable_version += 1
     st.rerun()
 
-def undo_last():
-    if st.session_state.undo_stack:
-        bout_num = st.session_state.undo_stack.pop()
-        b = next(
-            x for x in st.session_state.bout_list
-            if x["bout_num"] == bout_num and x.get("manual") == "Manually Removed"
-        )
-        b["manual"] = ""
-        w1 = next(w for w in st.session_state.active if w["id"] == b["w1_id"])
-        w2 = next(w for w in st.session_state.active if w["id"] == b["w2_id"])
-        if b["w2_id"] not in w1["match_ids"]:
-            w1["match_ids"].append(b["w2_id"])
-        if b["w1_id"] not in w2["match_ids"]:
-            w2["match_ids"].append(b["w1_id"])
-        st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-        st.session_state.mat_order = {}
-        st.session_state.mat_order_history = []  # reset drag history after structural change
-        st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-        st.success("Undo successful!")
-        st.session_state.excel_bytes = None
-        st.session_state.pdf_bytes = None
-
-        st.session_state.sortable_version += 1
-    st.rerun()
-
-def undo_last_drag():
-    """Undo the last drag-based reorder across mats."""
-    history = st.session_state.get("mat_order_history", [])
-    if history:
-        last_snapshot = history.pop()
-        st.session_state.mat_order = last_snapshot
-        st.session_state.excel_bytes = None
-        st.session_state.pdf_bytes = None
-        st.session_state.sortable_version += 1
-        st.success("Last drag/reorder undone.")
-        st.rerun()
-    else:
-        st.info("No drag operations to undo yet.")
-
 def validate_roster_df(df: pd.DataFrame):
-    """Return list of error messages if roster has issues; empty list if OK.
-
-    NOTE: We no longer require an 'id' column from the CSV; IDs are generated internally.
-    """
+    """Return list of error messages if roster has issues; empty list if OK."""
     errors = []
+    # NOTE: no 'id' column required now – IDs are generated internally
     required = ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -577,8 +665,6 @@ def build_meet_snapshot():
         "bout_list": st.session_state.get("bout_list", []),
         "suggestions": st.session_state.get("suggestions", []),
         "mat_order": st.session_state.get("mat_order", {}),
-        "mat_order_history": st.session_state.get("mat_order_history", []),
-        "undo_stack": st.session_state.get("undo_stack", []),
     }
 
 def restore_meet_from_snapshot(data: dict):
@@ -589,12 +675,11 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.bout_list = data.get("bout_list", [])
     st.session_state.suggestions = data.get("suggestions", [])
     st.session_state.mat_order = data.get("mat_order", {})
-    st.session_state.mat_order_history = data.get("mat_order_history", [])
-    st.session_state.undo_stack = data.get("undo_stack", [])
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.initialized = bool(st.session_state.roster)
     st.session_state.sortable_version += 1  # refresh drag widgets
+    st.session_state.action_history = []  # clear undo history on restore
 
 def autosave_meet():
     """Write current meet to a server-side autosave file."""
@@ -670,26 +755,29 @@ if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
 
-        # Validate first (does not require 'id')
+        # Validate first
         validation_errors = validate_roster_df(df)
         if validation_errors:
             for msg in validation_errors:
                 st.error(msg)
             st.stop()
 
-        # Ensure we have a clean internal ID column (coach does not supply this)
-        if "id" in df.columns:
-            df = df.drop(columns=["id"])
-        df.insert(0, "id", range(1, len(df) + 1))
-
         wrestlers = df.to_dict("records")
-        for w in wrestlers:
-            w["id"] = int(w["id"])
+
+        # Generate internal integer IDs
+        for idx, w in enumerate(wrestlers, start=1):
+            w["id"] = idx
             w["grade"] = int(w["grade"])
             w["level"] = float(w["level"])
             w["weight"] = float(w["weight"])
-            w["early"] = (str(w["early_matches"]).strip().upper() == "Y") or (w["early_matches"] in [1, True])
-            w["scratch"] = (str(w["scratch"]).strip().upper() == "Y") or (w["scratch"] in [1, True])
+            w["early"] = (
+                str(w["early_matches"]).strip().upper() == "Y"
+                or w["early_matches"] in [1, True]
+            )
+            w["scratch"] = (
+                str(w["scratch"]).strip().upper() == "Y"
+                or w["scratch"] in [1, True]
+            )
             w["match_ids"] = []
 
         st.session_state.roster = wrestlers
@@ -697,6 +785,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
+        st.session_state.action_history = []
 
         st.success(
             f"Roster loaded ({len(wrestlers)} wrestlers, "
@@ -713,8 +802,8 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
     ):
         for key in [
             "initialized", "bout_list", "mat_schedules", "suggestions",
-            "active", "undo_stack", "mat_order", "excel_bytes", "pdf_bytes",
-            "roster", "mat_order_history", "manual_match_warning"
+            "active", "mat_order", "excel_bytes", "pdf_bytes",
+            "roster", "manual_match_warning", "action_history"
         ]:
             st.session_state.pop(key, None)
 
@@ -853,6 +942,7 @@ if st.session_state.get("roster"):
         color = prev_color_by_name.get(team_name)
         if color not in circle_color_names:
             # pick first unused color, then wrap
+            color = None
             for c in circle_color_names:
                 if c not in used_colors:
                     color = c
@@ -987,10 +1077,9 @@ if st.session_state.initialized:
                 st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
                 st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
                 st.session_state.mat_order = {}
-                st.session_state.mat_order_history = []  # reset drag history
-                st.session_state.undo_stack = []
                 st.session_state.excel_bytes = None
                 st.session_state.pdf_bytes = None
+                st.session_state.action_history = []
 
                 st.session_state.sortable_version += 1
 
@@ -1132,7 +1221,6 @@ if st.session_state.initialized:
 
                         # Clear manual mat order so the new match gets placed, then coach can drag it
                         st.session_state.mat_order = {}
-                        st.session_state.mat_order_history = []
 
                         # Rebuild suggestions based on new counts
                         st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
@@ -1140,6 +1228,9 @@ if st.session_state.initialized:
                         # Invalidate exports
                         st.session_state.excel_bytes = None
                         st.session_state.pdf_bytes = None
+
+                        # Record action for undo
+                        push_action({"type": "manual_add", "bout_num": new_bout_num})
 
                         # Refresh drag widgets
                         st.session_state.sortable_version += 1
@@ -1208,6 +1299,9 @@ if st.session_state.initialized:
                     current_suggestions[sugg_full_df.iloc[row.name]["idx"]]
                     for _, row in edited.iterrows() if row["Add"]
                 ]
+
+                added_bouts = []
+
                 for s in to_add:
                     w = next(w for w in raw_active if w["id"] == s["_w_id"])
                     o = next(w for w in raw_active if w["id"] == s["_o_id"])
@@ -1215,8 +1309,12 @@ if st.session_state.initialized:
                         w["match_ids"].append(o["id"])
                     if w["id"] not in o["match_ids"]:
                         o["match_ids"].append(w["id"])
+
+                    new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
+                        if st.session_state.bout_list else 1
+
                     new_bout = {
-                        "bout_num": len(st.session_state.bout_list) + 1,
+                        "bout_num": new_bout_num,
                         "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
                         "w1_level": w["level"], "w1_weight": w["weight"],
                         "w1_grade": w["grade"], "w1_early": w["early"],
@@ -1229,17 +1327,22 @@ if st.session_state.initialized:
                         "manual": "Manually Added"
                     }
                     st.session_state.bout_list.append(new_bout)
+                    added_bouts.append(new_bout_num)
 
-                st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-                st.session_state.mat_order = {}
-                st.session_state.mat_order_history = []
-                st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-                st.success("Matches added! Early matches placed at the top of their mat.")
-                st.session_state.excel_bytes = None
-                st.session_state.pdf_bytes = None
+                if added_bouts:
+                    # keep bouts sorted by avg_weight
+                    st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+                    st.session_state.mat_order = {}
+                    st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
 
-                st.session_state.sortable_version += 1
-                st.rerun()
+                    # Push grouped action for undo
+                    push_action({"type": "suggest_add", "bout_nums": added_bouts})
+
+                    st.success("Matches added! Early matches placed at the top of their mat.")
+                    st.session_state.sortable_version += 1
+                    st.rerun()
         else:
             st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
 
@@ -1439,13 +1542,18 @@ if st.session_state.initialized:
                                 new_order.append(bn)
 
                         if new_order != prev_order:
-                            # Save snapshot of current mat_order for drag undo
+                            # Take a snapshot of current mat_order for unified undo
                             snapshot = {
                                 m: order.copy() for m, order in st.session_state.mat_order.items()
                             }
-                            st.session_state.mat_order_history.append(snapshot)
+                            push_action({
+                                "type": "drag",
+                                "previous_mat_order": snapshot,
+                            })
 
                             st.session_state.mat_order[mat] = new_order
+                            st.session_state.excel_bytes = None
+                            st.session_state.pdf_bytes = None
                             st.session_state.sortable_version += 1
                             st.rerun()
                         else:
@@ -1477,7 +1585,7 @@ if st.session_state.initialized:
                             if st.button(
                                 "Remove selected bout",
                                 key=f"remove_button_mat_{mat}",
-                                help="Removes the selected bout from this meet (Undo available at bottom)."
+                                help="Removes the selected bout from this meet (Undo available below)."
                             ):
                                 remove_bout(selected_bout)
 
@@ -1495,21 +1603,28 @@ if st.session_state.initialized:
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
 
-        # ----- Undo -----
+        # ----- Unified Undo Button -----
         st.markdown("---")
-        col_undo_remove, col_undo_drag = st.columns(2)
-        with col_undo_remove:
-            if st.session_state.undo_stack:
-                if st.button("Undo Last Remove", help="Restore last removed match"):
-                    undo_last()
+
+        last_action = st.session_state.action_history[-1] if st.session_state.action_history else None
+
+        if last_action:
+            t = last_action.get("type")
+            if t == "remove":
+                label = "Undo Last Remove"
+            elif t == "drag":
+                label = "Undo Last Drag / Reorder"
+            elif t == "manual_add":
+                label = "Undo Last Manual Match"
+            elif t == "suggest_add":
+                label = "Undo Last Suggested Matches"
             else:
-                st.caption("No removals yet to undo.")
-        with col_undo_drag:
-            if st.session_state.mat_order_history:
-                if st.button("Undo Last Drag / Reorder", help="Undo last drag change to mat order"):
-                    undo_last_drag()
-            else:
-                st.caption("No drag changes yet to undo.")
+                label = "Undo Last Action"
+
+            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested)"):
+                undo_last_action()
+        else:
+            st.caption("No actions yet to undo.")
 
         # ---- GENERATE MEET ----
         if st.button("Generate Matches", type="primary", help="Generate Excel + PDF for download"):
@@ -1754,21 +1869,19 @@ if st.session_state.initialized:
         st.markdown("##### 1. Build Your Roster CSV")
         st.markdown(
             """
-Your CSV **must** include these columns (header names must match exactly):
+Your CSV **must** include these columns:
 
 | Column          | Description                                          | Example      |
 |-----------------|------------------------------------------------------|--------------|
 | `name`          | Wrestler name                                        | `John Doe`   |
 | `team`          | Team name (used for colors & legends)                | `Stillwater` |
-| `grade`         | Numeric grade (5–8, etc.)                             | `7`          |
+| `grade`         | Numeric grade (5–8, etc)                             | `7`          |
 | `level`         | Level / experience (float, e.g. 1.0, 1.5, 2.0)       | `1.5`        |
 | `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?              | `Y`          |
-| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?               | `N`          |
+| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
+| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
 
-You **do not** need to provide an `id` column. The scheduler assigns each
-wrestler a unique internal ID automatically after you upload the CSV.
-
+You **do not** need to provide an `id` column – the app generates unique IDs internally.
 Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
         )
@@ -1797,6 +1910,11 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
   - Watch the *rest warnings* to avoid back-to-back matches.
+- Use the single **Undo** button to step backwards through:
+  - Bout removals  
+  - Drag/reorder changes  
+  - Manual matches  
+  - Added suggested matches
             """
         )
 
