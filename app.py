@@ -1505,29 +1505,29 @@ if st.session_state.initialized:
                         # Build drag labels (plain text, circle emojis)
                         row_labels = []
                         label_to_bout = {}
-                        for bn in st.session_state.mat_order[mat]:
-                            if bn not in bout_nums_in_mat:
-                                continue
-                            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                        for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
+                           if bn not in bout_nums_in_mat:
+                              continue
+                           b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-                            early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+                           early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
 
-                            color_name1 = team_color_for_roster.get(b["w1_team"])
-                            color_name2 = team_color_for_roster.get(b["w2_team"])
-                            icon1 = COLOR_ICON.get(color_name1, "●")
-                            icon2 = COLOR_ICON.get(color_name2, "●")
+                           color_name1 = team_color_for_roster.get(b["w1_team"])
+                           color_name2 = team_color_for_roster.get(b["w2_team"])
+                           icon1 = COLOR_ICON.get(color_name1, "●")
+                           icon2 = COLOR_ICON.get(color_name2, "●")
 
-                            label = (
-                                f"{early_prefix}"
-                                f"Bout {bn:>3} | "
-                                f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
-                                f"{icon2} {b['w2_name']} ({b['w2_team']})"
-                                f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
-                                f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                                f"  |  Score {b['score']:.1f}"
+                           label = (
+                               f"{early_prefix}"
+                               f"Slot {slot_index:02d} | Bout {bn:>3} | "
+                               f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
+                               f"{icon2} {b['w2_name']} ({b['w2_team']})"
+                               f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
+                               f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                               f"  |  Score {b['score']:.1f}"
                             )
-                            row_labels.append(label)
-                            label_to_bout[label] = bn
+                           row_labels.append(label)
+                           label_to_bout[label] = bn
 
                         sorted_labels = sort_items(
                             row_labels,
@@ -1940,3 +1940,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
