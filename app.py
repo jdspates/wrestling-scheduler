@@ -1,3 +1,4 @@
+
 # app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
 import streamlit as st
 import pandas as pd
@@ -714,21 +715,6 @@ st.markdown(
         background: transparent !important;
         border: none !important;
         color: #888 !important;
-    }
-
-    /* Floating Undo – make the last block in main fixed bottom-right */
-    section.main div[data-testid="stVerticalBlock"]:last-child {
-        position: fixed;
-        bottom: 16px;
-        right: 16px;
-        z-index: 9999;
-        background: white;
-        padding: 4px 10px;
-        border-radius: 999px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    }
-    section.main div[data-testid="stVerticalBlock"]:last-child button {
-        margin: 0;
     }
 </style>
 """,
@@ -1954,38 +1940,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-# ----------------------------------------------------------------------
-# FLOATING UNDO BUTTON (uses unified action_history)
-# ----------------------------------------------------------------------
-if st.session_state.get("initialized"):
-    float_slot = st.empty()
-    with float_slot.container():
-        history = st.session_state.get("action_history", [])
-        if history:
-            last_action = history[-1]
-            t = last_action.get("type")
-            if t == "remove":
-                label = "⮪ Undo Last Remove"
-            elif t == "drag":
-                label = "⮪ Undo Last Drag / Reorder"
-            elif t == "manual_add":
-                label = "⮪ Undo Last Manual Match"
-            elif t == "suggest_add":
-                label = "⮪ Undo Last Suggested Matches"
-            else:
-                label = "⮪ Undo Last Action"
-            disabled = False
-        else:
-            label = "⮪ Undo (no actions yet)"
-            disabled = True
-
-        if st.button(
-            label,
-            key="floating_undo_btn",
-            disabled=disabled,
-            help="Undo the most recent change (remove/drag/manual/suggested)"
-        ):
-            if not disabled:
-                undo_last_action()
-
