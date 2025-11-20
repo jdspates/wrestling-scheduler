@@ -70,19 +70,21 @@ DEFAULT_CONFIG = {
 # ROSTER TEMPLATE (for new coaches)
 # ----------------------------------------------------------------------
 # Columns MUST match what the app expects below:
-# ["id", "name", "team", "grade", "level", "weight", "early_matches", "scratch"]
-TEMPLATE_CSV = """id,name,team,grade,level,weight,early_matches,scratch
-1,John Doe,Stillwater,7,1.0,70,Y,N
-2,Jane Smith,Hastings,8,1.5,75,N,N
-3,Ben Carter,Cottage Grove,6,2.0,80,N,N
-4,Ava Johnson,Woodbury,7,1.0,68,Y,N
+# ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
+# Internal IDs are generated automatically after upload.
+TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch
+John Doe,Stillwater,7,1.0,70,Y,N
+Jane Smith,Hastings,8,1.5,75,N,N
+Ben Carter,Cottage Grove,6,2.0,80,N,N
+Ava Johnson,Woodbury,7,1.0,68,Y,N
 """
 
 # Load base config once (read-only default, e.g. from repo)
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r") as f:
-            loaded = json.load(f)
+            with open(CONFIG_FILE, "r") as f:
+                loaded = json.load(f)
             if isinstance(loaded, dict):
                 BASE_CONFIG = loaded
             else:
@@ -540,9 +542,12 @@ def undo_last_drag():
         st.info("No drag operations to undo yet.")
 
 def validate_roster_df(df: pd.DataFrame):
-    """Return list of error messages if roster has issues; empty list if OK."""
+    """Return list of error messages if roster has issues; empty list if OK.
+
+    NOTE: We no longer require an 'id' column from the CSV; IDs are generated internally.
+    """
     errors = []
-    required = ["id", "name", "team", "grade", "level", "weight", "early_matches", "scratch"]
+    required = ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
     missing = [c for c in required if c not in df.columns]
     if missing:
         errors.append("Missing columns: " + ", ".join(missing))
@@ -550,11 +555,6 @@ def validate_roster_df(df: pd.DataFrame):
 
     if df.empty:
         errors.append("Roster file is empty (no wrestlers found).")
-
-    # Duplicated IDs
-    if df["id"].duplicated().any():
-        dups = df["id"][df["id"].duplicated()].unique().tolist()
-        errors.append(f"Duplicate wrestler IDs found: {dups}. IDs must be unique.")
 
     # Basic numeric checks
     for col in ["grade", "level", "weight"]:
@@ -670,12 +670,17 @@ if uploaded and not st.session_state.initialized:
     try:
         df = pd.read_csv(uploaded)
 
-        # Validate first
+        # Validate first (does not require 'id')
         validation_errors = validate_roster_df(df)
         if validation_errors:
             for msg in validation_errors:
                 st.error(msg)
             st.stop()
+
+        # Ensure we have a clean internal ID column (coach does not supply this)
+        if "id" in df.columns:
+            df = df.drop(columns=["id"])
+        df.insert(0, "id", range(1, len(df) + 1))
 
         wrestlers = df.to_dict("records")
         for w in wrestlers:
@@ -1749,18 +1754,20 @@ if st.session_state.initialized:
         st.markdown("##### 1. Build Your Roster CSV")
         st.markdown(
             """
-Your CSV **must** include these columns:
+Your CSV **must** include these columns (header names must match exactly):
 
 | Column          | Description                                          | Example      |
 |-----------------|------------------------------------------------------|--------------|
-| `id`            | Unique ID per wrestler (number)                      | `1`          |
 | `name`          | Wrestler name                                        | `John Doe`   |
 | `team`          | Team name (used for colors & legends)                | `Stillwater` |
-| `grade`         | Numeric grade (5–8, etc)                             | `7`          |
+| `grade`         | Numeric grade (5–8, etc.)                             | `7`          |
 | `level`         | Level / experience (float, e.g. 1.0, 1.5, 2.0)       | `1.5`        |
 | `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
-| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
+| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?              | `Y`          |
+| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?               | `N`          |
+
+You **do not** need to provide an `id` column. The scheduler assigns each
+wrestler a unique internal ID automatically after you upload the CSV.
 
 Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
