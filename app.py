@@ -1181,8 +1181,8 @@ if st.session_state.initialized:
         if len(active_ids) < 2:
             st.caption("Not enough active wrestlers to create a manual match.")
         else:
-            col_m1, col_m2, col_m_btn = st.columns([3, 3, 1])
-
+            col_m1, col_m2 = st.columns([3, 3])
+            
             with col_m1:
                 manual_w1_id = st.selectbox(
                     "Wrestler 1",
@@ -1193,7 +1193,7 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w1",
                 )
-
+            
             with col_m2:
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
@@ -1204,13 +1204,16 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w2",
                 )
-
-            with col_m_btn:
-                create_manual = st.button(
-                    "Create Match",
-                    help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
-                    key="manual_match_create_btn",
-                )
+            
+                # nest a small two-column layout just for right-aligning the button
+                btn_spacer, btn_col = st.columns([3, 1])
+                with btn_col:
+                    create_manual = st.button(
+                        "Create Match",
+                        use_container_width=True,
+                        help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                        key="manual_match_create_btn",
+                    )
 
             if create_manual:
                 if manual_w1_id == manual_w2_id:
@@ -2007,3 +2010,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
