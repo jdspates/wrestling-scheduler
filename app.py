@@ -1,4 +1,3 @@
-
 # app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
 import streamlit as st
 import pandas as pd
@@ -13,6 +12,8 @@ from reportlab.lib.colors import HexColor
 import json
 import os
 import copy
+from streamlit_js_eval import streamlit_js_eval
+from datetime import datetime  # NEW: for autosave timestamp
 
 from streamlit_sortables import sort_items  # drag-and-drop component
 
@@ -121,8 +122,8 @@ SORTABLE_STYLE = """
     border-radius: 4px;
     border: 1px solid #ddd;
     padding: 0 8px;
-    margin-bottom: 4px;
-    font-size: 0.85rem;
+    margin-bottom: 3px;
+    font-size: 0.82rem;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     cursor: grab;
 
@@ -173,6 +174,14 @@ if "roster_uploader_version" not in st.session_state:
 # NEW: versioned key for JSON meet uploader (so Start Over can clear it)
 if "state_json_uploader_version" not in st.session_state:
     st.session_state.state_json_uploader_version = 0
+
+# NEW: confirmation flag for Start Over
+if "reset_confirm" not in st.session_state:
+    st.session_state.reset_confirm = False
+
+# NEW: store last autosave time (for UI caption)
+if "last_autosave_time" not in st.session_state:
+    st.session_state.last_autosave_time = None
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -683,13 +692,20 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.action_history = []  # clear undo history on restore
 
 def autosave_meet():
-    """Write current meet to a server-side autosave file."""
     try:
         snapshot = build_meet_snapshot()
         with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
             json.dump(snapshot, f)
+
+        local_time = streamlit_js_eval(
+            js_expressions="new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})",
+            key="local_time_key"
+        )
+
+        if local_time:
+            st.session_state["last_autosave_time"] = local_time
+
     except Exception:
-        # Don't crash the app if autosave fails
         pass
 
 # ----------------------------------------------------------------------
@@ -797,23 +813,46 @@ if uploaded and not st.session_state.initialized:
 
 # Start-over / load new roster button, right under the uploader
 if st.session_state.get("initialized") and st.session_state.get("roster"):
+
+    # Confirmation UI if reset_confirm is set
+    if st.session_state.get("reset_confirm", False):
+        st.warning(
+            "Are you sure you want to **reset this meet**? "
+            "This will clear the current roster, matchups, mat orders, exports, and undo history "
+            "for this browser session."
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Yes, reset meet", key="confirm_reset_yes"):
+                for key in [
+                    "initialized", "bout_list", "mat_schedules", "suggestions",
+                    "active", "mat_order", "excel_bytes", "pdf_bytes",
+                    "roster", "manual_match_warning", "action_history"
+                ]:
+                    st.session_state.pop(key, None)
+
+                # Reset confirmation flag
+                st.session_state.reset_confirm = False
+
+                # Bump uploader versions so Streamlit creates fresh, empty uploaders
+                st.session_state.roster_uploader_version += 1
+                st.session_state.state_json_uploader_version += 1  # clears JSON file selection
+
+                st.success("Meet reset. You can upload a new roster file.")
+                st.rerun()
+
+        with c2:
+            if st.button("❌ Cancel", key="confirm_reset_no"):
+                st.session_state.reset_confirm = False
+                st.info("Reset cancelled.")
+
+    # Primary Start Over button – just toggles confirmation mode
     if st.button(
         "🔄 Start Over / Load New Roster",
-        help="Clear current roster and matches so you can upload a new file."
+        help="Clear current roster and matches so you can upload a new file.",
+        key="start_over_button",
     ):
-        for key in [
-            "initialized", "bout_list", "mat_schedules", "suggestions",
-            "active", "mat_order", "excel_bytes", "pdf_bytes",
-            "roster", "manual_match_warning", "action_history"
-        ]:
-            st.session_state.pop(key, None)
-
-        # Bump uploader versions so Streamlit creates fresh, empty uploaders
-        st.session_state.roster_uploader_version += 1
-        st.session_state.state_json_uploader_version += 1  # clears JSON file selection
-
-        st.success("Meet reset. You can upload a new roster file.")
-        st.rerun()
+        st.session_state.reset_confirm = True
 
 # ----------------------------------------------------------------------
 # SAVE / LOAD MEET (JSON SNAPSHOT)
@@ -1050,6 +1089,35 @@ if st.session_state.initialized:
             used_colors.add(color_name)
             idx += 1
 
+        # ---------- QUICK START HELP (in-context) ----------
+        st.markdown("### ❓ Quick Start")
+        with st.expander("Quick Start Guide", expanded=False):
+            st.markdown(
+                """
+1. **Import your roster CSV**
+   - Use **Step 1** to download the template and **Step 2** to upload your completed `roster.csv`.
+   - The app will auto-generate initial matchups once the file is uploaded.
+
+2. **Adjust meet settings (left sidebar)**
+   - Set **Min / Max Matches**, **Number of Mats**, **Max Level Diff**, and **Min Wt Diff**.
+   - Set **Min Rest Gap** so wrestlers don’t wrestle back-to-back.
+   - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
+
+3. **Apply scratches**
+   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight.
+   - Click **Apply scratches & regenerate schedule** to rebuild matchups.
+
+4. **Fine-tune matchups**
+   - Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
+   - Use **Manual Match Creator** when coaches want specific pairings.
+   - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
+
+5. **Generate & download**
+   - Click **Generate Matches** to build the **Excel** and **PDF**.
+   - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
+                """
+            )
+
         # ----- Pre-Meet Scratches -----
         st.subheader("Pre-Meet Scratches")
 
@@ -1118,8 +1186,8 @@ if st.session_state.initialized:
         if len(active_ids) < 2:
             st.caption("Not enough active wrestlers to create a manual match.")
         else:
-            col_m1, col_m2, col_m_btn = st.columns([3, 3, 1])
-
+            col_m1, col_m2 = st.columns([3, 3])
+            
             with col_m1:
                 manual_w1_id = st.selectbox(
                     "Wrestler 1",
@@ -1130,7 +1198,7 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w1",
                 )
-
+            
             with col_m2:
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
@@ -1141,13 +1209,16 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w2",
                 )
-
-            with col_m_btn:
-                create_manual = st.button(
-                    "Create Match",
-                    help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
-                    key="manual_match_create_btn",
-                )
+            
+                # nest a small two-column layout just for right-aligning the button
+                btn_spacer, btn_col = st.columns([3, 1])
+                with btn_col:
+                    create_manual = st.button(
+                        "Create Match",
+                        use_container_width=True,
+                        help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                        key="manual_match_create_btn",
+                    )
 
             if create_manual:
                 if manual_w1_id == manual_w2_id:
@@ -1421,7 +1492,7 @@ if st.session_state.initialized:
                             )
 
                         table_html = (
-                            "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;'>"
+                            "<table style='width:100%;border-collapse:collapse;font-size:0.80rem;'>"
                             "<thead>"
                             "<tr style='background:#f0f0f0;'>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
@@ -1506,28 +1577,28 @@ if st.session_state.initialized:
                         row_labels = []
                         label_to_bout = {}
                         for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
-                           if bn not in bout_nums_in_mat:
-                              continue
-                           b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
+                            if bn not in bout_nums_in_mat:
+                                continue
+                            b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-                           early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+                            early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
 
-                           color_name1 = team_color_for_roster.get(b["w1_team"])
-                           color_name2 = team_color_for_roster.get(b["w2_team"])
-                           icon1 = COLOR_ICON.get(color_name1, "●")
-                           icon2 = COLOR_ICON.get(color_name2, "●")
+                            color_name1 = team_color_for_roster.get(b["w1_team"])
+                            color_name2 = team_color_for_roster.get(b["w2_team"])
+                            icon1 = COLOR_ICON.get(color_name1, "●")
+                            icon2 = COLOR_ICON.get(color_name2, "●")
 
-                           label = (
-                               f"{early_prefix}"
-                               f"Slot {slot_index:02d} | Bout {bn:>3} | "
-                               f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
-                               f"{icon2} {b['w2_name']} ({b['w2_team']})"
-                               f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
-                               f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                               f"  |  Score {b['score']:.1f}"
+                            label = (
+                                f"{early_prefix}"
+                                f"Slot {slot_index:02d} | Bout {bn:>3} | "
+                                f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']})"
+                                f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
+                                f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                                f"  |  Score {b['score']:.1f}"
                             )
-                           row_labels.append(label)
-                           label_to_bout[label] = bn
+                            row_labels.append(label)
+                            label_to_bout[label] = bn
 
                         sorted_labels = sort_items(
                             row_labels,
@@ -1544,12 +1615,12 @@ if st.session_state.initialized:
 
                         if new_order != prev_order:
                             # Take a snapshot of current mat_order for unified undo
-                            snapshot = {
+                            snapshot_order = {
                                 m: order.copy() for m, order in st.session_state.mat_order.items()
                             }
                             push_action({
                                 "type": "drag",
-                                "previous_mat_order": snapshot,
+                                "previous_mat_order": snapshot_order,
                             })
 
                             st.session_state.mat_order[mat] = new_order
@@ -1713,6 +1784,7 @@ if st.session_state.initialized:
                                 b for b in st.session_state.bout_list
                                 if b["bout_num"] == data[r - 1]["bout_num"]
                             )["is_early"]:
+
                                 s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
                         t.setStyle(s)
                         elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
@@ -1937,7 +2009,11 @@ else:
 # ----------------------------------------------------------------------
 if st.session_state.get("initialized"):
     autosave_meet()
+    ts = st.session_state.get("last_autosave_time")
+    if ts:
+        st.caption(f"💾 Autosaved this meet at {ts}.")
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
