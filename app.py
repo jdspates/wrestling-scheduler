@@ -713,6 +713,34 @@ def validate_roster_df(df: pd.DataFrame):
     return errors
 
 # ----------------------------------------------------------------------
+# WIDGET RESET HELPER (for restored meets)
+# ----------------------------------------------------------------------
+def reset_setting_widgets():
+    """
+    Clear sidebar / search / team color widget keys so that on the next run,
+    the widgets use the restored CONFIG and team colors instead of stale values.
+    """
+    # Numeric / slider settings
+    for key in [
+        "min_matches",
+        "max_matches",
+        "num_mats",
+        "max_level_diff",
+        "min_weight_diff",
+        "weight_factor",
+        "rest_gap",
+    ]:
+        st.session_state.pop(key, None)
+
+    # Wrestler search box
+    st.session_state.pop("wrestler_search", None)
+
+    # Team color selectboxes: keys look like "color_0", "color_1", ...
+    color_keys = [k for k in list(st.session_state.keys()) if k.startswith("color_")]
+    for k in color_keys:
+        st.session_state.pop(k, None)
+
+# ----------------------------------------------------------------------
 # SNAPSHOT SAVE / LOAD HELPERS (JSON)
 # ----------------------------------------------------------------------
 def build_meet_snapshot():
@@ -729,6 +757,9 @@ def build_meet_snapshot():
 def restore_meet_from_snapshot(data: dict):
     """Restore a meet snapshot into session_state."""
     st.session_state.CONFIG = data.get("CONFIG", DEFAULT_CONFIG)
+    # Clear widget state so sidebar & colors pick up restored CONFIG/TEAMS
+    reset_setting_widgets()
+
     st.session_state.roster = data.get("roster", [])
     st.session_state.active = data.get("active", [])
     st.session_state.bout_list = data.get("bout_list", [])
@@ -1821,7 +1852,6 @@ if st.session_state.initialized:
                                     )
                                     st.rerun()
 
-
                         # Per-mat rest warnings (all wrestlers)
                         mat_conflicts = [
                             c for c in visible_conflicts if c["mat"] == mat
@@ -2192,7 +2222,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
