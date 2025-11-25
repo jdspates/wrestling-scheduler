@@ -122,7 +122,7 @@ def generate_initial_matchups(active):
             for w in group:
                 if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]:
                     continue
-                opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"] and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
+                opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"] and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]]
                 opps = [o for o in opps if is_compatible(w, o) and abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
                 if not opps:
                     continue
@@ -155,7 +155,7 @@ def build_suggestions(active, bout_list):
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         opps = [o for o in opps if abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"])) and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]]
         if not opps:
-            opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
+            opps = [ if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({"wrestler": w["name"], "team": w["team"], "level": w["level"], "weight": w["weight"],
                          "current": len(w["match_ids"]), "vs": o["name"], "vs_team": o["team"], "vs_current": len(o["match_ids"]),
@@ -506,3 +506,4 @@ if st.session_state.get("initialized"):
         st.caption(f"Autosaved this meet at {ts}.")
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
