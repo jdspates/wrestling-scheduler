@@ -1780,41 +1780,43 @@ if st.session_state.initialized:
                             # --- Move bout to another mat (simple manual move) ---
                             st.markdown("Move this bout to a different mat:")
 
-                            move_col1, move_col2 = st.columns([2, 2])
-                            with move_col1:
-                                move_target_mat = st.selectbox(
-                                    "Target mat",
-                                    options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
-                                    key=f"move_target_mat_{mat}",
+                            # --- Move selected bout to another mat (button below selectbox) ---
+                            st.markdown("**Move selected bout to another mat**")
+                            
+                            move_target_mat = st.selectbox(
+                                "Target mat",
+                                options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
+                                key=f"move_target_mat_{mat}",
+                            )
+                            
+                            if st.button("Move to mat", key=f"move_button_mat_{mat}", use_container_width=True):
+                                # Update mat_overrides so the scheduler keeps it on the new mat
+                                overrides = st.session_state.get("mat_overrides", {})
+                                overrides[selected_bout] = move_target_mat
+                                st.session_state.mat_overrides = overrides
+                            
+                                # Update mat_order: remove from this mat, append to target mat
+                                src_order = st.session_state.mat_order.get(mat, [])
+                                if selected_bout in src_order:
+                                    src_order.remove(selected_bout)
+                                st.session_state.mat_order[mat] = src_order
+                            
+                                dest_order = st.session_state.mat_order.get(move_target_mat, [])
+                                if selected_bout not in dest_order:
+                                    dest_order.append(selected_bout)
+                                st.session_state.mat_order[move_target_mat] = dest_order
+                            
+                                # Invalidate exports and refresh drag widgets
+                                st.session_state.excel_bytes = None
+                                st.session_state.pdf_bytes = None
+                                st.session_state.sortable_version += 1
+                            
+                                st.success(
+                                    f"Bout {selected_bout} moved to Mat {move_target_mat}. "
+                                    "You can now reorder it on that mat."
                                 )
-                            with move_col2:
-                                if st.button("Move to mat", key=f"move_button_mat_{mat}", use_container_width=True):
-                                    # Update mat_overrides so the scheduler keeps it on the new mat
-                                    overrides = st.session_state.get("mat_overrides", {})
-                                    overrides[selected_bout] = move_target_mat
-                                    st.session_state.mat_overrides = overrides
+                                st.rerun()
 
-                                    # Update mat_order: remove from this mat, append to target mat
-                                    src_order = st.session_state.mat_order.get(mat, [])
-                                    if selected_bout in src_order:
-                                        src_order.remove(selected_bout)
-                                    st.session_state.mat_order[mat] = src_order
-
-                                    dest_order = st.session_state.mat_order.get(move_target_mat, [])
-                                    if selected_bout not in dest_order:
-                                        dest_order.append(selected_bout)
-                                    st.session_state.mat_order[move_target_mat] = dest_order
-
-                                    # Invalidate exports and refresh drag widgets
-                                    st.session_state.excel_bytes = None
-                                    st.session_state.pdf_bytes = None
-                                    st.session_state.sortable_version += 1
-
-                                    st.success(
-                                        f"Bout {selected_bout} moved to Mat {move_target_mat}. "
-                                        "You can now reorder it on that mat."
-                                    )
-                                    st.rerun()
 
                         # Per-mat rest warnings (all wrestlers)
                         mat_conflicts = [
@@ -2186,3 +2188,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
