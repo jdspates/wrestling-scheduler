@@ -1777,9 +1777,6 @@ if st.session_state.initialized:
                             ):
                                 remove_bout(selected_bout)
 
-                            # --- Move bout to another mat (simple manual move) ---
-                            st.markdown("Move this bout to a different mat:")
-
                             # --- Move selected bout to another mat (button below selectbox) ---
                             st.markdown("**Move selected bout to another mat**")
                             
@@ -2195,5 +2192,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
