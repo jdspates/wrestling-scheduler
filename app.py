@@ -850,7 +850,7 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
     if st.button(
         "🔄 Start Over / Load New Roster",
         help="Clear current roster and matches so you can upload a new file.",
-        key="start_over_button",
+        key=f"start_over_button_{st.session_state.get('reset_confirm', False)}",
     ):
         st.session_state.reset_confirm = True
 
@@ -2029,6 +2029,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
