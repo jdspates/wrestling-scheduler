@@ -1789,33 +1789,40 @@ if st.session_state.initialized:
                                 key=f"move_target_mat_{mat}",
                             )
                             
-                            if st.button("Move to mat", key=f"move_button_mat_{mat}", use_container_width=True):
-                                # Update mat_overrides so the scheduler keeps it on the new mat
-                                overrides = st.session_state.get("mat_overrides", {})
-                                overrides[selected_bout] = move_target_mat
-                                st.session_state.mat_overrides = overrides
+                            # Create a full-width container to match the Remove button sizing
+                            move_button_area = st.container()
+                            with move_button_area:
+                                if st.button(
+                                    "Move to mat",
+                                    key=f"move_button_mat_{mat}",
+                                    use_container_width=True
+                                ):
+                                    # Update mat_overrides so the scheduler keeps it on the new mat
+                                    overrides = st.session_state.get("mat_overrides", {})
+                                    overrides[selected_bout] = move_target_mat
+                                    st.session_state.mat_overrides = overrides
                             
-                                # Update mat_order: remove from this mat, append to target mat
-                                src_order = st.session_state.mat_order.get(mat, [])
-                                if selected_bout in src_order:
-                                    src_order.remove(selected_bout)
-                                st.session_state.mat_order[mat] = src_order
+                                    # Update mat_order: remove from this mat, append to target mat
+                                    src_order = st.session_state.mat_order.get(mat, [])
+                                    if selected_bout in src_order:
+                                        src_order.remove(selected_bout)
+                                    st.session_state.mat_order[mat] = src_order
                             
-                                dest_order = st.session_state.mat_order.get(move_target_mat, [])
-                                if selected_bout not in dest_order:
-                                    dest_order.append(selected_bout)
-                                st.session_state.mat_order[move_target_mat] = dest_order
+                                    dest_order = st.session_state.mat_order.get(move_target_mat, [])
+                                    if selected_bout not in dest_order:
+                                        dest_order.append(selected_bout)
+                                    st.session_state.mat_order[move_target_mat] = dest_order
                             
-                                # Invalidate exports and refresh drag widgets
-                                st.session_state.excel_bytes = None
-                                st.session_state.pdf_bytes = None
-                                st.session_state.sortable_version += 1
+                                    # Invalidate exports and refresh drag widgets
+                                    st.session_state.excel_bytes = None
+                                    st.session_state.pdf_bytes = None
+                                    st.session_state.sortable_version += 1
                             
-                                st.success(
-                                    f"Bout {selected_bout} moved to Mat {move_target_mat}. "
-                                    "You can now reorder it on that mat."
-                                )
-                                st.rerun()
+                                    st.success(
+                                        f"Bout {selected_bout} moved to Mat {move_target_mat}. "
+                                        "You can now reorder it on that mat."
+                                    )
+                                    st.rerun()
 
 
                         # Per-mat rest warnings (all wrestlers)
@@ -2188,4 +2195,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
