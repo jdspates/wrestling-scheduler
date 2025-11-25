@@ -1192,6 +1192,10 @@ if st.session_state.initialized:
             # Sort wrestlers by weight (lightest → heaviest)
             sorted_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
         
+            # Percentage of roster to consider around Wrestler 1
+            # e.g. 0.30 = 30% of wrestlers centered around Wrestler 1's weight
+            WINDOW_PCT = 0.30
+        
             col_m1, col_m2 = st.columns([3, 3])
         
             with col_m1:
@@ -1209,9 +1213,32 @@ if st.session_state.initialized:
                 )
         
             with col_m2:
+                # Build window of candidates around Wrestler 1's weight
+                if manual_w1_id is not None and manual_w1_id in sorted_ids:
+                    total = len(sorted_ids)
+                    window_size = max(1, int(total * WINDOW_PCT))
+        
+                    # Index of Wrestler 1 in the weight-sorted list
+                    center_idx = sorted_ids.index(manual_w1_id)
+        
+                    half = window_size // 2
+                    start = max(0, center_idx - half)
+                    end = min(total, center_idx + half + 1)
+        
+                    candidate_ids = [
+                        wid for wid in sorted_ids[start:end]
+                        if wid != manual_w1_id
+                    ]
+        
+                    # Fallback: if window somehow collapses to no candidates, use all others
+                    if not candidate_ids:
+                        candidate_ids = [wid for wid in sorted_ids if wid != manual_w1_id]
+                else:
+                    candidate_ids = [wid for wid in sorted_ids if wid != manual_w1_id]
+        
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
-                    options=[wid for wid in sorted_ids if wid != manual_w1_id],
+                    options=candidate_ids,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
                         f"({id_to_wrestler[wid]['team']}) – "
@@ -1221,16 +1248,16 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w2",
                 )
-
-        # nest a small two-column layout just for right-aligning the button
-        btn_spacer, btn_col = st.columns([3, 1])
-        with btn_col:
-            create_manual = st.button(
-                "Create Match",
-                use_container_width=True,
-                help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
-                key="manual_match_create_btn",
-            )
+        
+                # nest a small two-column layout just for right-aligning the button
+                btn_spacer, btn_col = st.columns([3, 1])
+                with btn_col:
+                    create_manual = st.button(
+                        "Create Match",
+                        use_container_width=True,
+                        help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                        key="manual_match_create_btn",
+                    )
 
             if create_manual:
                 if manual_w1_id == manual_w2_id:
@@ -2041,6 +2068,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
