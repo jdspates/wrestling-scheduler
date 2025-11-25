@@ -183,6 +183,10 @@ if "reset_confirm" not in st.session_state:
 if "last_autosave_time" not in st.session_state:
     st.session_state.last_autosave_time = None
 
+# NEW: map of bout_num -> overridden mat (for manual mat moves)
+if "mat_overrides" not in st.session_state:
+    st.session_state.mat_overrides = {}
+
 # ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
@@ -387,11 +391,22 @@ def generate_mat_schedule(bout_list, gap=4):
 
 def apply_mat_order_to_global_schedule():
     """
-    Take the base schedule, then reorder each mat according to st.session_state.mat_order,
-    and recompute slot + mat_bout_num so exports and previews match the dragged order.
+    Take the base schedule, then:
+      - apply any mat overrides (bout -> mat),
+      - reorder each mat according to st.session_state.mat_order,
+      - recompute slot + mat_bout_num so exports and previews match the dragged order.
     """
     rest_gap = CONFIG.get("REST_GAP", 4)
     base = generate_mat_schedule(st.session_state.bout_list, gap=rest_gap)
+
+    # NEW: apply mat overrides (manual moves)
+    overrides = st.session_state.get("mat_overrides", {})
+    if overrides:
+        for e in base:
+            override_mat = overrides.get(e["bout_num"])
+            if override_mat:
+                e["mat"] = override_mat
+
     schedules = []
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -465,6 +480,40 @@ def compute_rest_conflicts(schedule, min_gap):
                     })
 
     return conflicts
+
+def compute_multi_mat_assignments(schedule):
+    """
+    Find wrestlers who are scheduled on more than one mat.
+    Returns a list of dicts: {wrestler_id, name, team, mats: sorted list of mats}.
+    """
+    appearances = {}
+
+    for e in schedule:
+        b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+
+        for w_id, name, team in [
+            (b["w1_id"], b["w1_name"], b["w1_team"]),
+            (b["w2_id"], b["w2_name"], b["w2_team"]),
+        ]:
+            if w_id not in appearances:
+                appearances[w_id] = {
+                    "name": name,
+                    "team": team,
+                    "mats": set(),
+                }
+            appearances[w_id]["mats"].add(e["mat"])
+
+    multi = []
+    for w_id, info in appearances.items():
+        if len(info["mats"]) > 1:
+            multi.append({
+                "wrestler_id": w_id,
+                "name": info["name"],
+                "team": info["team"],
+                "mats": sorted(info["mats"]),
+            })
+
+    return multi
 
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
@@ -1188,16 +1237,16 @@ if st.session_state.initialized:
         else:
             # Map IDs to wrestler records for quick lookup
             id_to_wrestler = {w["id"]: w for w in raw_active}
-        
+
             # Sort wrestlers by weight (lightest → heaviest)
             sorted_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
-        
+
             # Percentage of roster to consider around Wrestler 1
             # e.g. 0.30 = 30% of wrestlers centered around Wrestler 1's weight
             WINDOW_PCT = 0.30
-        
+
             col_m1, col_m2 = st.columns([3, 3])
-        
+
             # ---------------- Wrestler 1 ----------------
             with col_m1:
                 manual_w1_id = st.selectbox(
@@ -1212,28 +1261,28 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w1",
                 )
-        
+
             # ---------------- Wrestler 2 ----------------
             with col_m2:
                 if manual_w1_id is not None and manual_w1_id in sorted_ids:
                     total = len(sorted_ids)
                     window_size = max(1, int(total * WINDOW_PCT))
-        
+
                     # Index of Wrestler 1 in the weight-sorted list
                     center_idx = sorted_ids.index(manual_w1_id)
                     half = window_size // 2
                     start = max(0, center_idx - half)
                     end = min(total, center_idx + half + 1)
-        
+
                     # Wrestlers who already have a match with Wrestler 1
                     w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
-        
+
                     # Filter: within window, not W1, not already matched with W1
                     candidate_ids = [
                         wid for wid in sorted_ids[start:end]
                         if wid != manual_w1_id and wid not in w1_existing_opponents
                     ]
-        
+
                     # Fallback: if window collapses, use all others not already opponents
                     if not candidate_ids:
                         candidate_ids = [
@@ -1248,7 +1297,7 @@ if st.session_state.initialized:
                         wid for wid in sorted_ids
                         if wid != manual_w1_id and wid not in w1_existing_opponents
                     ]
-        
+
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
                     options=candidate_ids,
@@ -1261,7 +1310,7 @@ if st.session_state.initialized:
                     ),
                     key="manual_match_w2",
                 )
-        
+
                 # nest a small two-column layout just for right-aligning the button
                 btn_spacer, btn_col = st.columns([3, 1])
                 with btn_col:
@@ -1271,7 +1320,7 @@ if st.session_state.initialized:
                         help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
                         key="manual_match_create_btn",
                     )
-                    
+
             if create_manual:
                 if manual_w1_id == manual_w2_id:
                     st.warning("Please choose two different wrestlers.")
@@ -1475,6 +1524,21 @@ if st.session_state.initialized:
         rest_gap = CONFIG.get("REST_GAP", 4)
         conflicts_all = compute_rest_conflicts(full_schedule, rest_gap) if full_schedule else []
 
+        # NEW: multi-mat warning
+        multi_mat_issues = compute_multi_mat_assignments(full_schedule) if full_schedule else []
+
+        if multi_mat_issues:
+            st.warning(
+                f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
+            )
+            for issue in multi_mat_issues:
+                mat_list = ", ".join(str(m) for m in issue["mats"])
+                st.markdown(
+                    f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
+                )
+        else:
+            st.caption("All wrestlers are currently assigned to a single mat.")
+
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
         else:
@@ -1581,7 +1645,7 @@ if st.session_state.initialized:
 
                 st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
 
-            # ---------- EDIT MODE (drag + per-mat remove) ----------
+            # ---------- EDIT MODE (drag + per-mat remove + move) ----------
             else:
                 for mat in range(1, CONFIG["NUM_MATS"] + 1):
                     mat_entries = [e for e in full_schedule if e["mat"] == mat]
@@ -1685,7 +1749,7 @@ if st.session_state.initialized:
 
                         st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
 
-                        # Per-mat remove
+                        # Per-mat remove + move
                         bout_label_map = {}
                         for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
                             if bn not in bout_nums_in_mat:
@@ -1712,6 +1776,45 @@ if st.session_state.initialized:
                                 help="Removes the selected bout from this meet (Undo available below)."
                             ):
                                 remove_bout(selected_bout)
+
+                            # --- Move bout to another mat (simple manual move) ---
+                            st.markdown("Move this bout to a different mat:")
+
+                            move_col1, move_col2 = st.columns([2, 2])
+                            with move_col1:
+                                move_target_mat = st.selectbox(
+                                    "Target mat",
+                                    options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
+                                    key=f"move_target_mat_{mat}",
+                                )
+                            with move_col2:
+                                if st.button("Move to mat", key=f"move_button_mat_{mat}", use_container_width=True):
+                                    # Update mat_overrides so the scheduler keeps it on the new mat
+                                    overrides = st.session_state.get("mat_overrides", {})
+                                    overrides[selected_bout] = move_target_mat
+                                    st.session_state.mat_overrides = overrides
+
+                                    # Update mat_order: remove from this mat, append to target mat
+                                    src_order = st.session_state.mat_order.get(mat, [])
+                                    if selected_bout in src_order:
+                                        src_order.remove(selected_bout)
+                                    st.session_state.mat_order[mat] = src_order
+
+                                    dest_order = st.session_state.mat_order.get(move_target_mat, [])
+                                    if selected_bout not in dest_order:
+                                        dest_order.append(selected_bout)
+                                    st.session_state.mat_order[move_target_mat] = dest_order
+
+                                    # Invalidate exports and refresh drag widgets
+                                    st.session_state.excel_bytes = None
+                                    st.session_state.pdf_bytes = None
+                                    st.session_state.sortable_version += 1
+
+                                    st.success(
+                                        f"Bout {selected_bout} moved to Mat {move_target_mat}. "
+                                        "You can now reorder it on that mat."
+                                    )
+                                    st.rerun()
 
                         # Per-mat rest warnings (all wrestlers)
                         mat_conflicts = [
@@ -1802,6 +1905,7 @@ if st.session_state.initialized:
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
                             elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
+
                             elements.append(PageBreak())
                             continue
                         table = [["#", "Wrestler 1", "Wrestler 2"]]
@@ -2048,7 +2152,8 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
-  - Watch the *rest warnings* to avoid back-to-back matches.
+  - Use the **Move to mat** control to move a bout from one mat to another.
+  - Watch the *rest warnings* and *multi-mat warnings* to avoid conflicts.
 - Use the single **Undo** button to step backwards through:
   - Bout removals  
   - Drag/reorder changes  
@@ -2081,12 +2186,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
-
-
-
