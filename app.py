@@ -1213,62 +1213,62 @@ if st.session_state.initialized:
                 )
         
             with col_m2:
-            # Build window of candidates around Wrestler 1's weight
-            if manual_w1_id is not None and manual_w1_id in sorted_ids:
-                total = len(sorted_ids)
-                window_size = max(1, int(total * WINDOW_PCT))
-        
-                # Index of Wrestler 1 in the weight-sorted list
-                center_idx = sorted_ids.index(manual_w1_id)
-        
-                half = window_size // 2
-                start = max(0, center_idx - half)
-                end = min(total, center_idx + half + 1)
-        
-                # Wrestlers who already have a match with Wrestler 1
-                w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
-        
-                candidate_ids = [
-                    wid for wid in sorted_ids[start:end]
-                    if wid != manual_w1_id and wid not in w1_existing_opponents
-                ]
-        
-                # Fallback: if window collapses, use all non-duplicate, non-existing-opponent wrestlers
-                if not candidate_ids:
+                # Build window of candidates around Wrestler 1's weight
+                if manual_w1_id is not None and manual_w1_id in sorted_ids:
+                    total = len(sorted_ids)
+                    window_size = max(1, int(total * WINDOW_PCT))
+            
+                    # Index of Wrestler 1 in the weight-sorted list
+                    center_idx = sorted_ids.index(manual_w1_id)
+            
+                    half = window_size // 2
+                    start = max(0, center_idx - half)
+                    end = min(total, center_idx + half + 1)
+            
+                    # Wrestlers who already have a match with Wrestler 1
+                    w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
+            
                     candidate_ids = [
-                        wid for wid in sorted_ids
-                        if wid != manual_w1_id and wid not in w1_existing_opponents
-                    ]
-                else:
-                    # Very defensive fallback
-                    w1_existing_opponents = set(id_to_wrestler.get(manual_w1_id, {}).get("match_ids", []))
-                    candidate_ids = [
-                        wid for wid in sorted_ids
+                        wid for wid in sorted_ids[start:end]
                         if wid != manual_w1_id and wid not in w1_existing_opponents
                     ]
             
-                manual_w2_id = st.selectbox(
-                    "Wrestler 2",
-                    options=candidate_ids,
-                    format_func=lambda wid: (
-                        f"{id_to_wrestler[wid]['name']} "
-                        f"({id_to_wrestler[wid]['team']}) – "
-                        f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
-                        f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
-                        f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
-                    ),
-                    key="manual_match_w2",
-                )
-            
-                # nest a small two-column layout just for right-aligning the button
-                btn_spacer, btn_col = st.columns([3, 1])
-                with btn_col:
-                    create_manual = st.button(
-                        "Create Match",
-                        use_container_width=True,
-                        help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
-                        key="manual_match_create_btn",
+                    # Fallback: if window collapses, use all non-duplicate, non-existing-opponent wrestlers
+                    if not candidate_ids:
+                        candidate_ids = [
+                            wid for wid in sorted_ids
+                            if wid != manual_w1_id and wid not in w1_existing_opponents
+                        ]
+                    else:
+                        # Very defensive fallback
+                        w1_existing_opponents = set(id_to_wrestler.get(manual_w1_id, {}).get("match_ids", []))
+                        candidate_ids = [
+                            wid for wid in sorted_ids
+                            if wid != manual_w1_id and wid not in w1_existing_opponents
+                        ]
+                
+                    manual_w2_id = st.selectbox(
+                        "Wrestler 2",
+                        options=candidate_ids,
+                        format_func=lambda wid: (
+                            f"{id_to_wrestler[wid]['name']} "
+                            f"({id_to_wrestler[wid]['team']}) – "
+                            f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
+                            f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
+                            f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
+                        ),
+                        key="manual_match_w2",
                     )
+                
+                    # nest a small two-column layout just for right-aligning the button
+                    btn_spacer, btn_col = st.columns([3, 1])
+                    with btn_col:
+                        create_manual = st.button(
+                            "Create Match",
+                            use_container_width=True,
+                            help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                            key="manual_match_create_btn",
+                        )
                     
             if create_manual:
                 if manual_w1_id == manual_w2_id:
@@ -2079,6 +2079,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
