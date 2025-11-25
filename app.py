@@ -1186,30 +1186,40 @@ if st.session_state.initialized:
         if len(active_ids) < 2:
             st.caption("Not enough active wrestlers to create a manual match.")
         else:
+            # Map IDs to wrestler records for quick lookup
+            id_to_wrestler = {w["id"]: w for w in raw_active}
+        
+            # Sort wrestlers by weight (lightest → heaviest)
+            sorted_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
+        
             col_m1, col_m2 = st.columns([3, 3])
-            
+        
             with col_m1:
                 manual_w1_id = st.selectbox(
                     "Wrestler 1",
-                    options=active_ids,
-                    format_func=lambda wid: next(
-                        f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
-                        for w in raw_active if w["id"] == wid
+                    options=sorted_ids,
+                    format_func=lambda wid: (
+                        f"{id_to_wrestler[wid]['name']} "
+                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs"
                     ),
                     key="manual_match_w1",
                 )
-            
+        
             with col_m2:
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
-                    options=[wid for wid in active_ids if wid != manual_w1_id],
-                    format_func=lambda wid: next(
-                        f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
-                        for w in raw_active if w["id"] == wid
+                    options=[wid for wid in sorted_ids if wid != manual_w1_id],
+                    format_func=lambda wid: (
+                        f"{id_to_wrestler[wid]['name']} "
+                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs"
                     ),
                     key="manual_match_w2",
                 )
-            
+        
                 # nest a small two-column layout just for right-aligning the button
                 btn_spacer, btn_col = st.columns([3, 1])
                 with btn_col:
@@ -2029,6 +2039,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
