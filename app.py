@@ -1840,68 +1840,67 @@ if st.session_state.initialized:
 
         st.markdown("---")
 
-                # NEW: Wrestler match counts with below/OK/above min/max flags + weight/level/grade
+        # Wrestler Match Counts with Grade, Level, Weight + proper sorting
         st.markdown("#### Wrestler Match Counts")
-        valid_bouts = [
-            b for b in st.session_state.bout_list
-            if b["manual"] != "Manually Removed"
-        ]
-        if not valid_bouts and not st.session_state.active:
-            st.caption("No wrestlers or bouts yet.")
+
+        valid_bouts = [b for b in st.session_state.bout_list if b["manual"] != "Manually Removed"]
+        if not st.session_state.active:
+            st.caption("No wrestlers yet.")
         else:
-            # Build match count dictionary
+            # Build match counts
             match_counts = {}
             for b in valid_bouts:
                 for side in ("w1", "w2"):
                     wid = b[f"{side}_id"]
-                    name = b[f"{side}_name"]
-                    team = b[f"{side}_team"]
                     if wid not in match_counts:
-                        match_counts[wid] = {
-                            "Wrestler": name,
-                            "Team": team,
-                            "Matches": 0,
-                        }
+                        match_counts[wid] = {"Matches": 0}
                     match_counts[wid]["Matches"] += 1
 
-            # Ensure every active wrestler appears (even with 0 matches)
-            for w in st.session_state.active:
-                if w["id"] not in match_counts:
-                    match_counts[w["id"]] = {
-                        "Wrestler": w["name"],
-                        "Team": w["team"],
-                        "Matches": 0,
-                    }
-
+            # Build rows with full wrestler data
             rows = []
-            for wid, data in match_counts.items():
-                wrestler = next(w for w in st.session_state.active if w["id"] == wid)
+            for w in st.session_state.active:
                 rows.append({
-                    "Wrestler": data["Wrestler"],
-                    "Team": data["Team"],
-                    "Grade": wrestler["grade"],
-                    "Level": f"{wrestler['level']:.1f}",
-                    "Weight": f"{wrestler['weight']:.0f}",
-                    "Matches": data["Matches"],
+                    "Wrestler": w["name"],
+                    "Team": w["team"],
+                    "Grade": w["grade"],
+                    "Level": f"{w['level']:.1f}",
+                    "Weight": w["weight"],           # keep as float for correct sorting
+                    "Weight_display": f"{w['weight']:.0f}",  # nice display version
+                    "Matches": match_counts.get(w["id"], {}).get("Matches", 0),
                 })
 
             df_wc = pd.DataFrame(rows)
+
+            # Status column
             min_m = CONFIG["MIN_MATCHES"]
             max_m = CONFIG["MAX_MATCHES"]
-            def status_fn(m):
-                if m < min_m:
-                    return "Below Min"
-                if m > max_m:
-                    return "Above Max"
-                return "OK"
-            df_wc["Status"] = df_wc["Matches"].apply(status_fn)
+            df_wc["Status"] = df_wc["Matches"].apply(
+                lambda m: "Below Min" if m < min_m else ("Above Max" if m > max_m else "OK")
+            )
 
-            # Sort by Team → Wrestler name
-            df_wc = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
+            # Default sort: Team → Wrestler name
+            default_df = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
 
-            # Display with nice column order
-            display_df = df_wc[["Wrestler", "Team", "Grade", "Level", "Weight", "Matches", "Status"]]
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            # Add a sort selector
+            sort_by = st.radio(
+                "Sort table by:",
+                options=["Team (default)", "Weight (light → heavy)"],
+                horizontal=True,
+                index=0,
+                key="summary_sort"
+            )
+
+            if sort_by == "Weight (light → heavy)":
+                display_df = df_wc.sort_values("Weight").reset_index(drop=True)
+            else:
+                display_df = default_df
+
+            # Final display (use pretty weight column)
+            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Matches", "Status"]]
+            final_display = final_display.rename(columns={"Weight_display": "Weight"})
+
+            st.dataframe(final_display, use_container_width=True, hide_index=True)
+
         st.markdown("---")
 
         st.markdown("#### Mats Overview")
@@ -2030,6 +2029,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
