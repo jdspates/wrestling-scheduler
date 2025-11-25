@@ -1269,10 +1269,40 @@ if st.session_state.initialized:
             # Map IDs to wrestler records for quick lookup
             id_to_wrestler = {w["id"]: w for w in raw_active}
 
-            # Sort wrestlers by weight (lightest → heaviest)
-            sorted_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
+            # All active wrestlers sorted by weight (lightest → heaviest)
+            sorted_all_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
 
-            # Percentage of roster to consider around Wrestler 1
+            # ---- NEW: Wrestler 1 filter toggle ----
+            w1_filter_mode = st.radio(
+                "Wrestler 1 list",
+                options=[
+                    "Show everyone",
+                    "Only wrestlers below MIN matches",
+                ],
+                horizontal=True,
+                key="manual_w1_filter_mode",
+                help=(
+                    "Show either all active wrestlers, or only those who currently have fewer "
+                    f"than MIN matches ({CONFIG['MIN_MATCHES']}). Wrestler 2 stays unfiltered."
+                ),
+            )
+
+            if w1_filter_mode == "Only wrestlers below MIN matches":
+                filtered_ids_for_w1 = [
+                    wid for wid in sorted_all_ids
+                    if len(id_to_wrestler[wid]["match_ids"]) < CONFIG["MIN_MATCHES"]
+                ]
+                # If everyone already meets the minimum, fall back to all wrestlers
+                if not filtered_ids_for_w1:
+                    st.info(
+                        "All wrestlers already meet the minimum matches – "
+                        "showing everyone for Wrestler 1."
+                    )
+                    filtered_ids_for_w1 = sorted_all_ids
+            else:
+                filtered_ids_for_w1 = sorted_all_ids
+
+            # Percentage of roster to consider around Wrestler 1 (for Wrestler 2)
             # e.g. 0.30 = 30% of wrestlers centered around Wrestler 1's weight
             WINDOW_PCT = 0.30
 
@@ -1282,7 +1312,7 @@ if st.session_state.initialized:
             with col_m1:
                 manual_w1_id = st.selectbox(
                     "Wrestler 1",
-                    options=sorted_ids,
+                    options=filtered_ids_for_w1,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
                         f"({id_to_wrestler[wid]['team']}) – "
@@ -1294,13 +1324,14 @@ if st.session_state.initialized:
                 )
 
             # ---------------- Wrestler 2 ----------------
+            # NOTE: Wrestler 2 stays based on the full list (can go over MAX matches)
             with col_m2:
-                if manual_w1_id is not None and manual_w1_id in sorted_ids:
-                    total = len(sorted_ids)
+                if manual_w1_id is not None and manual_w1_id in sorted_all_ids:
+                    total = len(sorted_all_ids)
                     window_size = max(1, int(total * WINDOW_PCT))
 
-                    # Index of Wrestler 1 in the weight-sorted list
-                    center_idx = sorted_ids.index(manual_w1_id)
+                    # Index of Wrestler 1 in the global weight-sorted list
+                    center_idx = sorted_all_ids.index(manual_w1_id)
                     half = window_size // 2
                     start = max(0, center_idx - half)
                     end = min(total, center_idx + half + 1)
@@ -1310,14 +1341,14 @@ if st.session_state.initialized:
 
                     # Filter: within window, not W1, not already matched with W1
                     candidate_ids = [
-                        wid for wid in sorted_ids[start:end]
+                        wid for wid in sorted_all_ids[start:end]
                         if wid != manual_w1_id and wid not in w1_existing_opponents
                     ]
 
                     # Fallback: if window collapses, use all others not already opponents
                     if not candidate_ids:
                         candidate_ids = [
-                            wid for wid in sorted_ids
+                            wid for wid in sorted_all_ids
                             if wid != manual_w1_id and wid not in w1_existing_opponents
                         ]
                 else:
@@ -1325,7 +1356,7 @@ if st.session_state.initialized:
                         id_to_wrestler.get(manual_w1_id, {}).get("match_ids", [])
                     )
                     candidate_ids = [
-                        wid for wid in sorted_ids
+                        wid for wid in sorted_all_ids
                         if wid != manual_w1_id and wid not in w1_existing_opponents
                     ]
 
@@ -2222,3 +2253,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
