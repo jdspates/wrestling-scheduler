@@ -1202,7 +1202,8 @@ if st.session_state.initialized:
                         f"{id_to_wrestler[wid]['name']} "
                         f"({id_to_wrestler[wid]['team']}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
-                        f"{id_to_wrestler[wid]['weight']:.0f} lbs"
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
+                        f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
                     ),
                     key="manual_match_w1",
                 )
@@ -1215,20 +1216,21 @@ if st.session_state.initialized:
                         f"{id_to_wrestler[wid]['name']} "
                         f"({id_to_wrestler[wid]['team']}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
-                        f"{id_to_wrestler[wid]['weight']:.0f} lbs"
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
+                        f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
                     ),
                     key="manual_match_w2",
                 )
-        
-                # nest a small two-column layout just for right-aligning the button
-                btn_spacer, btn_col = st.columns([3, 1])
-                with btn_col:
-                    create_manual = st.button(
-                        "Create Match",
-                        use_container_width=True,
-                        help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
-                        key="manual_match_create_btn",
-                    )
+
+        # nest a small two-column layout just for right-aligning the button
+        btn_spacer, btn_col = st.columns([3, 1])
+        with btn_col:
+            create_manual = st.button(
+                "Create Match",
+                use_container_width=True,
+                help="Force a match between these two wrestlers, even if it wasn’t auto-generated.",
+                key="manual_match_create_btn",
+            )
 
             if create_manual:
                 if manual_w1_id == manual_w2_id:
@@ -2039,6 +2041,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
