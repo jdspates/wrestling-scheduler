@@ -649,9 +649,9 @@ def _undo_scratch_update(snapshot: dict):
     ]
 
     # Keep the scratches multiselect in sync with restored roster
-    st.session_state["scratch_multiselect"] = [
-        w["id"] for w in st.session_state.roster if w.get("scratch")
-    ]
+    #st.session_state["scratch_multiselect"] = [
+    #    w["id"] for w in st.session_state.roster if w.get("scratch")
+    #]
 
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
@@ -2283,3 +2283,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
