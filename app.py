@@ -906,8 +906,18 @@ if uploaded and not st.session_state.initialized:
 # Start-over / load new roster button, right under the uploader
 if st.session_state.get("initialized") and st.session_state.get("roster"):
 
-    # Confirmation UI if reset_confirm is set
-    if st.session_state.get("reset_confirm", False):
+    # NEW LOGIC: show either Start Over button OR confirmation UI, never both
+    if not st.session_state.get("reset_confirm", False):
+        # Primary Start Over button – toggles confirmation mode
+        if st.button(
+            "🔄 Start Over / Load New Roster",
+            help="Clear current roster and matches so you can upload a new file.",
+            key="start_over_button",
+        ):
+            st.session_state.reset_confirm = True
+            st.rerun()
+    else:
+        # Confirmation UI when reset_confirm is True
         st.warning(
             "Are you sure you want to **reset this meet**? "
             "This will clear the current roster, matchups, mat orders, exports, and undo history "
@@ -937,14 +947,7 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
             if st.button("❌ Cancel", key="confirm_reset_no"):
                 st.session_state.reset_confirm = False
                 st.info("Reset cancelled.")
-
-    # Primary Start Over button – just toggles confirmation mode
-    if st.button(
-        "🔄 Start Over / Load New Roster",
-        help="Clear current roster and matches so you can upload a new file.",
-        key="start_over_button",
-    ):
-        st.session_state.reset_confirm = True
+                st.rerun()
 
 # ----------------------------------------------------------------------
 # SAVE / LOAD MEET (JSON SNAPSHOT)
@@ -1559,112 +1562,7 @@ if st.session_state.initialized:
                             "You can now drag it to the desired mat and slot."
                         )
                         st.rerun()
-        
-        # ----- Suggested Matches -----
-        # st.subheader("Suggested Matches")
 
-        # all_suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-        # current_suggestions = [s for s in all_suggestions if s["_w_id"] in filtered_ids]
-
-        # under_count = len([
-        #     w for w in filtered_active
-        #     if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]
-        # ])
-        # st.caption(
-        #     f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches."
-        # )
-
-        # if current_suggestions:
-        #     sugg_data = []
-        #     for i, s in enumerate(current_suggestions):
-        #         w = next(w for w in filtered_active if w["id"] == s["_w_id"])
-        #         o = next(w for w in raw_active if w["id"] == s["_o_id"])
-        #         sugg_data.append({
-        #             "Add": False,
-        #             "Current": f"{len(w['match_ids'])}",
-        #             "Wrestler": f"{w['name']} ({w['team']})",
-        #             "Lvl": f"{w['level']:.1f}",
-        #             "Wt": f"{w['weight']:.0f}",
-        #             "vs_Current": f"{len(o['match_ids'])}",
-        #             "vs": f"{o['name']} ({o['team']})",
-        #             "vs_Lvl": f"{o['level']:.1f}",
-        #             "vs_Wt": f"{o['weight']:.0f}",
-        #             "Score": f"{s['score']:.1f}",
-        #             "idx": i
-        #         })
-        #     sugg_full_df = pd.DataFrame(sugg_data)
-        #     sugg_display_df = sugg_full_df.drop(columns=["idx"])
-        #     edited = st.data_editor(
-        #         sugg_display_df,
-        #         column_config={
-        #             "Add": st.column_config.CheckboxColumn("Add"),
-        #             "Current": st.column_config.NumberColumn("Current"),
-        #             "Wrestler": st.column_config.TextColumn("Wrestler"),
-        #             "Lvl": st.column_config.NumberColumn("Lvl"),
-        #             "Wt": st.column_config.NumberColumn("Wt"),
-        #             "vs_Current": st.column_config.NumberColumn("vs_Current"),
-        #             "vs": st.column_config.TextColumn("vs"),
-        #             "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
-        #             "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
-        #             "Score": st.column_config.NumberColumn("Score"),
-        #         },
-        #         use_container_width=True,
-        #         hide_index=True,
-        #         key="sugg_editor"
-        #     )
-
-        #     if st.button("Add Selected", help="Add checked suggested matches"):
-        #         to_add = [
-        #             current_suggestions[sugg_full_df.iloc[row.name]["idx"]]
-        #             for _, row in edited.iterrows() if row["Add"]
-        #         ]
-
-        #         added_bouts = []
-
-        #         for s in to_add:
-        #             w = next(w for w in raw_active if w["id"] == s["_w_id"])
-        #             o = next(w for w in raw_active if w["id"] == s["_o_id"])
-        #             if o["id"] not in w["match_ids"]:
-        #                 w["match_ids"].append(o["id"])
-        #             if w["id"] not in o["match_ids"]:
-        #                 o["match_ids"].append(w["id"])
-
-        #             new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
-        #                 if st.session_state.bout_list else 1
-
-        #             new_bout = {
-        #                 "bout_num": new_bout_num,
-        #                 "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
-        #                 "w1_level": w["level"], "w1_weight": w["weight"],
-        #                 "w1_grade": w["grade"], "w1_early": w["early"],
-        #                 "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
-        #                 "w2_level": o["level"], "w2_weight": o["weight"],
-        #                 "w2_grade": o["grade"], "w2_early": o["early"],
-        #                 "score": s["score"],
-        #                 "avg_weight": (w["weight"] + o["weight"]) / 2,
-        #                 "is_early": w["early"] or o["early"],
-        #                 "manual": "Manually Added"
-        #             }
-        #             st.session_state.bout_list.append(new_bout)
-        #             added_bouts.append(new_bout_num)
-
-        #         if added_bouts:
-        #             # keep bouts sorted by avg_weight
-        #             st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-        #             st.session_state.mat_order = {}
-        #             st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-        #             st.session_state.excel_bytes = None
-        #             st.session_state.pdf_bytes = None
-
-        #             # Push grouped action for undo
-        #             push_action({"type": "suggest_add", "bout_nums": added_bouts})
-
-        #             st.success("Matches added! Early matches placed at the top of their mat.")
-        #             st.session_state.sortable_version += 1
-        #             st.rerun()
-        # else:
-        #     st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
-        
         # ----- Global schedule & rest conflicts -----
         full_schedule = apply_mat_order_to_global_schedule() if st.session_state.bout_list else []
         rest_gap = CONFIG.get("REST_GAP", 4)
