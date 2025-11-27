@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
+# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches 
 import streamlit as st
 import pandas as pd
 import io
@@ -182,6 +182,10 @@ if "reset_confirm" not in st.session_state:
 # NEW: store last autosave time (for UI caption)
 if "last_autosave_time" not in st.session_state:
     st.session_state.last_autosave_time = None
+
+# NEW: map of bout_num -> overridden mat (for manual mat moves)
+if "mat_overrides" not in st.session_state:
+    st.session_state.mat_overrides = {}
 
 # ----------------------------------------------------------------------
 # CORE LOGIC
@@ -387,11 +391,22 @@ def generate_mat_schedule(bout_list, gap=4):
 
 def apply_mat_order_to_global_schedule():
     """
-    Take the base schedule, then reorder each mat according to st.session_state.mat_order,
-    and recompute slot + mat_bout_num so exports and previews match the dragged order.
+    Take the base schedule, then:
+      - apply any mat overrides (bout -> mat),
+      - reorder each mat according to st.session_state.mat_order,
+      - recompute slot + mat_bout_num so exports and previews match the dragged order.
     """
     rest_gap = CONFIG.get("REST_GAP", 4)
     base = generate_mat_schedule(st.session_state.bout_list, gap=rest_gap)
+
+    # NEW: apply mat overrides (manual moves)
+    overrides = st.session_state.get("mat_overrides", {})
+    if overrides:
+        for e in base:
+            override_mat = overrides.get(e["bout_num"])
+            if override_mat:
+                e["mat"] = override_mat
+
     schedules = []
 
     for mat in range(1, CONFIG["NUM_MATS"] + 1):
@@ -466,6 +481,53 @@ def compute_rest_conflicts(schedule, min_gap):
 
     return conflicts
 
+def compute_multi_mat_assignments(schedule):
+    """
+    Find wrestlers who are scheduled on more than one mat.
+    Returns a list of dicts:
+      {
+        wrestler_id,
+        name,
+        team,
+        mats: sorted list of mats,
+        matches: list of {mat, slot, bout_num}
+      }
+    """
+    appearances = {}
+
+    for e in schedule:
+        b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+
+        for w_id, name, team in [
+            (b["w1_id"], b["w1_name"], b["w1_team"]),
+            (b["w2_id"], b["w2_name"], b["w2_team"]),
+        ]:
+            if w_id not in appearances:
+                appearances[w_id] = {
+                    "name": name,
+                    "team": team,
+                    "matches": [],  # list of {mat, slot, bout_num}
+                }
+            appearances[w_id]["matches"].append({
+                "mat": e["mat"],
+                "slot": e["slot"],          # this is the visible slot on that mat
+                "bout_num": e["bout_num"],
+            })
+
+    multi = []
+    for w_id, info in appearances.items():
+        mats = sorted({m["mat"] for m in info["matches"]})
+        if len(mats) > 1:
+            multi.append({
+                "wrestler_id": w_id,
+                "name": info["name"],
+                "team": info["team"],
+                "mats": mats,
+                # sort matches nicely by mat, then slot
+                "matches": sorted(info["matches"], key=lambda x: (x["mat"], x["slot"])),
+            })
+
+    return multi
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
@@ -585,6 +647,23 @@ def _undo_suggest_add(bout_nums: list[int]):
     st.session_state.sortable_version += 1
     st.success("Undo: suggested matches removed.")
 
+def _undo_scratch_update(snapshot: dict):
+    """Undo a scratches update by restoring a saved snapshot."""
+    # Restore from snapshot using deep copies so we don't share references
+    st.session_state.roster = copy.deepcopy(snapshot["roster"])
+    st.session_state.active = copy.deepcopy(snapshot["active"])
+    st.session_state.bout_list = copy.deepcopy(snapshot["bout_list"])
+    st.session_state.suggestions = copy.deepcopy(snapshot["suggestions"])
+    st.session_state.mat_order = copy.deepcopy(snapshot["mat_order"])
+    st.session_state.mat_overrides = copy.deepcopy(snapshot.get("mat_overrides", {}))
+
+    # The Pre-Meet Scratches widget will rebuild its selection from
+    # the restored roster (w['scratch']) on the next run.
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: scratches and schedule restored.")
+
 def undo_last_action():
     """Pop the last action off the history and undo it."""
     history = st.session_state.get("action_history", [])
@@ -603,6 +682,8 @@ def undo_last_action():
         _undo_manual_add(action["bout_num"])
     elif t == "suggest_add":
         _undo_suggest_add(action["bout_nums"])
+    elif t == "scratch_update":
+        _undo_scratch_update(action["snapshot"])
     else:
         st.info("Nothing to undo.")
         return
@@ -664,6 +745,34 @@ def validate_roster_df(df: pd.DataFrame):
     return errors
 
 # ----------------------------------------------------------------------
+# WIDGET RESET HELPER (for restored meets)
+# ----------------------------------------------------------------------
+def reset_setting_widgets():
+    """
+    Clear sidebar / search / team color widget keys so that on the next run,
+    the widgets use the restored CONFIG and team colors instead of stale values.
+    """
+    # Numeric / slider settings
+    for key in [
+        "min_matches",
+        "max_matches",
+        "num_mats",
+        "max_level_diff",
+        "min_weight_diff",
+        "weight_factor",
+        "rest_gap",
+    ]:
+        st.session_state.pop(key, None)
+
+    # Wrestler search box
+    st.session_state.pop("wrestler_search", None)
+
+    # Team color selectboxes: keys look like "color_0", "color_1", ...
+    color_keys = [k for k in list(st.session_state.keys()) if k.startswith("color_")]
+    for k in color_keys:
+        st.session_state.pop(k, None)
+
+# ----------------------------------------------------------------------
 # SNAPSHOT SAVE / LOAD HELPERS (JSON)
 # ----------------------------------------------------------------------
 def build_meet_snapshot():
@@ -679,7 +788,22 @@ def build_meet_snapshot():
 
 def restore_meet_from_snapshot(data: dict):
     """Restore a meet snapshot into session_state."""
+    # Load CONFIG from snapshot
     st.session_state.CONFIG = data.get("CONFIG", DEFAULT_CONFIG)
+    cfg = st.session_state.CONFIG
+
+    # Clear widget state so sidebar & colors pick up restored CONFIG/TEAMS
+    reset_setting_widgets()
+
+    # NEW: explicitly sync widget-backed keys to loaded CONFIG
+    st.session_state["min_matches"] = cfg["MIN_MATCHES"]
+    st.session_state["max_matches"] = cfg["MAX_MATCHES"]
+    st.session_state["num_mats"] = cfg["NUM_MATS"]
+    st.session_state["max_level_diff"] = cfg["MAX_LEVEL_DIFF"]
+    st.session_state["min_weight_diff"] = cfg["MIN_WEIGHT_DIFF"]
+    st.session_state["weight_factor"] = cfg["WEIGHT_DIFF_FACTOR"]
+    st.session_state["rest_gap"] = cfg.get("REST_GAP", 4)
+
     st.session_state.roster = data.get("roster", [])
     st.session_state.active = data.get("active", [])
     st.session_state.bout_list = data.get("bout_list", [])
@@ -814,8 +938,18 @@ if uploaded and not st.session_state.initialized:
 # Start-over / load new roster button, right under the uploader
 if st.session_state.get("initialized") and st.session_state.get("roster"):
 
-    # Confirmation UI if reset_confirm is set
-    if st.session_state.get("reset_confirm", False):
+    # NEW LOGIC: show either Start Over button OR confirmation UI, never both
+    if not st.session_state.get("reset_confirm", False):
+        # Primary Start Over button – toggles confirmation mode
+        if st.button(
+            "🔄 Start Over / Load New Roster",
+            help="Clear current roster and matches so you can upload a new file.",
+            key="start_over_button",
+        ):
+            st.session_state.reset_confirm = True
+            st.rerun()
+    else:
+        # Confirmation UI when reset_confirm is True
         st.warning(
             "Are you sure you want to **reset this meet**? "
             "This will clear the current roster, matchups, mat orders, exports, and undo history "
@@ -845,14 +979,7 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
             if st.button("❌ Cancel", key="confirm_reset_no"):
                 st.session_state.reset_confirm = False
                 st.info("Reset cancelled.")
-
-    # Primary Start Over button – just toggles confirmation mode
-    if st.button(
-        "🔄 Start Over / Load New Roster",
-        help="Clear current roster and matches so you can upload a new file.",
-        key="start_over_button",
-    ):
-        st.session_state.reset_confirm = True
+                st.rerun()
 
 # ----------------------------------------------------------------------
 # SAVE / LOAD MEET (JSON SNAPSHOT)
@@ -1104,12 +1231,11 @@ if st.session_state.initialized:
    - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
 
 3. **Apply scratches**
-   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight.
-   - Click **Apply scratches & regenerate schedule** to rebuild matchups.
+   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight if not already defined in the roster CSV.
+   - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout. Use **Start Over** if you want to completely rebuild from scratch.
 
 4. **Fine-tune matchups**
-   - Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
-   - Use **Manual Match Creator** when coaches want specific pairings.
+   - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
 5. **Generate & download**
@@ -1132,28 +1258,115 @@ if st.session_state.initialized:
                     f"{w['name']} ({w['team']})"
                     for w in roster if w["id"] == wid
                 ),
-                key="scratch_multiselect"
             )
 
-            if st.button("Apply scratches & regenerate schedule"):
+            apply_clicked = st.button("Apply scratches & regenerate schedule")
+
+            st.caption(
+                "Tip: After manual editing, applying scratches will only remove matches involving scratched wrestlers "
+                "and keep your mat layout. Use **Start Over** if you want to completely rebuild all matchups."
+            )
+
+            if apply_clicked:
+                # Take snapshot for undo **before** applying new scratches
+                pre_snapshot = {
+                    "roster": copy.deepcopy(st.session_state.roster),
+                    "active": copy.deepcopy(st.session_state.active),
+                    "bout_list": copy.deepcopy(st.session_state.bout_list),
+                    "suggestions": copy.deepcopy(st.session_state.suggestions),
+                    "mat_order": copy.deepcopy(st.session_state.mat_order),
+                    "mat_overrides": copy.deepcopy(st.session_state.get("mat_overrides", {})),
+                }
+
+                # Update scratch flags based on selection
                 for w in roster:
                     w["scratch"] = (w["id"] in selected_scratched)
-                    w["match_ids"] = []
 
                 st.session_state.roster = roster
-                st.session_state.active = [w for w in roster if not w["scratch"]]
+                new_active = [w for w in roster if not w["scratch"]]
+                st.session_state.active = new_active
 
-                st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
-                st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
-                st.session_state.mat_order = {}
-                st.session_state.excel_bytes = None
-                st.session_state.pdf_bytes = None
-                st.session_state.action_history = []
+                existing_bouts = st.session_state.bout_list or []
 
-                st.session_state.sortable_version += 1
+                # Detect whether the meet is still in a "pristine" auto-generated state
+                has_manual = any(b.get("manual") for b in existing_bouts)
+                has_history = bool(st.session_state.get("action_history"))
+                has_mat_order = any(st.session_state.mat_order.values())
 
-                st.success("Scratches applied and schedule regenerated.")
-                st.rerun()
+                pristine = (not existing_bouts) or (not has_manual and not has_history and not has_mat_order)
+
+                if pristine:
+                    # Early workflow: behave like old logic – full regenerate
+                    for w in roster:
+                        w["match_ids"] = []
+                    st.session_state.bout_list = generate_initial_matchups(new_active)
+                    st.session_state.suggestions = build_suggestions(new_active, st.session_state.bout_list)
+                    st.session_state.mat_order = {}
+                    st.session_state.mat_overrides = {}
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
+                    st.session_state.action_history = []
+                    st.session_state.sortable_version += 1
+
+                    st.success("Scratches applied and schedule regenerated.")
+                    st.rerun()
+                else:
+                    # Edited workflow: only remove matches
+
+                    # Use snapshot captured BEFORE scratches were applied
+                    push_action({
+                        "type": "scratch_update",
+                        "snapshot": pre_snapshot,
+                    })
+
+                    scratched_ids = {w["id"] for w in roster if w["scratch"]}
+
+                    # Keep bouts that do NOT involve scratched wrestlers
+                    remaining_bouts = [
+                        b for b in existing_bouts
+                        if b["w1_id"] not in scratched_ids and b["w2_id"] not in scratched_ids
+                    ]
+
+                    # Rebuild match_ids based on remaining bouts
+                    for w in roster:
+                        w["match_ids"] = []
+
+                    for b in remaining_bouts:
+                        w1 = next(w for w in roster if w["id"] == b["w1_id"])
+                        w2 = next(w for w in roster if w["id"] == b["w2_id"])
+                        w1["match_ids"].append(w2["id"])
+                        w2["match_ids"].append(w1["id"])
+
+                    st.session_state.bout_list = remaining_bouts
+
+                    # Clean mat_order and mat_overrides to drop removed bouts
+                    remaining_bout_nums = {b["bout_num"] for b in remaining_bouts}
+
+                    cleaned_mat_order = {}
+                    for mat, order in st.session_state.mat_order.items():
+                        cleaned_order = [bn for bn in order if bn in remaining_bout_nums]
+                        if cleaned_order:
+                            cleaned_mat_order[mat] = cleaned_order
+                    st.session_state.mat_order = cleaned_mat_order
+
+                    overrides = st.session_state.get("mat_overrides", {})
+                    st.session_state.mat_overrides = {
+                        bn: m for bn, m in overrides.items() if bn in remaining_bout_nums
+                    }
+
+                    # Rebuild suggestions based on new active + remaining bouts
+                    st.session_state.suggestions = build_suggestions(new_active, remaining_bouts)
+
+                    # Invalidate exports; refresh drag widgets
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
+                    st.session_state.sortable_version += 1
+
+                    st.success(
+                        "Scratches applied: matches involving scratched wrestlers were removed. "
+                        "Manual matches and mat layout for remaining bouts were preserved."
+                    )
+                    st.rerun()
 
         # ---- Filtered wrestlers by search ----
         if search_term.strip():
@@ -1186,30 +1399,113 @@ if st.session_state.initialized:
         if len(active_ids) < 2:
             st.caption("Not enough active wrestlers to create a manual match.")
         else:
+            # Map IDs to wrestler records for quick lookup
+            id_to_wrestler = {w["id"]: w for w in raw_active}
+
+            # All active wrestlers sorted by weight (lightest → heaviest)
+            sorted_all_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
+
+            # ---- NEW: Wrestler 1 filter toggle ----
+            w1_filter_mode = st.radio(
+                "Wrestler 1 list",
+                options=[
+                    "Show everyone",
+                    "Only wrestlers below MIN matches",
+                ],
+                horizontal=True,
+                key="manual_w1_filter_mode",
+                help=(
+                    "Show either all active wrestlers, or only those who currently have fewer "
+                    f"than MIN matches ({CONFIG['MIN_MATCHES']}). Wrestler 2 stays unfiltered."
+                ),
+            )
+
+            if w1_filter_mode == "Only wrestlers below MIN matches":
+                filtered_ids_for_w1 = [
+                    wid for wid in sorted_all_ids
+                    if len(id_to_wrestler[wid]["match_ids"]) < CONFIG["MIN_MATCHES"]
+                ]
+                # If everyone already meets the minimum, fall back to all wrestlers
+                if not filtered_ids_for_w1:
+                    st.info(
+                        "All wrestlers already meet the minimum matches – "
+                        "showing everyone for Wrestler 1."
+                    )
+                    filtered_ids_for_w1 = sorted_all_ids
+            else:
+                filtered_ids_for_w1 = sorted_all_ids
+
+            # Percentage of roster to consider around Wrestler 1 (for Wrestler 2)
+            # e.g. 0.30 = 30% of wrestlers centered around Wrestler 1's weight
+            WINDOW_PCT = 0.30
+
             col_m1, col_m2 = st.columns([3, 3])
-            
+
+            # ---------------- Wrestler 1 ----------------
             with col_m1:
                 manual_w1_id = st.selectbox(
                     "Wrestler 1",
-                    options=active_ids,
-                    format_func=lambda wid: next(
-                        f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
-                        for w in raw_active if w["id"] == wid
+                    options=filtered_ids_for_w1,
+                    format_func=lambda wid: (
+                        f"{id_to_wrestler[wid]['name']} "
+                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
+                        f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
                     ),
                     key="manual_match_w1",
                 )
-            
+
+            # ---------------- Wrestler 2 ----------------
+            # NOTE: Wrestler 2 stays based on the full list (can go over MAX matches)
             with col_m2:
+                if manual_w1_id is not None and manual_w1_id in sorted_all_ids:
+                    total = len(sorted_all_ids)
+                    window_size = max(1, int(total * WINDOW_PCT))
+
+                    # Index of Wrestler 1 in the global weight-sorted list
+                    center_idx = sorted_all_ids.index(manual_w1_id)
+                    half = window_size // 2
+                    start = max(0, center_idx - half)
+                    end = min(total, center_idx + half + 1)
+
+                    # Wrestlers who already have a match with Wrestler 1
+                    w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
+
+                    # Filter: within window, not W1, not already matched with W1
+                    candidate_ids = [
+                        wid for wid in sorted_all_ids[start:end]
+                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                    ]
+
+                    # Fallback: if window collapses, use all others not already opponents
+                    if not candidate_ids:
+                        candidate_ids = [
+                            wid for wid in sorted_all_ids
+                            if wid != manual_w1_id and wid not in w1_existing_opponents
+                        ]
+                else:
+                    w1_existing_opponents = set(
+                        id_to_wrestler.get(manual_w1_id, {}).get("match_ids", [])
+                    )
+                    candidate_ids = [
+                        wid for wid in sorted_all_ids
+                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                    ]
+
                 manual_w2_id = st.selectbox(
                     "Wrestler 2",
-                    options=[wid for wid in active_ids if wid != manual_w1_id],
-                    format_func=lambda wid: next(
-                        f"{w['name']} ({w['team']}) – Lvl {w['level']:.1f}, {w['weight']:.0f} lbs"
-                        for w in raw_active if w["id"] == wid
+                    options=candidate_ids,
+                    format_func=lambda wid: (
+                        f"{id_to_wrestler[wid]['name']} "
+                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
+                        f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
+                        f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
                     ),
                     key="manual_match_w2",
                 )
-            
+
                 # nest a small two-column layout just for right-aligning the button
                 btn_spacer, btn_col = st.columns([3, 1])
                 with btn_col:
@@ -1313,115 +1609,44 @@ if st.session_state.initialized:
                         )
                         st.rerun()
 
-        # ----- Suggested Matches -----
-        st.subheader("Suggested Matches")
-
-        all_suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-        current_suggestions = [s for s in all_suggestions if s["_w_id"] in filtered_ids]
-
-        under_count = len([
-            w for w in filtered_active
-            if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]
-        ])
-        st.caption(
-            f"**{under_count}** of **{len(filtered_active)}** filtered wrestler(s) need more matches."
-        )
-
-        if current_suggestions:
-            sugg_data = []
-            for i, s in enumerate(current_suggestions):
-                w = next(w for w in filtered_active if w["id"] == s["_w_id"])
-                o = next(w for w in raw_active if w["id"] == s["_o_id"])
-                sugg_data.append({
-                    "Add": False,
-                    "Current": f"{len(w['match_ids'])}",
-                    "Wrestler": f"{w['name']} ({w['team']})",
-                    "Lvl": f"{w['level']:.1f}",
-                    "Wt": f"{w['weight']:.0f}",
-                    "vs_Current": f"{len(o['match_ids'])}",
-                    "vs": f"{o['name']} ({o['team']})",
-                    "vs_Lvl": f"{o['level']:.1f}",
-                    "vs_Wt": f"{o['weight']:.0f}",
-                    "Score": f"{s['score']:.1f}",
-                    "idx": i
-                })
-            sugg_full_df = pd.DataFrame(sugg_data)
-            sugg_display_df = sugg_full_df.drop(columns=["idx"])
-            edited = st.data_editor(
-                sugg_display_df,
-                column_config={
-                    "Add": st.column_config.CheckboxColumn("Add"),
-                    "Current": st.column_config.NumberColumn("Current"),
-                    "Wrestler": st.column_config.TextColumn("Wrestler"),
-                    "Lvl": st.column_config.NumberColumn("Lvl"),
-                    "Wt": st.column_config.NumberColumn("Wt"),
-                    "vs_Current": st.column_config.NumberColumn("vs_Current"),
-                    "vs": st.column_config.TextColumn("vs"),
-                    "vs_Lvl": st.column_config.NumberColumn("vs_Lvl"),
-                    "vs_Wt": st.column_config.NumberColumn("vs_Wt"),
-                    "Score": st.column_config.NumberColumn("Score"),
-                },
-                use_container_width=True,
-                hide_index=True,
-                key="sugg_editor"
-            )
-
-            if st.button("Add Selected", help="Add checked suggested matches"):
-                to_add = [
-                    current_suggestions[sugg_full_df.iloc[row.name]["idx"]]
-                    for _, row in edited.iterrows() if row["Add"]
-                ]
-
-                added_bouts = []
-
-                for s in to_add:
-                    w = next(w for w in raw_active if w["id"] == s["_w_id"])
-                    o = next(w for w in raw_active if w["id"] == s["_o_id"])
-                    if o["id"] not in w["match_ids"]:
-                        w["match_ids"].append(o["id"])
-                    if w["id"] not in o["match_ids"]:
-                        o["match_ids"].append(w["id"])
-
-                    new_bout_num = (max([b["bout_num"] for b in st.session_state.bout_list]) + 1) \
-                        if st.session_state.bout_list else 1
-
-                    new_bout = {
-                        "bout_num": new_bout_num,
-                        "w1_id": w["id"], "w1_name": w["name"], "w1_team": w["team"],
-                        "w1_level": w["level"], "w1_weight": w["weight"],
-                        "w1_grade": w["grade"], "w1_early": w["early"],
-                        "w2_id": o["id"], "w2_name": o["name"], "w2_team": o["team"],
-                        "w2_level": o["level"], "w2_weight": o["weight"],
-                        "w2_grade": o["grade"], "w2_early": o["early"],
-                        "score": s["score"],
-                        "avg_weight": (w["weight"] + o["weight"]) / 2,
-                        "is_early": w["early"] or o["early"],
-                        "manual": "Manually Added"
-                    }
-                    st.session_state.bout_list.append(new_bout)
-                    added_bouts.append(new_bout_num)
-
-                if added_bouts:
-                    # keep bouts sorted by avg_weight
-                    st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
-                    st.session_state.mat_order = {}
-                    st.session_state.suggestions = build_suggestions(raw_active, st.session_state.bout_list)
-                    st.session_state.excel_bytes = None
-                    st.session_state.pdf_bytes = None
-
-                    # Push grouped action for undo
-                    push_action({"type": "suggest_add", "bout_nums": added_bouts})
-
-                    st.success("Matches added! Early matches placed at the top of their mat.")
-                    st.session_state.sortable_version += 1
-                    st.rerun()
-        else:
-            st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
-
         # ----- Global schedule & rest conflicts -----
         full_schedule = apply_mat_order_to_global_schedule() if st.session_state.bout_list else []
         rest_gap = CONFIG.get("REST_GAP", 4)
         conflicts_all = compute_rest_conflicts(full_schedule, rest_gap) if full_schedule else []
+
+        # NEW: multi-mat warning
+        multi_mat_issues = compute_multi_mat_assignments(full_schedule) if full_schedule else []
+        multi_mat_ids = {issue["wrestler_id"] for issue in multi_mat_issues} if multi_mat_issues else set()
+        
+        if multi_mat_issues:
+            st.warning(
+                f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
+            )
+            with st.expander("Show wrestlers on multiple mats", expanded=False):
+                for issue in multi_mat_issues:
+                    # Build per-mat slot display like: "1 (Slot 3), 2 (Slots 4, 9)"
+                    parts = []
+                    for mat in issue["mats"]:
+                        slots_on_mat = sorted(
+                            m["slot"]
+                            for m in issue["matches"]
+                            if m["mat"] == mat
+                        )
+                        if len(slots_on_mat) == 1:
+                            slot_text = f"Slot {slots_on_mat[0]}"
+                        else:
+                            slot_text = "Slots " + ", ".join(str(s) for s in slots_on_mat)
+        
+                        parts.append(f"{mat} ({slot_text})")
+        
+                    mat_slot_text = ", ".join(parts)
+                    st.markdown(
+                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_slot_text}"
+                    )
+        else:
+            st.caption("All wrestlers are currently assigned to a single mat.")
+        
+
 
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
@@ -1529,7 +1754,7 @@ if st.session_state.initialized:
 
                 st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
 
-            # ---------- EDIT MODE (drag + per-mat remove) ----------
+            # ---------- EDIT MODE (drag + per-mat remove + move) ----------
             else:
                 for mat in range(1, CONFIG["NUM_MATS"] + 1):
                     mat_entries = [e for e in full_schedule if e["mat"] == mat]
@@ -1633,7 +1858,7 @@ if st.session_state.initialized:
 
                         st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
 
-                        # Per-mat remove
+                        # Per-mat remove + move
                         bout_label_map = {}
                         for idx2, bn in enumerate(st.session_state.mat_order[mat], start=1):
                             if bn not in bout_nums_in_mat:
@@ -1660,6 +1885,50 @@ if st.session_state.initialized:
                                 help="Removes the selected bout from this meet (Undo available below)."
                             ):
                                 remove_bout(selected_bout)
+
+                            # --- Move selected bout to another mat (button below selectbox) ---
+                            st.markdown("**Move selected bout to another mat**")
+
+                            move_target_mat = st.selectbox(
+                                "Target mat",
+                                options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
+                                key=f"move_target_mat_{mat}",
+                            )
+
+                            # Create a full-width container to match the Remove button sizing
+                            move_button_area = st.container()
+                            with move_button_area:
+                                if st.button(
+                                    "Move to mat",
+                                    key=f"move_button_mat_{mat}",
+                                    help="Move the selected bout to the chosen mat."
+                                ):
+                                    # Update mat_overrides so the scheduler keeps it on the new mat
+                                    overrides = st.session_state.get("mat_overrides", {})
+                                    overrides[selected_bout] = move_target_mat
+                                    st.session_state.mat_overrides = overrides
+
+                                    # Update mat_order: remove from this mat, append to target mat
+                                    src_order = st.session_state.mat_order.get(mat, [])
+                                    if selected_bout in src_order:
+                                        src_order.remove(selected_bout)
+                                    st.session_state.mat_order[mat] = src_order
+
+                                    dest_order = st.session_state.mat_order.get(move_target_mat, [])
+                                    if selected_bout not in dest_order:
+                                        dest_order.append(selected_bout)
+                                    st.session_state.mat_order[move_target_mat] = dest_order
+
+                                    # Invalidate exports and refresh drag widgets
+                                    st.session_state.excel_bytes = None
+                                    st.session_state.pdf_bytes = None
+                                    st.session_state.sortable_version += 1
+
+                                    st.success(
+                                        f"Bout {selected_bout} moved to Mat {move_target_mat}. "
+                                        "You can now reorder it on that mat."
+                                    )
+                                    st.rerun()
 
                         # Per-mat rest warnings (all wrestlers)
                         mat_conflicts = [
@@ -1690,10 +1959,12 @@ if st.session_state.initialized:
                 label = "Undo Last Manual Match"
             elif t == "suggest_add":
                 label = "Undo Last Suggested Matches"
+            elif t == "scratch_update":
+                label = "Undo Last Scratches Update"
             else:
                 label = "Undo Last Action"
 
-            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested)"):
+            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested/scratches)"):
                 undo_last_action()
         else:
             st.caption("No actions yet to undo.")
@@ -1750,6 +2021,7 @@ if st.session_state.initialized:
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
                             elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
+
                             elements.append(PageBreak())
                             continue
                         table = [["#", "Wrestler 1", "Wrestler 2"]]
@@ -1840,52 +2112,66 @@ if st.session_state.initialized:
 
         st.markdown("---")
 
-        # NEW: Wrestler match counts with below/OK/above min/max flags
+        # Wrestler Match Counts with Grade, Level, Weight + proper sorting
         st.markdown("#### Wrestler Match Counts")
 
-        valid_bouts = [
-            b for b in st.session_state.bout_list
-            if b["manual"] != "Manually Removed"
-        ]
-
-        if not valid_bouts:
-            st.caption("No bouts yet. Generate or add matches in **Match Builder**.")
+        valid_bouts = [b for b in st.session_state.bout_list if b["manual"] != "Manually Removed"]
+        if not st.session_state.active:
+            st.caption("No wrestlers yet.")
         else:
-            match_counts = {}  # keyed by wrestler id
-
+            # Build match counts
+            match_counts = {}
             for b in valid_bouts:
                 for side in ("w1", "w2"):
                     wid = b[f"{side}_id"]
-                    name = b[f"{side}_name"]
-                    team = b[f"{side}_team"]
-
                     if wid not in match_counts:
-                        match_counts[wid] = {
-                            "Wrestler": name,
-                            "Team": team,
-                            "Matches": 0,
-                        }
+                        match_counts[wid] = {"Matches": 0}
                     match_counts[wid]["Matches"] += 1
 
-            rows = list(match_counts.values())
+            # Build rows with full wrestler data
+            rows = []
+            for w in st.session_state.active:
+                rows.append({
+                    "Wrestler": w["name"],
+                    "Team": w["team"],
+                    "Grade": w["grade"],
+                    "Level": f"{w['level']:.1f}",
+                    "Weight": w["weight"],           # keep as float for correct sorting
+                    "Weight_display": f"{w['weight']:.0f}",  # nice display version
+                    "Matches": match_counts.get(w["id"], {}).get("Matches", 0),
+                })
+
             df_wc = pd.DataFrame(rows)
 
+            # Status column
             min_m = CONFIG["MIN_MATCHES"]
             max_m = CONFIG["MAX_MATCHES"]
+            df_wc["Status"] = df_wc["Matches"].apply(
+                lambda m: "Below Min" if m < min_m else ("Above Max" if m > max_m else "OK")
+            )
 
-            def status_fn(m):
-                if m < min_m:
-                    return "Below Min"
-                if m > max_m:
-                    return "Above Max"
-                return "OK"
+            # Default sort: Team → Wrestler name
+            default_df = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
 
-            df_wc["Status"] = df_wc["Matches"].apply(status_fn)
+            # Add a sort selector
+            sort_by = st.radio(
+                "Sort table by:",
+                options=["Team (default)", "Weight (light → heavy)"],
+                horizontal=True,
+                index=0,
+                key="summary_sort"
+            )
 
-            # Sort by team then name
-            df_wc = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
+            if sort_by == "Weight (light → heavy)":
+                display_df = df_wc.sort_values("Weight").reset_index(drop=True)
+            else:
+                display_df = default_df
 
-            st.dataframe(df_wc, use_container_width=True)
+            # Final display (use pretty weight column)
+            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Matches", "Status"]]
+            final_display = final_display.rename(columns={"Weight_display": "Weight"})
+
+            st.dataframe(final_display, use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
@@ -1977,17 +2263,18 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
         st.markdown(
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
-- Use **Manual Match Creator** when coaches want specific bouts.
-- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
+- Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
-  - Watch the *rest warnings* to avoid back-to-back matches.
+  - Use the **Move to mat** control to move a bout from one mat to another.
+  - Watch the *rest warnings* and *multi-mat warnings* to avoid conflicts.
 - Use the single **Undo** button to step backwards through:
   - Bout removals  
   - Drag/reorder changes  
   - Manual matches  
-  - Added suggested matches
+  - Added suggested matches  
+  - Scratches updates (in edited mode)
             """
         )
 
@@ -2015,5 +2302,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
