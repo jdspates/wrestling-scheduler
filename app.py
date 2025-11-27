@@ -643,16 +643,9 @@ def _undo_scratch_update(snapshot: dict):
     st.session_state.mat_order = snapshot["mat_order"]
     st.session_state.mat_overrides = snapshot.get("mat_overrides", {})
 
-    # NEW: ensure the scratches multiselect & cards reflect the restored roster
-    scratched_ids = [
-        w["id"]
-        for w in snapshot["roster"]
-        if w.get("scratch")
-    ]
-
-    # We cannot directly assign scratch_multiselect here (widget already exists
-    # in this run), so stash the desired value for the *next* run.
-    st.session_state["scratch_multiselect_pending"] = scratched_ids
+    # NEW: clear the scratches multiselect so next run reinitializes it
+    # from the restored roster's scratch flags.
+    st.session_state.pop("scratch_multiselect", None)
 
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
@@ -1244,14 +1237,8 @@ if st.session_state.initialized:
         st.subheader("Pre-Meet Scratches")
 
         if roster:
-            # NEW: if an undo just ran, pre-seed the widget with the restored selection
-            if "scratch_multiselect_pending" in st.session_state:
-                st.session_state["scratch_multiselect"] = st.session_state.pop(
-                    "scratch_multiselect_pending"
-                )
-        
             default_scratched_ids = [w["id"] for w in roster if w.get("scratch")]
-        
+
             selected_scratched = st.multiselect(
                 "Mark wrestlers as scratched (removed from meet scheduling):",
                 options=[w["id"] for w in roster],
@@ -2288,5 +2275,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
