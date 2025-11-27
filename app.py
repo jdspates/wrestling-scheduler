@@ -636,23 +636,16 @@ def _undo_suggest_add(bout_nums: list[int]):
 
 def _undo_scratch_update(snapshot: dict):
     """Undo a scratches update by restoring a saved snapshot."""
-    # Restore core structures from snapshot
+    # Restore from snapshot using deep copies so we don't share references
     st.session_state.roster = copy.deepcopy(snapshot["roster"])
+    st.session_state.active = copy.deepcopy(snapshot["active"])
     st.session_state.bout_list = copy.deepcopy(snapshot["bout_list"])
     st.session_state.suggestions = copy.deepcopy(snapshot["suggestions"])
     st.session_state.mat_order = copy.deepcopy(snapshot["mat_order"])
     st.session_state.mat_overrides = copy.deepcopy(snapshot.get("mat_overrides", {}))
 
-    # Recompute active based on restored roster (all non-scratched wrestlers)
-    st.session_state.active = [
-        w for w in st.session_state.roster if not w.get("scratch")
-    ]
-
-    # Keep the scratches multiselect in sync with restored roster
-    #st.session_state["scratch_multiselect"] = [
-    #    w["id"] for w in st.session_state.roster if w.get("scratch")
-    #]
-
+    # The Pre-Meet Scratches widget will rebuild its selection from
+    # the restored roster (w['scratch']) on the next run.
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
@@ -778,7 +771,6 @@ def build_meet_snapshot():
         "bout_list": st.session_state.get("bout_list", []),
         "suggestions": st.session_state.get("suggestions", []),
         "mat_order": st.session_state.get("mat_order", {}),
-        "mat_overrides": st.session_state.get("mat_overrides", {}),
     }
 
 def restore_meet_from_snapshot(data: dict):
@@ -804,7 +796,6 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.bout_list = data.get("bout_list", [])
     st.session_state.suggestions = data.get("suggestions", [])
     st.session_state.mat_order = data.get("mat_order", {})
-    st.session_state.mat_overrides = data.get("mat_overrides", {})
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.initialized = bool(st.session_state.roster)
@@ -1255,9 +1246,8 @@ if st.session_state.initialized:
                     f"{w['name']} ({w['team']})"
                     for w in roster if w["id"] == wid
                 ),
-                key="scratch_multiselect"
             )
-            
+
             apply_clicked = st.button("Apply scratches & regenerate schedule")
 
             st.caption(
@@ -1275,24 +1265,24 @@ if st.session_state.initialized:
                     "mat_order": copy.deepcopy(st.session_state.mat_order),
                     "mat_overrides": copy.deepcopy(st.session_state.get("mat_overrides", {})),
                 }
-            
+
                 # Update scratch flags based on selection
                 for w in roster:
                     w["scratch"] = (w["id"] in selected_scratched)
-            
+
                 st.session_state.roster = roster
                 new_active = [w for w in roster if not w["scratch"]]
                 st.session_state.active = new_active
-            
+
                 existing_bouts = st.session_state.bout_list or []
-            
+
                 # Detect whether the meet is still in a "pristine" auto-generated state
                 has_manual = any(b.get("manual") for b in existing_bouts)
                 has_history = bool(st.session_state.get("action_history"))
                 has_mat_order = any(st.session_state.mat_order.values())
-            
+
                 pristine = (not existing_bouts) or (not has_manual and not has_history and not has_mat_order)
-            
+
                 if pristine:
                     # Early workflow: behave like old logic – full regenerate
                     for w in roster:
@@ -1305,67 +1295,66 @@ if st.session_state.initialized:
                     st.session_state.pdf_bytes = None
                     st.session_state.action_history = []
                     st.session_state.sortable_version += 1
-            
+
                     st.success("Scratches applied and schedule regenerated.")
                     st.rerun()
                 else:
                     # Edited workflow: only remove matches
-            
+
                     # Use snapshot captured BEFORE scratches were applied
                     push_action({
                         "type": "scratch_update",
                         "snapshot": pre_snapshot,
                     })
-            
+
                     scratched_ids = {w["id"] for w in roster if w["scratch"]}
-            
+
                     # Keep bouts that do NOT involve scratched wrestlers
                     remaining_bouts = [
                         b for b in existing_bouts
                         if b["w1_id"] not in scratched_ids and b["w2_id"] not in scratched_ids
                     ]
-            
+
                     # Rebuild match_ids based on remaining bouts
                     for w in roster:
                         w["match_ids"] = []
-            
+
                     for b in remaining_bouts:
                         w1 = next(w for w in roster if w["id"] == b["w1_id"])
                         w2 = next(w for w in roster if w["id"] == b["w2_id"])
                         w1["match_ids"].append(w2["id"])
                         w2["match_ids"].append(w1["id"])
-            
+
                     st.session_state.bout_list = remaining_bouts
-            
+
                     # Clean mat_order and mat_overrides to drop removed bouts
                     remaining_bout_nums = {b["bout_num"] for b in remaining_bouts}
-            
+
                     cleaned_mat_order = {}
                     for mat, order in st.session_state.mat_order.items():
                         cleaned_order = [bn for bn in order if bn in remaining_bout_nums]
                         if cleaned_order:
                             cleaned_mat_order[mat] = cleaned_order
                     st.session_state.mat_order = cleaned_mat_order
-            
+
                     overrides = st.session_state.get("mat_overrides", {})
                     st.session_state.mat_overrides = {
                         bn: m for bn, m in overrides.items() if bn in remaining_bout_nums
                     }
-            
+
                     # Rebuild suggestions based on new active + remaining bouts
                     st.session_state.suggestions = build_suggestions(new_active, remaining_bouts)
-            
+
                     # Invalidate exports; refresh drag widgets
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
                     st.session_state.sortable_version += 1
-            
+
                     st.success(
                         "Scratches applied: matches involving scratched wrestlers were removed. "
                         "Manual matches and mat layout for remaining bouts were preserved."
                     )
                     st.rerun()
-
 
         # ---- Filtered wrestlers by search ----
         if search_term.strip():
@@ -1868,13 +1857,13 @@ if st.session_state.initialized:
 
                             # --- Move selected bout to another mat (button below selectbox) ---
                             st.markdown("**Move selected bout to another mat**")
-                            
+
                             move_target_mat = st.selectbox(
                                 "Target mat",
                                 options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
                                 key=f"move_target_mat_{mat}",
                             )
-                            
+
                             # Create a full-width container to match the Remove button sizing
                             move_button_area = st.container()
                             with move_button_area:
@@ -1887,23 +1876,23 @@ if st.session_state.initialized:
                                     overrides = st.session_state.get("mat_overrides", {})
                                     overrides[selected_bout] = move_target_mat
                                     st.session_state.mat_overrides = overrides
-                                
+
                                     # Update mat_order: remove from this mat, append to target mat
                                     src_order = st.session_state.mat_order.get(mat, [])
                                     if selected_bout in src_order:
                                         src_order.remove(selected_bout)
                                     st.session_state.mat_order[mat] = src_order
-                                
+
                                     dest_order = st.session_state.mat_order.get(move_target_mat, [])
                                     if selected_bout not in dest_order:
                                         dest_order.append(selected_bout)
                                     st.session_state.mat_order[move_target_mat] = dest_order
-                                
+
                                     # Invalidate exports and refresh drag widgets
                                     st.session_state.excel_bytes = None
                                     st.session_state.pdf_bytes = None
                                     st.session_state.sortable_version += 1
-                                
+
                                     st.success(
                                         f"Bout {selected_bout} moved to Mat {move_target_mat}. "
                                         "You can now reorder it on that mat."
@@ -2283,4 +2272,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
