@@ -1603,18 +1603,21 @@ if st.session_state.initialized:
 
         # NEW: multi-mat warning
         multi_mat_issues = compute_multi_mat_assignments(full_schedule) if full_schedule else []
+        multi_mat_ids = {issue["wrestler_id"] for issue in multi_mat_issues} if multi_mat_issues else set()
         
         if multi_mat_issues:
             st.warning(
                 f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
             )
-            for issue in multi_mat_issues:
-                mat_list = ", ".join(str(m) for m in issue["mats"])
-                st.markdown(
-                    f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
-                )
+            with st.expander("Show wrestlers on multiple mats", expanded=False):
+                for issue in multi_mat_issues:
+                    mat_list = ", ".join(str(m) for m in issue["mats"])
+                    st.markdown(
+                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
+                    )
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
+
 
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
@@ -2270,4 +2273,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
