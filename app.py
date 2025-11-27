@@ -1197,7 +1197,7 @@ if st.session_state.initialized:
 
 3. **Apply scratches**
    - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight if not already defined in the roster CSV.
-   - Click **Apply scratches & regenerate schedule** to rebuild matchups.  WARNING: This will regenerate all matchups and remove any manual matchups that were previously created
+   - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout. Use **Start Over** if you want to completely rebuild from scratch.
 
 4. **Fine-tune matchups**
    #- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
@@ -1210,130 +1210,114 @@ if st.session_state.initialized:
                 """
             )
 
-# ---- Pre-Meet Scratches ----
-st.subheader("Pre-Meet Scratches")
+        # ----- Pre-Meet Scratches -----
+        st.subheader("Pre-Meet Scratches")
 
-if roster:
-    default_scratched_ids = [w["id"] for w in roster if w.get("scratch")]
+        if roster:
+            default_scratched_ids = [w["id"] for w in roster if w.get("scratch")]
 
-    selected_scratched = st.multiselect(
-        "Mark wrestlers as scratched (removed from meet scheduling):",
-        options=[w["id"] for w in roster],
-        default=default_scratched_ids,
-        format_func=lambda wid: next(
-            f"{w['name']} ({w['team']})"
-            for w in roster if w["id"] == wid
-        ),
-        key="scratch_multiselect"
-    )
-
-    # 🛈 NEW EXPLANATORY NOTE BELOW THE BUTTON
-    st.caption(
-        "**Note:** After you’ve added manual matches or dragged bouts, "
-        "applying scratches will *only remove matches involving scratched wrestlers* "
-        "and keep your existing layout. "
-        "For a full regenerate of all matchups, use **Start Over / Load New Roster**."
-    )
-
-    if st.button("Apply scratches & regenerate schedule"):
-        # Update scratch flags based on selection
-        selected_set = set(selected_scratched)
-        for w in roster:
-            w["scratch"] = (w["id"] in selected_set)
-
-        st.session_state.roster = roster
-
-        # Current state
-        bout_list = st.session_state.get("bout_list", [])
-        mat_order = st.session_state.get("mat_order", {})
-        action_history = st.session_state.get("action_history", [])
-
-        has_manual_flags = any(b.get("manual") for b in bout_list)
-        has_mat_order = any(mat_order.values())
-        has_actions = bool(action_history)
-
-        # 🔄 Condition for FULL regenerate (original behavior)
-        if not bout_list or not (has_manual_flags or has_mat_order or has_actions):
-            # Full regenerate
-            for w in roster:
-                w["match_ids"] = []
-
-            st.session_state.active = [w for w in roster if not w["scratch"]]
-            st.session_state.bout_list = generate_initial_matchups(st.session_state.active)
-            st.session_state.suggestions = build_suggestions(
-                st.session_state.active,
-                st.session_state.bout_list,
-            )
-            st.session_state.mat_order = {}
-            st.session_state.excel_bytes = None
-            st.session_state.pdf_bytes = None
-            st.session_state.action_history = []
-
-            st.session_state.sortable_version += 1
-
-            st.success("Scratches applied and schedule regenerated.")
-            st.rerun()
-
-        # 🩹 SURGICAL MODE — preserve manual work
-        else:
-            scratched_ids = {w["id"] for w in roster if w["scratch"]}
-
-            # 1) Remove bouts involving scratched wrestlers
-            new_bout_list = [
-                b for b in bout_list
-                if b["w1_id"] not in scratched_ids and b["w2_id"] not in scratched_ids
-            ]
-
-            # 2) Rebuild match_ids from remaining bouts
-            for w in roster:
-                w["match_ids"] = []
-
-            id_to_w = {w["id"]: w for w in roster}
-            for b in new_bout_list:
-                w1 = id_to_w.get(b["w1_id"])
-                w2 = id_to_w.get(b["w2_id"])
-                if not w1 or not w2:
-                    continue
-                if w2["id"] not in w1["match_ids"]:
-                    w1["match_ids"].append(w2["id"])
-                if w1["id"] not in w2["match_ids"]:
-                    w2["match_ids"].append(w1["id"])
-
-            st.session_state.bout_list = new_bout_list
-            st.session_state.active = [w for w in roster if not w["scratch"]]
-
-            # 3) Clean mat_order (remove deleted bouts, keep order for remaining)
-            existing_bout_nums = {b["bout_num"] for b in new_bout_list}
-            cleaned_mat_order = {}
-            for mat, order in mat_order.items():
-                cleaned = [bn for bn in order if bn in existing_bout_nums]
-                cleaned_mat_order[mat] = cleaned
-            st.session_state.mat_order = cleaned_mat_order
-
-            # 4) Clean mat_overrides
-            overrides = st.session_state.get("mat_overrides", {})
-            st.session_state.mat_overrides = {
-                bn: m for bn, m in overrides.items() if bn in existing_bout_nums
-            }
-
-            # 5) Rebuild suggestions
-            st.session_state.suggestions = build_suggestions(
-                st.session_state.active,
-                st.session_state.bout_list,
+            selected_scratched = st.multiselect(
+                "Mark wrestlers as scratched (removed from meet scheduling):",
+                options=[w["id"] for w in roster],
+                default=default_scratched_ids,
+                format_func=lambda wid: next(
+                    f"{w['name']} ({w['team']})"
+                    for w in roster if w["id"] == wid
+                ),
+                key="scratch_multiselect"
             )
 
-            # 6) Invalidate exports, clear undo stack, bump version
-            st.session_state.excel_bytes = None
-            st.session_state.pdf_bytes = None
-            st.session_state.action_history = []
-            st.session_state.sortable_version += 1
+            apply_clicked = st.button("Apply scratches & regenerate schedule")
 
-            st.success(
-                "Scratches applied. Matches involving scratched wrestlers were removed; "
-                "your manual matches and mat ordering were preserved."
+            st.caption(
+                "Tip: After manual editing, applying scratches will only remove matches involving scratched wrestlers "
+                "and keep your mat layout. Use **Start Over** if you want to completely rebuild all matchups."
             )
-            st.rerun()
 
+            if apply_clicked:
+                # Update scratch flags based on selection
+                for w in roster:
+                    w["scratch"] = (w["id"] in selected_scratched)
+
+                st.session_state.roster = roster
+                new_active = [w for w in roster if not w["scratch"]]
+                st.session_state.active = new_active
+
+                existing_bouts = st.session_state.bout_list or []
+
+                # Detect whether the meet is still in a "pristine" auto-generated state
+                has_manual = any(b.get("manual") for b in existing_bouts)
+                has_history = bool(st.session_state.get("action_history"))
+                has_mat_order = any(st.session_state.mat_order.values())
+
+                pristine = (not existing_bouts) or (not has_manual and not has_history and not has_mat_order)
+
+                if pristine:
+                    # Early workflow: behave like old logic – full regenerate
+                    for w in roster:
+                        w["match_ids"] = []
+                    st.session_state.bout_list = generate_initial_matchups(new_active)
+                    st.session_state.suggestions = build_suggestions(new_active, st.session_state.bout_list)
+                    st.session_state.mat_order = {}
+                    st.session_state.mat_overrides = {}
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
+                    st.session_state.action_history = []
+                    st.session_state.sortable_version += 1
+
+                    st.success("Scratches applied and schedule regenerated.")
+                    st.rerun()
+                else:
+                    # Edited workflow: only remove matches involving scratched wrestlers
+                    scratched_ids = {w["id"] for w in roster if w["scratch"]}
+
+                    # Keep bouts that do NOT involve scratched wrestlers
+                    remaining_bouts = [
+                        b for b in existing_bouts
+                        if b["w1_id"] not in scratched_ids and b["w2_id"] not in scratched_ids
+                    ]
+
+                    # Rebuild match_ids based on remaining bouts
+                    for w in roster:
+                        w["match_ids"] = []
+
+                    for b in remaining_bouts:
+                        w1 = next(w for w in roster if w["id"] == b["w1_id"])
+                        w2 = next(w for w in roster if w["id"] == b["w2_id"])
+                        w1["match_ids"].append(w2["id"])
+                        w2["match_ids"].append(w1["id"])
+
+                    st.session_state.bout_list = remaining_bouts
+
+                    # Clean mat_order and mat_overrides to drop removed bouts
+                    remaining_bout_nums = {b["bout_num"] for b in remaining_bouts}
+
+                    cleaned_mat_order = {}
+                    for mat, order in st.session_state.mat_order.items():
+                        cleaned_order = [bn for bn in order if bn in remaining_bout_nums]
+                        if cleaned_order:
+                            cleaned_mat_order[mat] = cleaned_order
+                    st.session_state.mat_order = cleaned_mat_order
+
+                    overrides = st.session_state.get("mat_overrides", {})
+                    st.session_state.mat_overrides = {
+                        bn: m for bn, m in overrides.items() if bn in remaining_bout_nums
+                    }
+
+                    # Rebuild suggestions based on new active + remaining bouts
+                    st.session_state.suggestions = build_suggestions(new_active, remaining_bouts)
+
+                    # Invalidate exports; clear undo history to avoid referencing removed bouts
+                    st.session_state.excel_bytes = None
+                    st.session_state.pdf_bytes = None
+                    st.session_state.action_history = []
+                    st.session_state.sortable_version += 1
+
+                    st.success(
+                        "Scratches applied: matches involving scratched wrestlers were removed. "
+                        "Manual matches and mat layout for remaining bouts were preserved."
+                    )
+                    st.rerun()
 
         # ---- Filtered wrestlers by search ----
         if search_term.strip():
@@ -2353,6 +2337,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
