@@ -756,9 +756,21 @@ def build_meet_snapshot():
 
 def restore_meet_from_snapshot(data: dict):
     """Restore a meet snapshot into session_state."""
+    # Load CONFIG from snapshot
     st.session_state.CONFIG = data.get("CONFIG", DEFAULT_CONFIG)
+    cfg = st.session_state.CONFIG
+
     # Clear widget state so sidebar & colors pick up restored CONFIG/TEAMS
     reset_setting_widgets()
+
+    # NEW: explicitly sync widget-backed keys to loaded CONFIG
+    st.session_state["min_matches"] = cfg["MIN_MATCHES"]
+    st.session_state["max_matches"] = cfg["MAX_MATCHES"]
+    st.session_state["num_mats"] = cfg["NUM_MATS"]
+    st.session_state["max_level_diff"] = cfg["MAX_LEVEL_DIFF"]
+    st.session_state["min_weight_diff"] = cfg["MIN_WEIGHT_DIFF"]
+    st.session_state["weight_factor"] = cfg["WEIGHT_DIFF_FACTOR"]
+    st.session_state["rest_gap"] = cfg.get("REST_GAP", 4)
 
     st.session_state.roster = data.get("roster", [])
     st.session_state.active = data.get("active", [])
@@ -2253,4 +2265,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
