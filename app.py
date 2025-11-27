@@ -1849,7 +1849,7 @@ if st.session_state.initialized:
                                 f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
                             )
 
-                        valid_bouts = list(bout_label_map.keys()))
+                        valid_bouts = list(bout_label_map.keys())
                         if not valid_bouts:
                             st.caption("No bouts left on this mat.")
                         else:
@@ -2283,3 +2283,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
