@@ -643,6 +643,11 @@ def _undo_scratch_update(snapshot: dict):
     st.session_state.mat_order = snapshot["mat_order"]
     st.session_state.mat_overrides = snapshot.get("mat_overrides", {})
 
+    # NEW: reset scratches multiselect widget to match restored roster
+    st.session_state["scratch_multiselect"] = [
+        w["id"] for w in st.session_state.roster if w.get("scratch")
+    ]
+
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
@@ -1254,25 +1259,26 @@ if st.session_state.initialized:
             )
 
             if apply_clicked:
-                # Update scratch flags based on selection
-                for w in roster:
-                    w["scratch"] = (w["id"] in selected_scratched)
-
-                st.session_state.roster = roster
-                new_active = [w for w in roster if not w["scratch"]]
-                st.session_state.active = new_active
-
-                existing_bouts = st.session_state.bout_list or []
-
                 # Detect whether the meet is still in a "pristine" auto-generated state
+                existing_bouts = st.session_state.bout_list or []
                 has_manual = any(b.get("manual") for b in existing_bouts)
                 has_history = bool(st.session_state.get("action_history"))
                 has_mat_order = any(st.session_state.mat_order.values())
 
                 pristine = (not existing_bouts) or (not has_manual and not has_history and not has_mat_order)
 
+                roster = st.session_state.roster
+
                 if pristine:
                     # Early workflow: behave like old logic – full regenerate
+                    # Update scratch flags based on selection
+                    for w in roster:
+                        w["scratch"] = (w["id"] in selected_scratched)
+
+                    st.session_state.roster = roster
+                    new_active = [w for w in roster if not w["scratch"]]
+                    st.session_state.active = new_active
+
                     for w in roster:
                         w["match_ids"] = []
                     st.session_state.bout_list = generate_initial_matchups(new_active)
@@ -1288,8 +1294,7 @@ if st.session_state.initialized:
                     st.rerun()
                 else:
                     # Edited workflow: only remove matches involving scratched wrestlers
-
-                    # Take snapshot for undo before mutating state
+                    # Take snapshot for undo BEFORE mutating state
                     pre_snapshot = {
                         "roster": copy.deepcopy(st.session_state.roster),
                         "active": copy.deepcopy(st.session_state.active),
@@ -1303,7 +1308,17 @@ if st.session_state.initialized:
                         "snapshot": pre_snapshot,
                     })
 
+                    # Update scratch flags based on selection
+                    for w in roster:
+                        w["scratch"] = (w["id"] in selected_scratched)
+
+                    st.session_state.roster = roster
+                    new_active = [w for w in roster if not w["scratch"]]
+                    st.session_state.active = new_active
+
                     scratched_ids = {w["id"] for w in roster if w["scratch"]}
+
+                    existing_bouts = st.session_state.bout_list or []
 
                     # Keep bouts that do NOT involve scratched wrestlers
                     remaining_bouts = [
@@ -1341,7 +1356,7 @@ if st.session_state.initialized:
                     # Rebuild suggestions based on new active + remaining bouts
                     st.session_state.suggestions = build_suggestions(new_active, remaining_bouts)
 
-                    # Invalidate exports; clear undo history to avoid referencing removed bouts
+                    # Invalidate exports; clear sortable cache
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
                     st.session_state.sortable_version += 1
@@ -1834,7 +1849,7 @@ if st.session_state.initialized:
                                 f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
                             )
 
-                        valid_bouts = list(bout_label_map.keys())
+                        valid_bouts = list(bout_label_map.keys()))
                         if not valid_bouts:
                             st.caption("No bouts left on this mat.")
                         else:
