@@ -636,16 +636,22 @@ def _undo_suggest_add(bout_nums: list[int]):
 
 def _undo_scratch_update(snapshot: dict):
     """Undo a scratches update by restoring a saved snapshot."""
-    st.session_state.roster = snapshot["roster"]
-    st.session_state.active = snapshot["active"]
-    st.session_state.bout_list = snapshot["bout_list"]
-    st.session_state.suggestions = snapshot["suggestions"]
-    st.session_state.mat_order = snapshot["mat_order"]
-    st.session_state.mat_overrides = snapshot.get("mat_overrides", {})
+    # Restore core structures from snapshot
+    st.session_state.roster = copy.deepcopy(snapshot["roster"])
+    st.session_state.bout_list = copy.deepcopy(snapshot["bout_list"])
+    st.session_state.suggestions = copy.deepcopy(snapshot["suggestions"])
+    st.session_state.mat_order = copy.deepcopy(snapshot["mat_order"])
+    st.session_state.mat_overrides = copy.deepcopy(snapshot.get("mat_overrides", {}))
 
-    # NEW: clear the scratches multiselect so next run reinitializes it
-    # from the restored roster's scratch flags.
-    st.session_state.pop("scratch_multiselect", None)
+    # Recompute active based on restored roster (all non-scratched wrestlers)
+    st.session_state.active = [
+        w for w in st.session_state.roster if not w.get("scratch")
+    ]
+
+    # Keep the scratches multiselect in sync with restored roster
+    st.session_state["scratch_multiselect"] = [
+        w["id"] for w in st.session_state.roster if w.get("scratch")
+    ]
 
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
@@ -772,6 +778,7 @@ def build_meet_snapshot():
         "bout_list": st.session_state.get("bout_list", []),
         "suggestions": st.session_state.get("suggestions", []),
         "mat_order": st.session_state.get("mat_order", {}),
+        "mat_overrides": st.session_state.get("mat_overrides", {}),
     }
 
 def restore_meet_from_snapshot(data: dict):
@@ -797,6 +804,7 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.bout_list = data.get("bout_list", [])
     st.session_state.suggestions = data.get("suggestions", [])
     st.session_state.mat_order = data.get("mat_order", {})
+    st.session_state.mat_overrides = data.get("mat_overrides", {})
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.initialized = bool(st.session_state.roster)
