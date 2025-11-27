@@ -1,4 +1,4 @@
-# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches
+# app.py – Wrestling Scheduler – drag rows + rest gap warnings + scratches + manual matches 
 import streamlit as st
 import pandas as pd
 import io
@@ -634,6 +634,20 @@ def _undo_suggest_add(bout_nums: list[int]):
     st.session_state.sortable_version += 1
     st.success("Undo: suggested matches removed.")
 
+def _undo_scratch_update(snapshot: dict):
+    """Undo a scratches update by restoring a saved snapshot."""
+    st.session_state.roster = snapshot["roster"]
+    st.session_state.active = snapshot["active"]
+    st.session_state.bout_list = snapshot["bout_list"]
+    st.session_state.suggestions = snapshot["suggestions"]
+    st.session_state.mat_order = snapshot["mat_order"]
+    st.session_state.mat_overrides = snapshot.get("mat_overrides", {})
+
+    st.session_state.excel_bytes = None
+    st.session_state.pdf_bytes = None
+    st.session_state.sortable_version += 1
+    st.success("Undo: scratches and schedule restored.")
+
 def undo_last_action():
     """Pop the last action off the history and undo it."""
     history = st.session_state.get("action_history", [])
@@ -652,6 +666,8 @@ def undo_last_action():
         _undo_manual_add(action["bout_num"])
     elif t == "suggest_add":
         _undo_suggest_add(action["bout_nums"])
+    elif t == "scratch_update":
+        _undo_scratch_update(action["snapshot"])
     else:
         st.info("Nothing to undo.")
         return
@@ -1272,6 +1288,21 @@ if st.session_state.initialized:
                     st.rerun()
                 else:
                     # Edited workflow: only remove matches involving scratched wrestlers
+
+                    # Take snapshot for undo before mutating state
+                    pre_snapshot = {
+                        "roster": copy.deepcopy(st.session_state.roster),
+                        "active": copy.deepcopy(st.session_state.active),
+                        "bout_list": copy.deepcopy(st.session_state.bout_list),
+                        "suggestions": copy.deepcopy(st.session_state.suggestions),
+                        "mat_order": copy.deepcopy(st.session_state.mat_order),
+                        "mat_overrides": copy.deepcopy(st.session_state.get("mat_overrides", {})),
+                    }
+                    push_action({
+                        "type": "scratch_update",
+                        "snapshot": pre_snapshot,
+                    })
+
                     scratched_ids = {w["id"] for w in roster if w["scratch"]}
 
                     # Keep bouts that do NOT involve scratched wrestlers
@@ -1313,7 +1344,6 @@ if st.session_state.initialized:
                     # Invalidate exports; clear undo history to avoid referencing removed bouts
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
-                    st.session_state.action_history = []
                     st.session_state.sortable_version += 1
 
                     st.success(
@@ -1894,10 +1924,12 @@ if st.session_state.initialized:
                 label = "Undo Last Manual Match"
             elif t == "suggest_add":
                 label = "Undo Last Suggested Matches"
+            elif t == "scratch_update":
+                label = "Undo Last Scratches Update"
             else:
                 label = "Undo Last Action"
 
-            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested)"):
+            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested/scratches)"):
                 undo_last_action()
         else:
             st.caption("No actions yet to undo.")
@@ -2207,7 +2239,8 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
   - Bout removals  
   - Drag/reorder changes  
   - Manual matches  
-  - Added suggested matches
+  - Added suggested matches  
+  - Scratches updates (in edited mode)
             """
         )
 
