@@ -1222,7 +1222,6 @@ if st.session_state.initialized:
    - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout. Use **Start Over** if you want to completely rebuild from scratch.
 
 4. **Fine-tune matchups**
-   #- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
    - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
@@ -2233,7 +2232,6 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
 - Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
-#- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
@@ -2272,4 +2270,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
