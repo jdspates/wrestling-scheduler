@@ -1196,12 +1196,12 @@ if st.session_state.initialized:
    - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
 
 3. **Apply scratches**
-   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight.
-   - Click **Apply scratches & regenerate schedule** to rebuild matchups.
+   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight if not already defined in the roster CSV.
+   - Click **Apply scratches & regenerate schedule** to rebuild matchups.  WARNING: This will regenerate all matchups and remove any manual matchups that were previously created
 
 4. **Fine-tune matchups**
-   - Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
-   - Use **Manual Match Creator** when coaches want specific pairings.
+   #- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
+   - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
 5. **Generate & download**
@@ -1487,7 +1487,7 @@ if st.session_state.initialized:
                             "You can now drag it to the desired mat and slot."
                         )
                         st.rerun()
-
+        """
         # ----- Suggested Matches -----
         st.subheader("Suggested Matches")
 
@@ -1592,7 +1592,7 @@ if st.session_state.initialized:
                     st.rerun()
         else:
             st.info("All filtered wrestlers meet the minimum matches. No suggestions needed.")
-
+        """
         # ----- Global schedule & rest conflicts -----
         full_schedule = apply_mat_order_to_global_schedule() if st.session_state.bout_list else []
         rest_gap = CONFIG.get("REST_GAP", 4)
@@ -2265,3 +2265,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
