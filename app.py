@@ -636,16 +636,24 @@ def _undo_suggest_add(bout_nums: list[int]):
 
 def _undo_scratch_update(snapshot: dict):
     """Undo a scratches update by restoring a saved snapshot."""
-    # Restore from snapshot using deep copies so we don't share references
-    st.session_state.roster = copy.deepcopy(snapshot["roster"])
-    st.session_state.active = copy.deepcopy(snapshot["active"])
-    st.session_state.bout_list = copy.deepcopy(snapshot["bout_list"])
-    st.session_state.suggestions = copy.deepcopy(snapshot["suggestions"])
-    st.session_state.mat_order = copy.deepcopy(snapshot["mat_order"])
-    st.session_state.mat_overrides = copy.deepcopy(snapshot.get("mat_overrides", {}))
+    st.session_state.roster = snapshot["roster"]
+    st.session_state.active = snapshot["active"]
+    st.session_state.bout_list = snapshot["bout_list"]
+    st.session_state.suggestions = snapshot["suggestions"]
+    st.session_state.mat_order = snapshot["mat_order"]
+    st.session_state.mat_overrides = snapshot.get("mat_overrides", {})
 
-    # The Pre-Meet Scratches widget will rebuild its selection from
-    # the restored roster (w['scratch']) on the next run.
+    # NEW: ensure the scratches multiselect & cards reflect the restored roster
+    scratched_ids = [
+        w["id"]
+        for w in snapshot["roster"]
+        if w.get("scratch")
+    ]
+
+    # We cannot directly assign scratch_multiselect here (widget already exists
+    # in this run), so stash the desired value for the *next* run.
+    st.session_state["scratch_multiselect_pending"] = scratched_ids
+
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
@@ -1222,6 +1230,7 @@ if st.session_state.initialized:
    - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout. Use **Start Over** if you want to completely rebuild from scratch.
 
 4. **Fine-tune matchups**
+   - Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
    - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
@@ -1235,6 +1244,12 @@ if st.session_state.initialized:
         st.subheader("Pre-Meet Scratches")
 
         if roster:
+            # NEW: if an undo just ran, pre-seed the widget with the restored selection
+            if "scratch_multiselect_pending" in st.session_state:
+                st.session_state["scratch_multiselect"] = st.session_state.pop(
+                    "scratch_multiselect_pending"
+                )
+
             default_scratched_ids = [w["id"] for w in roster if w.get("scratch")]
 
             selected_scratched = st.multiselect(
@@ -1245,8 +1260,9 @@ if st.session_state.initialized:
                     f"{w['name']} ({w['team']})"
                     for w in roster if w["id"] == wid
                 ),
+                key="scratch_multiselect"
             )
-
+            
             apply_clicked = st.button("Apply scratches & regenerate schedule")
 
             st.caption(
@@ -1601,18 +1617,20 @@ if st.session_state.initialized:
         rest_gap = CONFIG.get("REST_GAP", 4)
         conflicts_all = compute_rest_conflicts(full_schedule, rest_gap) if full_schedule else []
 
-        # NEW: multi-mat warning
+        # NEW: multi-mat warning + IDs set for marking in previews
         multi_mat_issues = compute_multi_mat_assignments(full_schedule) if full_schedule else []
+        multi_mat_ids = {issue["wrestler_id"] for issue in multi_mat_issues} if multi_mat_issues else set()
 
         if multi_mat_issues:
             st.warning(
                 f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
             )
-            for issue in multi_mat_issues:
-                mat_list = ", ".join(str(m) for m in issue["mats"])
-                st.markdown(
-                    f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
-                )
+            with st.expander("Show wrestlers on multiple mats", expanded=False):
+                for issue in multi_mat_issues:
+                    mat_list = ", ".join(str(m) for m in issue["mats"])
+                    st.markdown(
+                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
+                    )
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
 
@@ -1658,7 +1676,7 @@ if st.session_state.initialized:
                             st.caption("No matches for the current filter on this mat.")
                             continue
 
-                        # HTML table with colored dots
+                        # HTML table with colored dots + multi-mat flag
                         table_rows = []
                         for e in mat_entries:
                             b = next(
@@ -1671,6 +1689,11 @@ if st.session_state.initialized:
                             dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
                             dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
 
+                            # NEW: multi-mat indicator
+                            multi_flag = "⭐" if (
+                                b["w1_id"] in multi_mat_ids or b["w2_id"] in multi_mat_ids
+                            ) else ""
+
                             table_rows.append(
                                 f"<tr>"
                                 f"<td>{e['mat_bout_num']}</td>"
@@ -1681,6 +1704,7 @@ if st.session_state.initialized:
                                 f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
                                 f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
                                 f"<td>{b['score']:.1f}</td>"
+                                f"<td>{multi_flag}</td>"
                                 f"</tr>"
                             )
 
@@ -1696,6 +1720,7 @@ if st.session_state.initialized:
                             "<th style='border:1px solid #ddd;padding:4px;'>Lvls</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Wts</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Score</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Multi</th>"
                             "</tr>"
                             "</thead>"
                             "<tbody>"
@@ -1766,7 +1791,7 @@ if st.session_state.initialized:
                                 unsafe_allow_html=True,
                             )
 
-                        # Build drag labels (plain text, circle emojis)
+                        # Build drag labels (plain text, circle emojis + multi-mat tag)
                         row_labels = []
                         label_to_bout = {}
                         for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
@@ -1781,9 +1806,14 @@ if st.session_state.initialized:
                             icon1 = COLOR_ICON.get(color_name1, "●")
                             icon2 = COLOR_ICON.get(color_name2, "●")
 
+                            # NEW: multi-mat marker if either wrestler is on multiple mats
+                            multi_tag = " ⭐ MULTI-MAT" if (
+                                b["w1_id"] in multi_mat_ids or b["w2_id"] in multi_mat_ids
+                            ) else ""
+
                             label = (
                                 f"{early_prefix}"
-                                f"Slot {slot_index:02d} | Bout {bn:>3} | "
+                                f"Slot {slot_index:02d} | Bout {bn:>3}{multi_tag} | "
                                 f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
                                 f"{icon2} {b['w2_name']} ({b['w2_team']})"
                                 f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
@@ -1856,13 +1886,13 @@ if st.session_state.initialized:
 
                             # --- Move selected bout to another mat (button below selectbox) ---
                             st.markdown("**Move selected bout to another mat**")
-
+                            
                             move_target_mat = st.selectbox(
                                 "Target mat",
                                 options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
                                 key=f"move_target_mat_{mat}",
                             )
-
+                            
                             # Create a full-width container to match the Remove button sizing
                             move_button_area = st.container()
                             with move_button_area:
@@ -1875,23 +1905,23 @@ if st.session_state.initialized:
                                     overrides = st.session_state.get("mat_overrides", {})
                                     overrides[selected_bout] = move_target_mat
                                     st.session_state.mat_overrides = overrides
-
+                                
                                     # Update mat_order: remove from this mat, append to target mat
                                     src_order = st.session_state.mat_order.get(mat, [])
                                     if selected_bout in src_order:
                                         src_order.remove(selected_bout)
                                     st.session_state.mat_order[mat] = src_order
-
+                                
                                     dest_order = st.session_state.mat_order.get(move_target_mat, [])
                                     if selected_bout not in dest_order:
                                         dest_order.append(selected_bout)
                                     st.session_state.mat_order[move_target_mat] = dest_order
-
+                                
                                     # Invalidate exports and refresh drag widgets
                                     st.session_state.excel_bytes = None
                                     st.session_state.pdf_bytes = None
                                     st.session_state.sortable_version += 1
-
+                                
                                     st.success(
                                         f"Bout {selected_bout} moved to Mat {move_target_mat}. "
                                         "You can now reorder it on that mat."
@@ -2231,7 +2261,8 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
         st.markdown(
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
-- Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
+- Use **Manual Match Creator** when coaches want specific bouts.
+- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
@@ -2270,5 +2301,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
