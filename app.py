@@ -484,7 +484,14 @@ def compute_rest_conflicts(schedule, min_gap):
 def compute_multi_mat_assignments(schedule):
     """
     Find wrestlers who are scheduled on more than one mat.
-    Returns a list of dicts: {wrestler_id, name, team, mats: sorted list of mats}.
+    Returns a list of dicts:
+      {
+        wrestler_id,
+        name,
+        team,
+        mats: sorted list of mats,
+        matches: list of {mat, slot, bout_num}
+      }
     """
     appearances = {}
 
@@ -499,22 +506,28 @@ def compute_multi_mat_assignments(schedule):
                 appearances[w_id] = {
                     "name": name,
                     "team": team,
-                    "mats": set(),
+                    "matches": [],  # list of {mat, slot, bout_num}
                 }
-            appearances[w_id]["mats"].add(e["mat"])
+            appearances[w_id]["matches"].append({
+                "mat": e["mat"],
+                "slot": e["slot"],          # this is the visible slot on that mat
+                "bout_num": e["bout_num"],
+            })
 
     multi = []
     for w_id, info in appearances.items():
-        if len(info["mats"]) > 1:
+        mats = sorted({m["mat"] for m in info["matches"]})
+        if len(mats) > 1:
             multi.append({
                 "wrestler_id": w_id,
                 "name": info["name"],
                 "team": info["team"],
-                "mats": sorted(info["mats"]),
+                "mats": mats,
+                # sort matches nicely by mat, then slot
+                "matches": sorted(info["matches"], key=lambda x: (x["mat"], x["slot"])),
             })
 
     return multi
-
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
@@ -1611,12 +1624,28 @@ if st.session_state.initialized:
             )
             with st.expander("Show wrestlers on multiple mats", expanded=False):
                 for issue in multi_mat_issues:
-                    mat_list = ", ".join(str(m) for m in issue["mats"])
+                    # Build per-mat slot display like: "1 (Slot 3), 2 (Slots 4, 9)"
+                    parts = []
+                    for mat in issue["mats"]:
+                        slots_on_mat = sorted(
+                            m["slot"]
+                            for m in issue["matches"]
+                            if m["mat"] == mat
+                        )
+                        if len(slots_on_mat) == 1:
+                            slot_text = f"Slot {slots_on_mat[0]}"
+                        else:
+                            slot_text = "Slots " + ", ".join(str(s) for s in slots_on_mat)
+        
+                        parts.append(f"{mat} ({slot_text})")
+        
+                    mat_slot_text = ", ".join(parts)
                     st.markdown(
-                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_list}"
+                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_slot_text}"
                     )
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
+        
 
 
         if search_term.strip():
@@ -2273,5 +2302,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
