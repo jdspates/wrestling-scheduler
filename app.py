@@ -2232,8 +2232,8 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
         st.markdown(
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
-- Use **Manual Match Creator** when coaches want specific bouts.
-- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
+- Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
+#- Use **Suggested Matches** to fill gaps for wrestlers under the minimum.
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
@@ -2272,3 +2272,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
