@@ -622,6 +622,11 @@ def generate_coach_packets_pdf(full_schedule):
     doc = SimpleDocTemplate(buf, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
+    
+    # How wide is the usable area (page minus margins)?
+    page_width, page_height = letter
+    avail_width = page_width - doc.leftMargin - doc.rightMargin
+
 
     # Map wrestler_id -> wrestler record (only active wrestlers)
     active = st.session_state.get("active", [])
@@ -712,11 +717,15 @@ def generate_coach_packets_pdf(full_schedule):
             table_data.append(row)
 
         # Column widths:
-        # - First 3 columns fixed
-        # - Remaining share 6.5" of horizontal space
-        fixed_widths = [2.2 * inch, 0.6 * inch, 0.7 * inch]
+        # - First 3 columns fixed (a bit tighter)
+        # - Remaining columns share whatever width is left on the page
+        fixed_widths = [2.0 * inch, 0.6 * inch, 0.6 * inch]
+
+        # Make sure we don't go negative even if margins change
+        remaining_width = max(avail_width - sum(fixed_widths), 2.0 * inch)
+
         if max_matches > 0:
-            match_width = (6.5 * inch) / max_matches
+            match_width = remaining_width / max_matches
             col_widths = fixed_widths + [match_width] * max_matches
         else:
             col_widths = fixed_widths
@@ -729,6 +738,7 @@ def generate_coach_packets_pdf(full_schedule):
             ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
             ("ALIGN", (0, 0), (-1, -1), "LEFT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),  # smaller text so long match info fits
         ])
         table.setStyle(style)
 
@@ -2651,6 +2661,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
