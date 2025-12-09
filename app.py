@@ -152,7 +152,7 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
-    "active", "mat_order", "excel_bytes", "pdf_bytes",
+    "active", "mat_order", "excel_bytes", "pdf_bytes", "coach_pdf_bytes",
     "roster", "manual_match_warning", "action_history"
 ]:
     if key not in st.session_state:
@@ -611,6 +611,138 @@ def compute_multi_mat_assignments(schedule):
             })
 
     return multi
+
+def generate_coach_packets_pdf(full_schedule):
+    """
+    Build a PDF with one page per team.
+    Each page lists all active wrestlers on that team and ALL of their matches
+    (across mats), with dynamic Match 1 / Match 2 / ... columns.
+    """
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Map wrestler_id -> wrestler record (only active wrestlers)
+    active = st.session_state.get("active", [])
+    wrestler_by_id = {w["id"]: w for w in active}
+
+    # Build per-wrestler match info
+    # key: (team, wrestler_id) -> {
+    #   "name", "team", "grade", "weight", "matches": [ {mat, slot, opp_name, opp_team} ]
+    # }
+    packets = {}
+
+    for e in full_schedule:
+        # Look up the bout behind this schedule entry
+        try:
+            b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+        except StopIteration:
+            continue
+
+        # Add both sides (w1 and w2) to their own team's packet
+        for side, opp_side in (("w1", "w2"), ("w2", "w1")):
+            wid = b.get(f"{side}_id")
+            w = wrestler_by_id.get(wid)
+            if not w:
+                continue
+
+            team = w["team"]
+            key = (team, wid)
+            if key not in packets:
+                packets[key] = {
+                    "name": w["name"],
+                    "team": team,
+                    "grade": w["grade"],
+                    "weight": w["weight"],
+                    "matches": []
+                }
+
+            packets[key]["matches"].append({
+                "mat": e["mat"],
+                "slot": e["slot"],
+                "opp_name": b.get(f"{opp_side}_name"),
+                "opp_team": b.get(f"{opp_side}_team"),
+            })
+
+    # Group wrestlers by team
+    team_to_wrestlers = {}
+    for (team, wid), rec in packets.items():
+        team_to_wrestlers.setdefault(team, []).append(rec)
+
+    if not team_to_wrestlers:
+        # No matches / no active wrestlers
+        elements.append(Paragraph("No coach packets to generate (no matches found).", styles["Normal"]))
+        doc.build(elements)
+        return buf.getvalue()
+
+    first_team = True
+
+    for team, wrestlers in sorted(team_to_wrestlers.items()):
+        # Sort wrestlers (light → heavy, then grade, then name)
+        wrestlers.sort(key=lambda r: (r["weight"], r["grade"], r["name"]))
+
+        # How many match columns do we need?
+        max_matches = max((len(r["matches"]) for r in wrestlers), default=0)
+
+        # Headers: Wrestler / Wt / Grade / Match 1 / Match 2 / ... / Match N
+        headers = ["Wrestler", "Wt", "Grade"] + [
+            f"Match {i + 1}" for i in range(max_matches)
+        ]
+
+        table_data = [headers]
+
+        # Build each row with exactly max_matches match cells
+        for r in wrestlers:
+            row = [
+                r["name"],
+                f"{r['weight']:.0f}",
+                str(r["grade"]),
+            ]
+
+            # Add each match cell
+            for m in r["matches"]:
+                cell = f"Mat {m['mat']} – Slot {m['slot']} vs {m['opp_name']} ({m['opp_team']})"
+                row.append(cell)
+
+            # Pad with empty strings so every row has the same number of columns
+            while len(row) < 3 + max_matches:
+                row.append("")
+
+            table_data.append(row)
+
+        # Column widths:
+        # - First 3 columns fixed
+        # - Remaining share 6.5" of horizontal space
+        fixed_widths = [2.2 * inch, 0.6 * inch, 0.7 * inch]
+        if max_matches > 0:
+            match_width = (6.5 * inch) / max_matches
+            col_widths = fixed_widths + [match_width] * max_matches
+        else:
+            col_widths = fixed_widths
+
+        table = Table(table_data, colWidths=col_widths)
+
+        style = TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ])
+        table.setStyle(style)
+
+        # Page break between teams
+        if not first_team:
+            elements.append(PageBreak())
+        first_team = False
+
+        elements.append(Paragraph(f"{team} – Coach Packet", styles["Title"]))
+        elements.append(Spacer(1, 12))
+        elements.append(table)
+
+    doc.build(elements)
+    return buf.getvalue()
 
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
@@ -2126,6 +2258,34 @@ if st.session_state.initialized:
         else:
             st.caption("No actions yet to undo.")
 
+        # ---- COACH PACKETS (PER TEAM) ----
+        st.markdown("---")
+        st.subheader("Coach Packets (per team)")
+
+        if st.button(
+            "Generate Coach Packets PDF",
+            help="Builds a page per team with all matches for each of their wrestlers.",
+            key="generate_coach_packets_btn",
+        ):
+            if not full_schedule:
+                st.warning("No schedule yet – build matchups first.")
+            else:
+                try:
+                    coach_pdf = generate_coach_packets_pdf(full_schedule)
+                    st.session_state.coach_pdf_bytes = coach_pdf
+                    st.toast("Coach packets PDF generated.")
+                except Exception as e:
+                    st.error(f"Could not generate coach packets: {e}")
+
+        if st.session_state.get("coach_pdf_bytes"):
+            st.download_button(
+                "Download Coach Packets PDF",
+                data=st.session_state.coach_pdf_bytes,
+                file_name="coach_packets.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
         # ---- GENERATE MEET ----
         if st.button("Generate Documents", type="primary", help="Generate Excel + PDF for download"):
             with st.spinner("Generating files..."):
@@ -2491,6 +2651,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
