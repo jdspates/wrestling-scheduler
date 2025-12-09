@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import io
 import random
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageBreak, Spacer
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet
@@ -612,21 +612,46 @@ def compute_multi_mat_assignments(schedule):
 
     return multi
 
+def _short_name(full_name: str) -> str:
+    """Turn 'Brady Stebbins' into 'B. Stebbins'."""
+    if not full_name:
+        return ""
+    parts = str(full_name).split()
+    if len(parts) == 1:
+        return parts[0]
+    first_initial = parts[0][0].upper() + "."
+    last = parts[-1].capitalize()
+    return f"{first_initial} {last}"
+
+
+def _team_abbrev(team_name: str) -> str:
+    """Turn 'Forest Lake' into 'FL', 'Stillwater' into 'STI', etc."""
+    if not team_name:
+        return ""
+    parts = [p for p in str(team_name).split() if p]
+    if len(parts) == 1:
+        return parts[0][:3].upper()
+    # First two initials, e.g. Forest Lake -> FL, East Ridge -> ER
+    return "".join(p[0].upper() for p in parts[:2])
+
 def generate_coach_packets_pdf(full_schedule):
     """
-    Build a PDF with one page per team.
+    Build a PDF with one page per team (landscape).
     Each page lists all active wrestlers on that team and ALL of their matches
     (across mats), with dynamic Match 1 / Match 2 / ... columns.
+    Match text is abbreviated: M1 S18: B. Stebbins (FL)
     """
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter)
+
+    # 👉 LANDSCAPE instead of portrait
+    page_size = landscape(letter)
+    doc = SimpleDocTemplate(buf, pagesize=page_size)
     elements = []
     styles = getSampleStyleSheet()
-    
-    # How wide is the usable area (page minus margins)?
-    page_width, page_height = letter
-    avail_width = page_width - doc.leftMargin - doc.rightMargin
 
+    # How wide is the usable area (page minus margins)?
+    page_width, page_height = page_size
+    avail_width = page_width - doc.leftMargin - doc.rightMargin
 
     # Map wrestler_id -> wrestler record (only active wrestlers)
     active = st.session_state.get("active", [])
@@ -705,9 +730,13 @@ def generate_coach_packets_pdf(full_schedule):
                 str(r["grade"]),
             ]
 
-            # Add each match cell
+            # Add each match cell (ABBREVIATED)
             for m in r["matches"]:
-                cell = f"Mat {m['mat']} – Slot {m['slot']} vs {m['opp_name']} ({m['opp_team']})"
+                opp_short = _short_name(m.get("opp_name", ""))
+                team_short = _team_abbrev(m.get("opp_team", ""))
+                cell = f"M{m['mat']} S{m['slot']}: {opp_short}"
+                if team_short:
+                    cell += f" ({team_short})"
                 row.append(cell)
 
             # Pad with empty strings so every row has the same number of columns
@@ -717,11 +746,10 @@ def generate_coach_packets_pdf(full_schedule):
             table_data.append(row)
 
         # Column widths:
-        # - First 3 columns fixed (a bit tighter)
+        # - First 3 columns fixed
         # - Remaining columns share whatever width is left on the page
-        fixed_widths = [2.0 * inch, 0.6 * inch, 0.6 * inch]
+        fixed_widths = [2.0 * inch, 0.55 * inch, 0.65 * inch]
 
-        # Make sure we don't go negative even if margins change
         remaining_width = max(avail_width - sum(fixed_widths), 2.0 * inch)
 
         if max_matches > 0:
@@ -738,7 +766,7 @@ def generate_coach_packets_pdf(full_schedule):
             ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
             ("ALIGN", (0, 0), (-1, -1), "LEFT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),  # smaller text so long match info fits
+            ("FONTSIZE", (0, 0), (-1, -1), 8),  # small but readable
         ])
         table.setStyle(style)
 
@@ -2661,6 +2689,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
