@@ -2255,6 +2255,8 @@ if st.session_state.initialized:
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Active Wrestlers", num_wrestlers)
+        num_scratched = len([w for w in st.session_state.roster if w.get("scratch")])
+        c1.metric("Scratched Wrestlers", num_scratched)
         c2.metric("Total Bouts", total_bouts)
         c3.metric("Avg Matches / Wrestler", f"{avg_matches:.2f}")
 
@@ -2340,6 +2342,8 @@ if st.session_state.initialized:
             )
             
             st.dataframe(styled, use_container_width=True, hide_index=True)
+            # --- B: Add note for clarity ---
+            st.caption("Note: Wrestlers marked as scratched are not included in this table.")
 
         st.markdown("---")
 
@@ -2478,6 +2482,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
