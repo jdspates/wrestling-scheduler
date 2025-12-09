@@ -2330,23 +2330,13 @@ if st.session_state.initialized:
             final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Gender", "Matches", "Status"]]
             final_display = final_display.rename(columns={"Weight_display": "Weight"})
 
-            # Build column config so every column is left-justified
-            column_config = {}
-            for col in final_display.columns:
-                if pd.api.types.is_numeric_dtype(final_display[col]):
-                    # Keep numeric behavior but left-align
-                    column_config[col] = st.column_config.NumberColumn(col, justify="left")
-                else:
-                    # Text columns also left-align
-                    column_config[col] = st.column_config.TextColumn(col, justify="left")
-            
-            st.dataframe(
-                final_display,
-                use_container_width=True,
-                hide_index=True,
-                column_config=column_config,
+           # Pandas Styler to left-justify all columns while keeping numeric types
+            styled = final_display.style.set_properties(**{"text-align": "left"})
+            styled = styled.set_table_styles(
+                [dict(selector="th", props=[("text-align", "left")])]
             )
-
+            
+            st.dataframe(styled, use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
@@ -2485,5 +2475,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
