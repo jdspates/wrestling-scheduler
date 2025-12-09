@@ -1340,7 +1340,7 @@ if st.session_state.initialized:
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
 5. **Generate & download**
-   - Click **Generate Matches** to build the **Excel** and **PDF**.
+   - Click **Generate Documents** to build the **Excel** and **PDF**.
    - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
                 """
             )
@@ -2118,7 +2118,7 @@ if st.session_state.initialized:
             st.caption("No actions yet to undo.")
 
         # ---- GENERATE MEET ----
-        if st.button("Generate Matches", type="primary", help="Generate Excel + PDF for download"):
+        if st.button("Generate Documents", type="primary", help="Generate Excel + PDF for download"):
             with st.spinner("Generating files..."):
                 try:
                     final_sched = apply_mat_order_to_global_schedule()
@@ -2448,7 +2448,7 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
         st.markdown("##### 4. Exports")
         st.markdown(
             """
-- Click **Generate Matches** to build:
+- Click **Generate Documents** to build:
   - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
   - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
 - Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
@@ -2469,3 +2469,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
