@@ -14,9 +14,6 @@ import os
 import copy
 from streamlit_js_eval import streamlit_js_eval
 from datetime import datetime  # NEW: for autosave timestamp
-from collections import defaultdict
-import zipfile
-import re
 
 from streamlit_sortables import sort_items  # drag-and-drop component
 
@@ -74,14 +71,18 @@ DEFAULT_CONFIG = {
 # ----------------------------------------------------------------------
 # ROSTER TEMPLATE (for new coaches)
 # ----------------------------------------------------------------------
-# Columns MUST match what the app expects below:
+# Required columns the app expects:
 # ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
-# Internal numeric IDs are generated automatically after upload.
-TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch
-John Doe,Stillwater,7,1.0,70,Y,N
-Jane Smith,Hastings,8,1.5,75,N,N
-Ben Carter,Cottage Grove,6,2.0,80,N,N
-Ava Johnson,Woodbury,7,1.0,68,Y,N
+# Optional columns:
+# ["gender", "cross_gender_ok"]
+#
+# - gender: M/F (or variants like Male/Female/Boy/Girl – normalized in code)
+# - cross_gender_ok: Y/N (or True/False-ish) – whether this wrestler allows cross-gender matches.
+TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch,gender,cross_gender_ok
+John Doe,Stillwater,7,1.0,70,N,N,M,Y
+Jane Smith,Hastings,8,1.5,75,N,N,F,N
+Ava Johnson,Woodbury,7,1.0,68,Y,N,F,Y
+Mike Brown,Forest Lake,6,1.0,72,N,N,M,N
 """
 
 # Load base config once (read-only default, e.g. from repo)
@@ -152,8 +153,7 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
     "active", "mat_order", "excel_bytes", "pdf_bytes",
-    "roster", "manual_match_warning", "action_history",
-    "coach_zip_bytes",
+    "roster", "manual_match_warning", "action_history"
 ]:
     if key not in st.session_state:
         if key in ["bout_list", "mat_schedules", "suggestions", "active", "action_history"]:
@@ -192,22 +192,85 @@ if "mat_overrides" not in st.session_state:
     st.session_state.mat_overrides = {}
 
 # ----------------------------------------------------------------------
+# GENDER HELPERS (NEW)
+# ----------------------------------------------------------------------
+def _parse_gender(val):
+    """Normalize gender value to 'M', 'F', or None."""
+    if pd.isna(val):
+        return None
+    s = str(val).strip().upper()
+    if s in ["M", "MALE", "B", "BOY"]:
+        return "M"
+    if s in ["F", "FEMALE", "G", "GIRL"]:
+        return "F"
+    return None  # unknown/unset
+
+
+def _parse_cross_gender_ok(val):
+    """
+    Normalize cross-gender flag to bool.
+    Default True for backwards compatibility (no column = no restriction).
+    """
+    if pd.isna(val):
+        return True
+    s = str(val).strip().upper()
+    return s in ["Y", "YES", "TRUE", "T", "1"]
+
+
+def genders_compatible(w1, w2):
+    """
+    Gender matching rule:
+
+    - If either wrestler has no gender recorded, allow (no gender constraint).
+    - If both same gender, always allow.
+    - If genders differ, allow only if BOTH have cross_gender_ok = True.
+    """
+    g1 = w1.get("gender")
+    g2 = w2.get("gender")
+
+    # If either missing/unknown, don't enforce gender constraint
+    if not g1 or not g2:
+        return True
+
+    # Same gender always OK
+    if g1 == g2:
+        return True
+
+    # Cross-gender only if BOTH have cross_gender_ok = True
+    c1 = w1.get("cross_gender_ok", True)
+    c2 = w2.get("cross_gender_ok", True)
+    return bool(c1 and c2)
+
+# ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
-    return w1["team"] != w2["team"] and not (
-        (w1["grade"] == 5 and w2["grade"] in [7, 8]) or
-        (w2["grade"] == 5 and w1["grade"] in [7, 8])
+    """
+    Base compatibility check:
+      - different teams
+      - avoid 5th vs 7th/8th graders
+      - respect gender preferences (NEW)
+    """
+    return (
+        w1["team"] != w2["team"]
+        and not (
+            (w1["grade"] == 5 and w2["grade"] in [7, 8]) or
+            (w2["grade"] == 5 and w1["grade"] in [7, 8])
+        )
+        and genders_compatible(w1, w2)
     )
+
 
 def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 
 def matchup_score(w1, w2):
     return round(
         abs(w1["weight"] - w2["weight"]) +
         abs(w1["level"] - w2["level"]) * 10, 1
     )
+
 
 def generate_initial_matchups(active):
     bouts = set()
@@ -259,19 +322,31 @@ def generate_initial_matchups(active):
         })
     return bout_list
 
+
 def build_suggestions(active, bout_list):
+    """
+    Suggest additional matches for wrestlers under MIN_MATCHES.
+    Now respects gender preferences via genders_compatible().
+    """
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
     for w in under:
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         opps = [
             o for o in opps
-            if abs(w["weight"] - o["weight"]) <= \
+            if genders_compatible(w, o)  # NEW gender filter
+            and abs(w["weight"] - o["weight"]) <= \
                 min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
             and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
         ]
         if not opps:
-            opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
+            # Fallback – any opponent not yet matched, but still gender-compatible if possible
+            opps = [
+                o for o in active
+                if o["id"] not in w["match_ids"]
+                and o["id"] != w["id"]
+                and genders_compatible(w, o)
+            ]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
                 "wrestler": w["name"], "team": w["team"],
@@ -284,6 +359,7 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
+
 
 def generate_mat_schedule(bout_list, gap=4):
     """Base scheduling algorithm (ignores manual ordering, respects manual removals)."""
@@ -393,6 +469,7 @@ def generate_mat_schedule(bout_list, gap=4):
 
     return schedules
 
+
 def apply_mat_order_to_global_schedule():
     """
     Take the base schedule, then:
@@ -435,6 +512,7 @@ def apply_mat_order_to_global_schedule():
             schedules.append(e)
 
     return schedules
+
 
 def compute_rest_conflicts(schedule, min_gap):
     """
@@ -485,6 +563,7 @@ def compute_rest_conflicts(schedule, min_gap):
 
     return conflicts
 
+
 def compute_multi_mat_assignments(schedule):
     """
     Find wrestlers who are scheduled on more than one mat.
@@ -534,182 +613,6 @@ def compute_multi_mat_assignments(schedule):
     return multi
 
 # ----------------------------------------------------------------------
-# COACH PACKET HELPERS
-# ----------------------------------------------------------------------
-def build_coach_rows_by_team(schedule, bout_list, active_wrestlers):
-    """
-    Build per-team coach packet data, using the final global schedule
-    (after mat orders and overrides).
-
-    schedule: list from apply_mat_order_to_global_schedule()
-    bout_list: st.session_state.bout_list
-    active_wrestlers: st.session_state.active
-
-    Returns:
-      coach_data: dict[team] -> {
-        "rows": [
-          {
-            "name": str,
-            "weight": float,
-            "grade": int,
-            "matches": [
-              {
-                "mat": int,
-                "slot": int,
-                "bout_num": int,
-                "opp_name": str,
-                "opp_team": str,
-                "is_early": bool,
-              },
-              ...
-            ],
-          },
-          ...
-        ],
-        "max_matches": int,   # max matches for any wrestler on that team
-      }
-    """
-    # Index bouts by bout_num (skip manually-removed bouts)
-    bout_index = {
-        b["bout_num"]: b
-        for b in bout_list
-        if b.get("manual") != "Manually Removed"
-    }
-
-    # Active wrestlers only
-    wrestlers_by_id = {w["id"]: w for w in active_wrestlers}
-
-    # Collect matches per wrestler ID
-    matches_by_wrestler = defaultdict(list)
-
-    for e in schedule:
-        b = bout_index.get(e["bout_num"])
-        if not b:
-            continue
-
-        for side in ("w1", "w2"):
-            wid = b[f"{side}_id"]
-            if wid not in wrestlers_by_id:
-                continue
-
-            # Opponent info
-            if side == "w1":
-                opp_name = b["w2_name"]
-                opp_team = b["w2_team"]
-            else:
-                opp_name = b["w1_name"]
-                opp_team = b["w1_team"]
-
-            matches_by_wrestler[wid].append({
-                "mat": e["mat"],
-                "slot": e["slot"],      # slot on that mat (your “time” ordering)
-                "bout_num": e["bout_num"],
-                "opp_name": opp_name,
-                "opp_team": opp_team,
-                "is_early": b["is_early"],
-            })
-
-    # Build rows per team, track max matches per team
-    rows_by_team = defaultdict(list)
-    max_matches_by_team = defaultdict(int)
-
-    for w in active_wrestlers:
-        wid = w["id"]
-        team = w["team"]
-
-        w_matches = matches_by_wrestler.get(wid, [])
-        # Sort in a logical order: by slot, then mat, then bout_num
-        w_matches.sort(key=lambda m: (m["slot"], m["mat"], m["bout_num"]))
-
-        row = {
-            "name": w["name"],
-            "weight": float(w["weight"]),
-            "grade": int(w["grade"]),
-            "matches": w_matches,
-        }
-
-        rows_by_team[team].append(row)
-
-        if len(w_matches) > max_matches_by_team[team]:
-            max_matches_by_team[team] = len(w_matches)
-
-    coach_data = {}
-    for team, rows in rows_by_team.items():
-        coach_data[team] = {
-            "rows": rows,
-            "max_matches": max_matches_by_team[team],
-        }
-
-    return coach_data
-
-def build_coach_pdf_for_team(team_name: str, rows: list, max_matches: int) -> bytes:
-    """
-    Build a single-team coach packet PDF and return the bytes.
-    Uses the dynamic Match 1..Match N logic.
-    """
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter)
-    styles = getSampleStyleSheet()
-
-    # Headers: Wrestler, Wt, Grade, Match 1..Match N
-    headers = ["Wrestler", "Wt", "Grade"] + [
-        f"Match {i+1}" for i in range(max_matches)
-    ]
-    table_data = [headers]
-
-    # One row per wrestler, padded to max_matches
-    for r in rows:
-        row = [
-            r["name"],
-            f"{r['weight']:.0f}",
-            str(r["grade"]),
-        ]
-
-        for m_info in r["matches"]:
-            cell_text = (
-                f"Mat {m_info['mat']} – Slot {m_info['slot']:02d} "
-                f"vs {m_info['opp_name']} ({m_info['opp_team']})"
-            )
-            if m_info["is_early"]:
-                cell_text = "EARLY – " + cell_text
-            row.append(cell_text)
-
-        # Pad out to 3 + max_matches
-        while len(row) < 3 + max_matches:
-            row.append("")
-
-        table_data.append(row)
-
-    # Dynamic column widths
-    content_width = 6.5 * inch  # ~letter width minus margins
-    fixed_widths = [2.2 * inch, 0.6 * inch, 0.7 * inch]  # Wrestler / Wt / Grade
-    remaining_width = max(content_width - sum(fixed_widths), 1.0 * inch)
-
-    if max_matches > 0:
-        match_col_width = remaining_width / max_matches
-        col_widths = fixed_widths + [match_col_width] * max_matches
-    else:
-        col_widths = fixed_widths
-
-    coach_table = Table(table_data, colWidths=col_widths)
-    coach_style = TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ])
-    coach_table.setStyle(coach_style)
-
-    elements = []
-    elements.append(Paragraph(f"Team: {team_name}", styles["Title"]))
-    elements.append(Spacer(1, 12))
-    elements.append(coach_table)
-
-    doc.build(elements)
-    return buf.getvalue()
-
-# ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
 def color_dot_hex(hex_color: str) -> str:
@@ -721,11 +624,13 @@ def color_dot_hex(hex_color: str) -> str:
         f"border-radius:50%;background:{hex_color};margin-right:6px;'></span>"
     )
 
+
 def push_action(action: dict):
     """Record an action so it can be undone later."""
     if "action_history" not in st.session_state:
         st.session_state.action_history = []
     st.session_state.action_history.append(action)
+
 
 def _undo_remove(bout_num: int):
     """Undo a previously removed bout."""
@@ -752,9 +657,9 @@ def _undo_remove(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: restored last removed bout.")
+
 
 def _undo_drag(previous_mat_order: dict):
     """Undo a drag/reorder by restoring previous mat_order snapshot."""
@@ -763,9 +668,9 @@ def _undo_drag(previous_mat_order: dict):
     }
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: last drag / reorder reverted.")
+
 
 def _undo_manual_add(bout_num: int):
     """Undo a manually-added match."""
@@ -795,9 +700,9 @@ def _undo_manual_add(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: manual match removed.")
+
 
 def _undo_suggest_add(bout_nums: list[int]):
     """Undo a batch of suggested matches that were added at once."""
@@ -828,9 +733,9 @@ def _undo_suggest_add(bout_nums: list[int]):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: suggested matches removed.")
+
 
 def _undo_scratch_update(snapshot: dict):
     """Undo a scratches update by restoring a saved snapshot."""
@@ -846,9 +751,9 @@ def _undo_scratch_update(snapshot: dict):
     # the restored roster (w['scratch']) on the next run.
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: scratches and schedule restored.")
+
 
 def undo_last_action():
     """Pop the last action off the history and undo it."""
@@ -875,6 +780,7 @@ def undo_last_action():
         return
 
     st.rerun()
+
 
 def remove_bout(bout_num: int):
     """Mark bout as manually removed, update wrestler match_ids, trim from mat_order."""
@@ -904,15 +810,16 @@ def remove_bout(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
 
     st.session_state.sortable_version += 1
     st.rerun()
+
 
 def validate_roster_df(df: pd.DataFrame):
     """Return list of error messages if roster has issues; empty list if OK."""
     errors = []
     # NOTE: no 'id' column required now – IDs are generated internally
+    # gender and cross_gender_ok are OPTIONAL
     required = ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -973,6 +880,7 @@ def build_meet_snapshot():
         "mat_order": st.session_state.get("mat_order", {}),
     }
 
+
 def restore_meet_from_snapshot(data: dict):
     """Restore a meet snapshot into session_state."""
     # Load CONFIG from snapshot
@@ -998,10 +906,10 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.mat_order = data.get("mat_order", {})
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
-    st.session_state.coach_zip_bytes = None
     st.session_state.initialized = bool(st.session_state.roster)
     st.session_state.sortable_version += 1  # refresh drag widgets
     st.session_state.action_history = []  # clear undo history on restore
+
 
 def autosave_meet():
     try:
@@ -1107,6 +1015,11 @@ if uploaded and not st.session_state.initialized:
                 str(w["scratch"]).strip().upper() == "Y"
                 or w["scratch"] in [1, True]
             )
+
+            # --- NEW: gender + cross_gender_ok (optional columns) ---
+            w["gender"] = _parse_gender(w.get("gender", None))
+            w["cross_gender_ok"] = _parse_cross_gender_ok(w.get("cross_gender_ok", None))
+
             w["match_ids"] = []
 
         st.session_state.roster = wrestlers
@@ -1115,7 +1028,6 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
         st.session_state.action_history = []
-        st.session_state.coach_zip_bytes = None
 
         st.success(
             f"Roster loaded ({len(wrestlers)} wrestlers, "
@@ -1124,99 +1036,107 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error loading roster: {e}")
 
-# Start-over / load new roster button, right under the uploader
-if st.session_state.get("initialized") and st.session_state.get("roster"):
-
-    # NEW LOGIC: show either Start Over button OR confirmation UI, never both
-    if not st.session_state.get("reset_confirm", False):
-        # Primary Start Over button – toggles confirmation mode
-        if st.button(
-            "🔄 Start Over / Load New Roster",
-            help="Clear current roster and matches so you can upload a new file.",
-            key="start_over_button",
-        ):
-            st.session_state.reset_confirm = True
-            st.rerun()
-    else:
-        # Confirmation UI when reset_confirm is True
-        st.warning(
-            "Are you sure you want to **reset this meet**? "
-            "This will clear the current roster, matchups, mat orders, exports, and undo history "
-            "for this browser session."
-        )
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ Yes, reset meet", key="confirm_reset_yes"):
-                for key in [
-                    "initialized", "bout_list", "mat_schedules", "suggestions",
-                    "active", "mat_order", "excel_bytes", "pdf_bytes",
-                    "roster", "manual_match_warning", "action_history",
-                    "coach_zip_bytes",
-                ]:
-                    st.session_state.pop(key, None)
-
-                # Reset confirmation flag
-                st.session_state.reset_confirm = False
-
-                # Bump uploader versions so Streamlit creates fresh, empty uploaders
-                st.session_state.roster_uploader_version += 1
-                st.session_state.state_json_uploader_version += 1  # clears JSON file selection
-
-                st.success("Meet reset. You can upload a new roster file.")
-                st.rerun()
-
-        with c2:
-            if st.button("❌ Cancel", key="confirm_reset_no"):
-                st.session_state.reset_confirm = False
-                st.info("Reset cancelled.")
-                st.rerun()
-
 # ----------------------------------------------------------------------
-# SAVE / LOAD MEET (JSON SNAPSHOT)
+# ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET
 # ----------------------------------------------------------------------
-st.markdown("### Save / Load Meet")
-
-# Export current meet to JSON
-if st.session_state.get("initialized"):
-    snapshot = build_meet_snapshot()
-    json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
-
-    st.download_button(
-        "💾 Download meet as JSON",
-        data=json_bytes,
-        file_name="wrestling_meet_state.json",
-        mime="application/json",
-        use_container_width=False,
+with st.expander("Advanced options (Start Over, save / load meet)", expanded=False):
+    st.caption(
+        "Optional tools for resetting this meet or saving/loading a meet file. "
+        "Most coaches won't need these every time."
     )
 
-# Import meet from JSON (manual load – avoids infinite restore loop)
-uploaded_state = st.file_uploader(
-    "📂 Load saved meet (.json)",
-    type="json",
-    key=f"state_json_uploader_v{st.session_state.state_json_uploader_version}",
-)
+    # ----- Start Over / Load New Roster -----
+    if st.session_state.get("initialized") and st.session_state.get("roster"):
 
-if uploaded_state is not None:
-    if st.button("Load this saved meet", key="load_state_button"):
-        try:
-            data = json.load(uploaded_state)
-            restore_meet_from_snapshot(data)
-            st.success("Meet restored from JSON.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Could not load saved meet: {e}")
+        st.markdown("##### Start Over / Load New Roster")
 
-# Restore from server-side autosave file (if present)
-if os.path.exists(AUTOSAVE_FILE):
-    if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
-        try:
-            with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            restore_meet_from_snapshot(data)
-            st.success("Meet restored from autosave.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Could not restore autosave: {e}")
+        # Show either Start Over button OR confirmation UI, never both
+        if not st.session_state.get("reset_confirm", False):
+            # Primary Start Over button – toggles confirmation mode
+            if st.button(
+                "🔄 Start Over / Load New Roster",
+                help="Clear current roster and matches so you can upload a new file.",
+                key="start_over_button",
+            ):
+                st.session_state.reset_confirm = True
+                st.rerun()
+        else:
+            # Confirmation UI when reset_confirm is True
+            st.warning(
+                "Are you sure you want to **reset this meet**? "
+                "This will clear the current roster, matchups, mat orders, exports, and undo history "
+                "for this browser session."
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Yes, reset meet", key="confirm_reset_yes"):
+                    for key in [
+                        "initialized", "bout_list", "mat_schedules", "suggestions",
+                        "active", "mat_order", "excel_bytes", "pdf_bytes",
+                        "roster", "manual_match_warning", "action_history"
+                    ]:
+                        st.session_state.pop(key, None)
+
+                    # Reset confirmation flag
+                    st.session_state.reset_confirm = False
+
+                    # Bump uploader versions so Streamlit creates fresh, empty uploaders
+                    st.session_state.roster_uploader_version += 1
+                    st.session_state.state_json_uploader_version += 1  # clears JSON file selection
+
+                    st.success("Meet reset. You can upload a new roster file.")
+                    st.rerun()
+
+            with c2:
+                if st.button("❌ Cancel", key="confirm_reset_no"):
+                    st.session_state.reset_confirm = False
+                    st.info("Reset cancelled.")
+                    st.rerun()
+
+    # ----- Save / Load Meet (JSON snapshot) -----
+    st.markdown("##### Save / Load Meet")
+
+    # Export current meet to JSON
+    if st.session_state.get("initialized"):
+        snapshot = build_meet_snapshot()
+        json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
+
+        st.download_button(
+            "💾 Download meet as JSON",
+            data=json_bytes,
+            file_name="wrestling_meet_state.json",
+            mime="application/json",
+            use_container_width=False,
+        )
+
+    # Import meet from JSON (manual load – avoids infinite restore loop)
+    uploaded_state = st.file_uploader(
+        "📂 Load saved meet (.json)",
+        type="json",
+        key=f"state_json_uploader_v{st.session_state.state_json_uploader_version}",
+    )
+
+    if uploaded_state is not None:
+        if st.button("Load this saved meet", key="load_state_button"):
+            try:
+                data = json.load(uploaded_state)
+                restore_meet_from_snapshot(data)
+                st.success("Meet restored from JSON.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not load saved meet: {e}")
+
+    # Restore from server-side autosave file (if present)
+    if os.path.exists(AUTOSAVE_FILE):
+        if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
+            try:
+                with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                restore_meet_from_snapshot(data)
+                st.success("Meet restored from autosave.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not restore autosave: {e}")
 
 st.markdown("---")
 
@@ -1429,8 +1349,8 @@ if st.session_state.initialized:
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
 5. **Generate & download**
-   - Click **Generate Matches** to build the **Excel** and **Mat Sheets PDF**.
-   - Use **Generate Coach Packets** to build one PDF per team, zipped for coaches.
+   - Click **Generate Documents** to build the **Excel** and **PDF**.
+   - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
                 """
             )
 
@@ -1495,7 +1415,6 @@ if st.session_state.initialized:
                     st.session_state.mat_overrides = {}
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
-                    st.session_state.coach_zip_bytes = None
                     st.session_state.action_history = []
                     st.session_state.sortable_version += 1
 
@@ -1551,7 +1470,6 @@ if st.session_state.initialized:
                     # Invalidate exports; refresh drag widgets
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
-                    st.session_state.coach_zip_bytes = None
                     st.session_state.sortable_version += 1
 
                     st.success(
@@ -1593,6 +1511,14 @@ if st.session_state.initialized:
         else:
             # Map IDs to wrestler records for quick lookup
             id_to_wrestler = {w["id"]: w for w in raw_active}
+
+            # NEW: helper for gender tags in manual match dropdowns
+            def gender_tag_from_id(wid: int) -> str:
+                w = id_to_wrestler.get(wid)
+                if not w:
+                    return "-"
+                g = w.get("gender")
+                return g if g in ("M", "F") else "-"
 
             # All active wrestlers sorted by weight (lightest → heaviest)
             sorted_all_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
@@ -1640,7 +1566,7 @@ if st.session_state.initialized:
                     options=filtered_ids_for_w1,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
-                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"({id_to_wrestler[wid]['team']}, {gender_tag_from_id(wid)}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
                         f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
                         f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
@@ -1664,17 +1590,29 @@ if st.session_state.initialized:
                     # Wrestlers who already have a match with Wrestler 1
                     w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
 
-                    # Filter: within window, not W1, not already matched with W1
+                    # Filter: within window, not W1, not already matched with W1,
+                    # and gender-compatible (Option A)
                     candidate_ids = [
                         wid for wid in sorted_all_ids[start:end]
-                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                        if wid != manual_w1_id
+                           and wid not in w1_existing_opponents
+                           and genders_compatible(
+                                id_to_wrestler[manual_w1_id],
+                                id_to_wrestler[wid]
+                            )
                     ]
 
-                    # Fallback: if window collapses, use all others not already opponents
+                    # Fallback: if window collapses, use all others not already opponents,
+                    # still respecting gender compatibility.
                     if not candidate_ids:
                         candidate_ids = [
                             wid for wid in sorted_all_ids
-                            if wid != manual_w1_id and wid not in w1_existing_opponents
+                            if wid != manual_w1_id
+                               and wid not in w1_existing_opponents
+                               and genders_compatible(
+                                    id_to_wrestler[manual_w1_id],
+                                    id_to_wrestler[wid]
+                                )
                         ]
                 else:
                     w1_existing_opponents = set(
@@ -1682,7 +1620,12 @@ if st.session_state.initialized:
                     )
                     candidate_ids = [
                         wid for wid in sorted_all_ids
-                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                        if wid != manual_w1_id
+                           and wid not in w1_existing_opponents
+                           and genders_compatible(
+                                id_to_wrestler[manual_w1_id],
+                                id_to_wrestler[wid]
+                            )
                     ]
 
                 manual_w2_id = st.selectbox(
@@ -1690,7 +1633,7 @@ if st.session_state.initialized:
                     options=candidate_ids,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
-                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"({id_to_wrestler[wid]['team']}, {gender_tag_from_id(wid)}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
                         f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
                         f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
@@ -1714,6 +1657,15 @@ if st.session_state.initialized:
                 else:
                     w1 = next(w for w in raw_active if w["id"] == manual_w1_id)
                     w2 = next(w for w in raw_active if w["id"] == manual_w2_id)
+
+                    # Extra safety: don't allow gender-incompatible pair, even though
+                    # we filtered them out of the dropdown.
+                    if not genders_compatible(w1, w2):
+                        st.warning(
+                            "This manual pairing does not respect gender preferences and cannot be created. "
+                            "Adjust the wrestlers' gender or cross-gender settings if this match is intended."
+                        )
+                        st.stop()
 
                     # Check if they already have a match together (ignore Manually Removed bouts)
                     already_linked = any(
@@ -1788,7 +1740,6 @@ if st.session_state.initialized:
                         # Invalidate exports
                         st.session_state.excel_bytes = None
                         st.session_state.pdf_bytes = None
-                        st.session_state.coach_zip_bytes = None
 
                         # Record action for undo
                         push_action({"type": "manual_add", "bout_num": new_bout_num})
@@ -1839,12 +1790,23 @@ if st.session_state.initialized:
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
         
+
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
         else:
             visible_conflicts = conflicts_all
 
         st.subheader("Mat Previews")
+
+        # NEW: map ID -> wrestler for gender display on mat previews
+        id_to_wrestler_global = {w["id"]: w for w in roster}
+
+        def gender_display(wid: int) -> str:
+            w = id_to_wrestler_global.get(wid)
+            if not w:
+                return "?"
+            g = w.get("gender")
+            return g if g in ("M", "F") else "?"
 
         if visible_conflicts:
             st.warning(
@@ -1893,14 +1855,16 @@ if st.session_state.initialized:
                             color_name2 = team_color_for_roster.get(b["w2_team"])
                             dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
                             dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
+                            g1 = gender_display(b["w1_id"])
+                            g2 = gender_display(b["w2_id"])
 
                             table_rows.append(
                                 f"<tr>"
                                 f"<td>{e['mat_bout_num']}</td>"
                                 f"<td>{b['bout_num']}</td>"
                                 f"<td>{early_flag}</td>"
-                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']})</td>"
-                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']})</td>"
+                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']}, {g1})</td>"
+                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']}, {g2})</td>"
                                 f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
                                 f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
                                 f"<td>{b['score']:.1f}</td>"
@@ -1989,7 +1953,7 @@ if st.session_state.initialized:
                                 unsafe_allow_html=True,
                             )
 
-                        # Build drag labels (plain text, circle emojis)
+                        # Build drag labels (plain text, circle emojis + gender)
                         row_labels = []
                         label_to_bout = {}
                         for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
@@ -2003,12 +1967,14 @@ if st.session_state.initialized:
                             color_name2 = team_color_for_roster.get(b["w2_team"])
                             icon1 = COLOR_ICON.get(color_name1, "●")
                             icon2 = COLOR_ICON.get(color_name2, "●")
+                            g1 = gender_display(b["w1_id"])
+                            g2 = gender_display(b["w2_id"])
 
                             label = (
                                 f"{early_prefix}"
                                 f"Slot {slot_index:02d} | Bout {bn:>3} | "
-                                f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
-                                f"{icon2} {b['w2_name']} ({b['w2_team']})"
+                                f"{icon1} {b['w1_name']} ({b['w1_team']}, {g1})  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2})"
                                 f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                                 f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
                                 f"  |  Score {b['score']:.1f}"
@@ -2042,7 +2008,6 @@ if st.session_state.initialized:
                             st.session_state.mat_order[mat] = new_order
                             st.session_state.excel_bytes = None
                             st.session_state.pdf_bytes = None
-                            st.session_state.coach_zip_bytes = None
                             st.session_state.sortable_version += 1
                             st.rerun()
                         else:
@@ -2114,7 +2079,6 @@ if st.session_state.initialized:
                                     # Invalidate exports and refresh drag widgets
                                     st.session_state.excel_bytes = None
                                     st.session_state.pdf_bytes = None
-                                    st.session_state.coach_zip_bytes = None
                                     st.session_state.sortable_version += 1
 
                                     st.success(
@@ -2162,8 +2126,8 @@ if st.session_state.initialized:
         else:
             st.caption("No actions yet to undo.")
 
-        # ---- GENERATE MEET (Excel + Mat Sheets PDF) ----
-        if st.button("Generate Matches", type="primary", help="Generate Excel + Mat Sheets PDF for download"):
+        # ---- GENERATE MEET ----
+        if st.button("Generate Documents", type="primary", help="Generate Excel + PDF for download"):
             with st.spinner("Generating files..."):
                 try:
                     final_sched = apply_mat_order_to_global_schedule()
@@ -2205,7 +2169,7 @@ if st.session_state.initialized:
 
                     st.session_state.excel_bytes = out.getvalue()
 
-                    # PDF – Mat sheets per mat (no coach pages here)
+                    # PDF
                     buf = io.BytesIO()
                     doc = SimpleDocTemplate(buf, pagesize=letter)
                     elements = []
@@ -2214,8 +2178,8 @@ if st.session_state.initialized:
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
                             elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
-                            if m < CONFIG["NUM_MATS"]:
-                                elements.append(PageBreak())
+
+                            elements.append(PageBreak())
                             continue
                         table = [["#", "Wrestler 1", "Wrestler 2"]]
                         for e in data:
@@ -2249,6 +2213,7 @@ if st.session_state.initialized:
                                 b for b in st.session_state.bout_list
                                 if b["bout_num"] == data[r - 1]["bout_num"]
                             )["is_early"]:
+
                                 s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
                         t.setStyle(s)
                         elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
@@ -2256,55 +2221,12 @@ if st.session_state.initialized:
                             elements.append(PageBreak())
                     doc.build(elements)
                     st.session_state.pdf_bytes = buf.getvalue()
-
-                    # When mat sheets regenerate, clear any old coach ZIP
-                    st.session_state.coach_zip_bytes = None
-
                     st.toast("Files generated!")
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.toast("Error – check console.")
 
-        # ---- GENERATE COACH PACKETS (ZIP of per-team PDFs) ----
-        if st.button(
-            "Generate Coach Packets (per-team PDFs)",
-            help="Build one PDF per team with dynamic Match columns, zipped for download.",
-        ):
-            if not st.session_state.bout_list:
-                st.warning("No bouts found – generate matches first.")
-            else:
-                with st.spinner("Building coach packets..."):
-                    try:
-                        full_schedule = apply_mat_order_to_global_schedule()
-                        coach_data = build_coach_rows_by_team(
-                            full_schedule,
-                            st.session_state.bout_list,
-                            st.session_state.active,
-                        )
-
-                        zip_buf = io.BytesIO()
-                        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                            for team_name, info in coach_data.items():
-                                rows = info["rows"]
-                                max_matches = info["max_matches"]
-                                if not rows:
-                                    continue
-
-                                pdf_bytes = build_coach_pdf_for_team(team_name, rows, max_matches)
-
-                                # Safe filename: TeamName_coach_packet.pdf
-                                safe_team = re.sub(r"[^A-Za-z0-9_]+", "_", team_name).strip("_") or "team"
-                                filename = f"{safe_team}_coach_packet.pdf"
-                                zf.writestr(filename, pdf_bytes)
-
-                        st.session_state.coach_zip_bytes = zip_buf.getvalue()
-                        st.toast("Coach packets generated!")
-                    except Exception as e:
-                        st.error(f"Failed to generate coach packets: {e}")
-                        st.session_state.coach_zip_bytes = None
-
-        # ---- DOWNLOAD BUTTONS ----
-        col_ex, col_pdf, col_coach = st.columns(3)
+        col_ex, col_pdf = st.columns(2)
         with col_ex:
             if st.session_state.excel_bytes is not None:
                 st.download_button(
@@ -2317,19 +2239,10 @@ if st.session_state.initialized:
         with col_pdf:
             if st.session_state.pdf_bytes is not None:
                 st.download_button(
-                    label="Download Mat Sheets PDF",
+                    label="Download PDF",
                     data=st.session_state.pdf_bytes,
                     file_name="meet_schedule.pdf",
                     mime="application/pdf",
-                    use_container_width=True
-                )
-        with col_coach:
-            if st.session_state.coach_zip_bytes is not None:
-                st.download_button(
-                    label="Download Coach Packets (ZIP)",
-                    data=st.session_state.coach_zip_bytes,
-                    file_name="coach_packets.zip",
-                    mime="application/zip",
                     use_container_width=True
                 )
 
@@ -2351,6 +2264,8 @@ if st.session_state.initialized:
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Active Wrestlers", num_wrestlers)
+        num_scratched = len([w for w in st.session_state.roster if w.get("scratch")])
+        c1.metric("Scratched Wrestlers", num_scratched)
         c2.metric("Total Bouts", total_bouts)
         c3.metric("Avg Matches / Wrestler", f"{avg_matches:.2f}")
 
@@ -2372,7 +2287,7 @@ if st.session_state.initialized:
                         match_counts[wid] = {"Matches": 0}
                     match_counts[wid]["Matches"] += 1
 
-            # Build rows with full wrestler data
+            # Build rows with full wrestler data, including gender
             rows = []
             for w in st.session_state.active:
                 rows.append({
@@ -2382,6 +2297,7 @@ if st.session_state.initialized:
                     "Level": f"{w['level']:.1f}",
                     "Weight": w["weight"],           # keep as float for correct sorting
                     "Weight_display": f"{w['weight']:.0f}",  # nice display version
+                    "Gender": (w.get("gender") if w.get("gender") in ("M", "F") else "Unknown"),
                     "Matches": match_counts.get(w["id"], {}).get("Matches", 0),
                 })
 
@@ -2393,6 +2309,16 @@ if st.session_state.initialized:
             df_wc["Status"] = df_wc["Matches"].apply(
                 lambda m: "Below Min" if m < min_m else ("Above Max" if m > max_m else "OK")
             )
+
+            # NEW: gender filter
+            gender_options = ["M", "F", "Unknown"]
+            selected_genders = st.multiselect(
+                "Filter by gender",
+                options=gender_options,
+                default=gender_options,
+                key="summary_gender_filter"
+            )
+            df_wc = df_wc[df_wc["Gender"].isin(selected_genders)]
 
             # Default sort: Team → Wrestler name
             default_df = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
@@ -2412,10 +2338,21 @@ if st.session_state.initialized:
                 display_df = default_df
 
             # Final display (use pretty weight column)
-            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Matches", "Status"]]
+            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Gender", "Matches", "Status"]]
             final_display = final_display.rename(columns={"Weight_display": "Weight"})
+            # Convert only Grade and Matches to string so Streamlit left-aligns them
+            final_display["Grade"] = final_display["Grade"].astype(str)
+            final_display["Matches"] = final_display["Matches"].astype(str)
 
-            st.dataframe(final_display, use_container_width=True, hide_index=True)
+           # Pandas Styler to left-justify all columns while keeping numeric types
+            styled = final_display.style.set_properties(**{"text-align": "left"})
+            styled = styled.set_table_styles(
+                [dict(selector="th", props=[("text-align", "left")])]
+            )
+            
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+            # --- B: Add note for clarity ---
+            st.caption("Note: Wrestlers marked as scratched are not included in this table.")
 
         st.markdown("---")
 
@@ -2484,6 +2421,13 @@ Your CSV **must** include these columns:
 | `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
 | `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
 
+Optional columns:
+
+| Column            | Description                                                                 | Example |
+|-------------------|-----------------------------------------------------------------------------|---------|
+| `gender`          | `M` / `F` (or similar; normalized internally)                              | `F`     |
+| `cross_gender_ok` | `Y`/`N`, whether this wrestler can wrestle someone of a different gender   | `N`     |
+
 You **do not** need to provide an `id` column – the app generates unique IDs internally.
 Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
@@ -2508,6 +2452,7 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
 - Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
+  - Wrestler 2 choices are filtered so that gender preferences are respected (cross-gender only if both wrestlers allow it).
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
@@ -2525,11 +2470,10 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
         st.markdown("##### 4. Exports")
         st.markdown(
             """
-- Click **Generate Matches** to build:
+- Click **Generate Documents** to build:
   - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
-  - A **Mat Sheets PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
-- Click **Generate Coach Packets** to build:
-  - **One PDF per team** with dynamic `Match 1…N` columns, zipped into `coach_packets.zip` for easy sharing with coaches.
+  - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
+- Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
             """
         )
 
@@ -2547,3 +2491,8 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
+
+
+
+
