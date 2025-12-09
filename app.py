@@ -2329,6 +2329,9 @@ if st.session_state.initialized:
             # Final display (use pretty weight column)
             final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Gender", "Matches", "Status"]]
             final_display = final_display.rename(columns={"Weight_display": "Weight"})
+            # Convert only Grade and Matches to string so Streamlit left-aligns them
+            final_display["Grade"] = final_display["Grade"].astype(str)
+            final_display["Matches"] = final_display["Matches"].astype(str)
 
            # Pandas Styler to left-justify all columns while keeping numeric types
             styled = final_display.style.set_properties(**{"text-align": "left"})
@@ -2475,6 +2478,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
