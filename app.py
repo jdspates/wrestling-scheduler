@@ -639,19 +639,49 @@ def generate_coach_packets_pdf(full_schedule):
     Build a PDF with one page per team (landscape).
     Each page lists all active wrestlers on that team and ALL of their matches
     (across mats), with dynamic Match 1 / Match 2 / ... columns.
-    Match text is abbreviated: M1 S18: B. Stebbins (FL)
-    """
-    buf = io.BytesIO()
 
-    # 👉 LANDSCAPE instead of portrait
-    page_size = landscape(letter)
-    doc = SimpleDocTemplate(buf, pagesize=page_size)
+    Columns: Wrestler | Wt | Match 1 | Match 2 | ...
+    Match cell example: "M1 S18: B. Stebbins (FL)"
+    """
+    from reportlab.lib.pagesizes import landscape, letter  # in case not imported at top
+
+    buf = io.BytesIO()
+    # LANDSCAPE page setup
+    doc = SimpleDocTemplate(buf, pagesize=landscape(letter))
+    page_width, page_height = landscape(letter)
+    avail_width = page_width - doc.leftMargin - doc.rightMargin
+
     elements = []
     styles = getSampleStyleSheet()
 
-    # How wide is the usable area (page minus margins)?
-    page_width, page_height = page_size
-    avail_width = page_width - doc.leftMargin - doc.rightMargin
+    # --- Small helpers for abbreviations ---------------------------------
+    def abbreviate_team(team: str) -> str:
+        """
+        Make a short team code like:
+        "Forest Lake" -> "FL"
+        "Stillwater"  -> "S"
+        "New Prague"  -> "NP"
+        """
+        if not team:
+            return ""
+        parts = [p for p in str(team).split() if p.strip()]
+        initials = "".join(p[0].upper() for p in parts)
+        return initials[:3]
+
+    def abbreviate_name(full_name: str) -> str:
+        """
+        "Brandon Stebbins" -> "B. Stebbins"
+        "Aiden" -> "Aiden"
+        "Mary Ann Smith" -> "M. Smith"
+        """
+        if not full_name:
+            return ""
+        parts = [p for p in str(full_name).split() if p.strip()]
+        if len(parts) == 1:
+            return parts[0]
+        first = parts[0]
+        last = parts[-1]
+        return f"{first[0].upper()}. {last}"
 
     # Map wrestler_id -> wrestler record (only active wrestlers)
     active = st.session_state.get("active", [])
@@ -659,7 +689,7 @@ def generate_coach_packets_pdf(full_schedule):
 
     # Build per-wrestler match info
     # key: (team, wrestler_id) -> {
-    #   "name", "team", "grade", "weight", "matches": [ {mat, slot, opp_name, opp_team} ]
+    #   "name", "team", "weight", "matches": [ {mat, slot, opp_name, opp_team} ]
     # }
     packets = {}
 
@@ -683,7 +713,6 @@ def generate_coach_packets_pdf(full_schedule):
                 packets[key] = {
                     "name": w["name"],
                     "team": team,
-                    "grade": w["grade"],
                     "weight": w["weight"],
                     "matches": []
                 }
@@ -709,14 +738,14 @@ def generate_coach_packets_pdf(full_schedule):
     first_team = True
 
     for team, wrestlers in sorted(team_to_wrestlers.items()):
-        # Sort wrestlers (light → heavy, then grade, then name)
-        wrestlers.sort(key=lambda r: (r["weight"], r["grade"], r["name"]))
+        # Sort wrestlers (light → heavy, then name)
+        wrestlers.sort(key=lambda r: (r["weight"], r["name"]))
 
         # How many match columns do we need?
         max_matches = max((len(r["matches"]) for r in wrestlers), default=0)
 
-        # Headers: Wrestler / Wt / Grade / Match 1 / Match 2 / ... / Match N
-        headers = ["Wrestler", "Wt", "Grade"] + [
+        # Headers: Wrestler / Wt / Match 1 / Match 2 / ... / Match N
+        headers = ["Wrestler", "Wt"] + [
             f"Match {i + 1}" for i in range(max_matches)
         ]
 
@@ -727,29 +756,29 @@ def generate_coach_packets_pdf(full_schedule):
             row = [
                 r["name"],
                 f"{r['weight']:.0f}",
-                str(r["grade"]),
             ]
 
-            # Add each match cell (ABBREVIATED)
+            # Add each match cell with abbreviated text:
+            # "M1 S18: B. Stebbins (FL)"
             for m in r["matches"]:
-                opp_short = _short_name(m.get("opp_name", ""))
-                team_short = _team_abbrev(m.get("opp_team", ""))
-                cell = f"M{m['mat']} S{m['slot']}: {opp_short}"
-                if team_short:
-                    cell += f" ({team_short})"
+                opp_name = abbreviate_name(m["opp_name"])
+                opp_team_short = abbreviate_team(m["opp_team"])
+                cell = f"M{m['mat']} S{m['slot']}: {opp_name} ({opp_team_short})"
                 row.append(cell)
 
             # Pad with empty strings so every row has the same number of columns
-            while len(row) < 3 + max_matches:
+            while len(row) < 2 + max_matches:
                 row.append("")
 
             table_data.append(row)
 
         # Column widths:
-        # - First 3 columns fixed
+        # - First 2 columns fixed
         # - Remaining columns share whatever width is left on the page
-        fixed_widths = [2.0 * inch, 0.55 * inch, 0.65 * inch]
+        # You can tweak these to taste if things still feel tight.
+        fixed_widths = [1.8 * inch, 0.45 * inch]  # Wrestler, Wt
 
+        # Make sure we don't go negative even if margins change
         remaining_width = max(avail_width - sum(fixed_widths), 2.0 * inch)
 
         if max_matches > 0:
@@ -766,7 +795,7 @@ def generate_coach_packets_pdf(full_schedule):
             ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
             ("ALIGN", (0, 0), (-1, -1), "LEFT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),  # small but readable
+            ("FONTSIZE", (0, 0), (-1, -1), 8),  # smaller text so long match info fits
         ])
         table.setStyle(style)
 
@@ -2689,6 +2718,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
