@@ -1942,12 +1942,14 @@ if st.session_state.initialized:
                             label = (
                                 f"{early_prefix}"
                                 f"Slot {slot_index:02d} | Bout {bn:>3} | "
-                                f"{icon1} {b['w1_name']} ({b['w1_team']})  vs  "
-                                f"{icon2} {b['w2_name']} ({b['w2_team']})"
+                                f"{icon1} {b['w1_name']} ({b['w1_team']}, {b.get('w1_gender', '?')})  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']}, {b.get('w2_gender', '?')})"
+                                f"  |  G {b.get('w1_gender', '?')}/{b.get('w2_gender', '?')}"
                                 f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                                 f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
                                 f"  |  Score {b['score']:.1f}"
                             )
+
                             row_labels.append(label)
                             label_to_bout[label] = bn
 
@@ -2436,4 +2438,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
