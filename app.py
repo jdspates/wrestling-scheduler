@@ -1036,98 +1036,107 @@ if uploaded and not st.session_state.initialized:
     except Exception as e:
         st.error(f"Error loading roster: {e}")
 
-# Start-over / load new roster button, right under the uploader
-if st.session_state.get("initialized") and st.session_state.get("roster"):
-
-    # NEW LOGIC: show either Start Over button OR confirmation UI, never both
-    if not st.session_state.get("reset_confirm", False):
-        # Primary Start Over button – toggles confirmation mode
-        if st.button(
-            "🔄 Start Over / Load New Roster",
-            help="Clear current roster and matches so you can upload a new file.",
-            key="start_over_button",
-        ):
-            st.session_state.reset_confirm = True
-            st.rerun()
-    else:
-        # Confirmation UI when reset_confirm is True
-        st.warning(
-            "Are you sure you want to **reset this meet**? "
-            "This will clear the current roster, matchups, mat orders, exports, and undo history "
-            "for this browser session."
-        )
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ Yes, reset meet", key="confirm_reset_yes"):
-                for key in [
-                    "initialized", "bout_list", "mat_schedules", "suggestions",
-                    "active", "mat_order", "excel_bytes", "pdf_bytes",
-                    "roster", "manual_match_warning", "action_history"
-                ]:
-                    st.session_state.pop(key, None)
-
-                # Reset confirmation flag
-                st.session_state.reset_confirm = False
-
-                # Bump uploader versions so Streamlit creates fresh, empty uploaders
-                st.session_state.roster_uploader_version += 1
-                st.session_state.state_json_uploader_version += 1  # clears JSON file selection
-
-                st.success("Meet reset. You can upload a new roster file.")
-                st.rerun()
-
-        with c2:
-            if st.button("❌ Cancel", key="confirm_reset_no"):
-                st.session_state.reset_confirm = False
-                st.info("Reset cancelled.")
-                st.rerun()
-
 # ----------------------------------------------------------------------
-# SAVE / LOAD MEET (JSON SNAPSHOT)
+# ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET
 # ----------------------------------------------------------------------
-st.markdown("### Save / Load Meet")
-
-# Export current meet to JSON
-if st.session_state.get("initialized"):
-    snapshot = build_meet_snapshot()
-    json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
-
-    st.download_button(
-        "💾 Download meet as JSON",
-        data=json_bytes,
-        file_name="wrestling_meet_state.json",
-        mime="application/json",
-        use_container_width=False,
+with st.expander("Advanced options (Start Over, save / load meet)", expanded=False):
+    st.caption(
+        "Optional tools for resetting this meet or saving/loading a meet file. "
+        "Most coaches won't need these every time."
     )
 
-# Import meet from JSON (manual load – avoids infinite restore loop)
-uploaded_state = st.file_uploader(
-    "📂 Load saved meet (.json)",
-    type="json",
-    key=f"state_json_uploader_v{st.session_state.state_json_uploader_version}",
-)
+    # ----- Start Over / Load New Roster -----
+    if st.session_state.get("initialized") and st.session_state.get("roster"):
 
-if uploaded_state is not None:
-    if st.button("Load this saved meet", key="load_state_button"):
-        try:
-            data = json.load(uploaded_state)
-            restore_meet_from_snapshot(data)
-            st.success("Meet restored from JSON.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Could not load saved meet: {e}")
+        st.markdown("##### Start Over / Load New Roster")
 
-# Restore from server-side autosave file (if present)
-if os.path.exists(AUTOSAVE_FILE):
-    if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
-        try:
-            with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            restore_meet_from_snapshot(data)
-            st.success("Meet restored from autosave.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Could not restore autosave: {e}")
+        # Show either Start Over button OR confirmation UI, never both
+        if not st.session_state.get("reset_confirm", False):
+            # Primary Start Over button – toggles confirmation mode
+            if st.button(
+                "🔄 Start Over / Load New Roster",
+                help="Clear current roster and matches so you can upload a new file.",
+                key="start_over_button",
+            ):
+                st.session_state.reset_confirm = True
+                st.rerun()
+        else:
+            # Confirmation UI when reset_confirm is True
+            st.warning(
+                "Are you sure you want to **reset this meet**? "
+                "This will clear the current roster, matchups, mat orders, exports, and undo history "
+                "for this browser session."
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Yes, reset meet", key="confirm_reset_yes"):
+                    for key in [
+                        "initialized", "bout_list", "mat_schedules", "suggestions",
+                        "active", "mat_order", "excel_bytes", "pdf_bytes",
+                        "roster", "manual_match_warning", "action_history"
+                    ]:
+                        st.session_state.pop(key, None)
+
+                    # Reset confirmation flag
+                    st.session_state.reset_confirm = False
+
+                    # Bump uploader versions so Streamlit creates fresh, empty uploaders
+                    st.session_state.roster_uploader_version += 1
+                    st.session_state.state_json_uploader_version += 1  # clears JSON file selection
+
+                    st.success("Meet reset. You can upload a new roster file.")
+                    st.rerun()
+
+            with c2:
+                if st.button("❌ Cancel", key="confirm_reset_no"):
+                    st.session_state.reset_confirm = False
+                    st.info("Reset cancelled.")
+                    st.rerun()
+
+    # ----- Save / Load Meet (JSON snapshot) -----
+    st.markdown("##### Save / Load Meet")
+
+    # Export current meet to JSON
+    if st.session_state.get("initialized"):
+        snapshot = build_meet_snapshot()
+        json_bytes = json.dumps(snapshot, indent=2).encode("utf-8")
+
+        st.download_button(
+            "💾 Download meet as JSON",
+            data=json_bytes,
+            file_name="wrestling_meet_state.json",
+            mime="application/json",
+            use_container_width=False,
+        )
+
+    # Import meet from JSON (manual load – avoids infinite restore loop)
+    uploaded_state = st.file_uploader(
+        "📂 Load saved meet (.json)",
+        type="json",
+        key=f"state_json_uploader_v{st.session_state.state_json_uploader_version}",
+    )
+
+    if uploaded_state is not None:
+        if st.button("Load this saved meet", key="load_state_button"):
+            try:
+                data = json.load(uploaded_state)
+                restore_meet_from_snapshot(data)
+                st.success("Meet restored from JSON.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not load saved meet: {e}")
+
+    # Restore from server-side autosave file (if present)
+    if os.path.exists(AUTOSAVE_FILE):
+        if st.button("⏮️ Restore from autosave", key="restore_autosave_button"):
+            try:
+                with open(AUTOSAVE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                restore_meet_from_snapshot(data)
+                st.success("Meet restored from autosave.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not restore autosave: {e}")
 
 st.markdown("---")
 
@@ -2482,6 +2491,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
