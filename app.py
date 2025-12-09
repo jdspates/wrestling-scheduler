@@ -1503,6 +1503,14 @@ if st.session_state.initialized:
             # Map IDs to wrestler records for quick lookup
             id_to_wrestler = {w["id"]: w for w in raw_active}
 
+            # NEW: helper for gender tags in manual match dropdowns
+            def gender_tag_from_id(wid: int) -> str:
+                w = id_to_wrestler.get(wid)
+                if not w:
+                    return "-"
+                g = w.get("gender")
+                return g if g in ("M", "F") else "-"
+
             # All active wrestlers sorted by weight (lightest → heaviest)
             sorted_all_ids = sorted(active_ids, key=lambda wid: id_to_wrestler[wid]["weight"])
 
@@ -1549,7 +1557,7 @@ if st.session_state.initialized:
                     options=filtered_ids_for_w1,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
-                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"({id_to_wrestler[wid]['team']}, {gender_tag_from_id(wid)}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
                         f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
                         f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
@@ -1616,7 +1624,7 @@ if st.session_state.initialized:
                     options=candidate_ids,
                     format_func=lambda wid: (
                         f"{id_to_wrestler[wid]['name']} "
-                        f"({id_to_wrestler[wid]['team']}) – "
+                        f"({id_to_wrestler[wid]['team']}, {gender_tag_from_id(wid)}) – "
                         f"Lvl {id_to_wrestler[wid]['level']:.1f}, "
                         f"{id_to_wrestler[wid]['weight']:.0f} lbs, "
                         f"Matches: {len(id_to_wrestler[wid]['match_ids'])}"
@@ -1781,6 +1789,16 @@ if st.session_state.initialized:
 
         st.subheader("Mat Previews")
 
+        # NEW: map ID -> wrestler for gender display on mat previews
+        id_to_wrestler_global = {w["id"]: w for w in roster}
+
+        def gender_display(wid: int) -> str:
+            w = id_to_wrestler_global.get(wid)
+            if not w:
+                return "?"
+            g = w.get("gender")
+            return g if g in ("M", "F") else "?"
+
         if visible_conflicts:
             st.warning(
                 f"Rest conflicts detected: **{len(visible_conflicts)}** (requires at least "
@@ -1828,14 +1846,16 @@ if st.session_state.initialized:
                             color_name2 = team_color_for_roster.get(b["w2_team"])
                             dot1 = color_dot_hex(COLOR_MAP.get(color_name1, "#000000")) if color_name1 else ""
                             dot2 = color_dot_hex(COLOR_MAP.get(color_name2, "#000000")) if color_name2 else ""
+                            g1 = gender_display(b["w1_id"])
+                            g2 = gender_display(b["w2_id"])
 
                             table_rows.append(
                                 f"<tr>"
                                 f"<td>{e['mat_bout_num']}</td>"
                                 f"<td>{b['bout_num']}</td>"
                                 f"<td>{early_flag}</td>"
-                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']})</td>"
-                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']})</td>"
+                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']}, {g1})</td>"
+                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']}, {g2})</td>"
                                 f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
                                 f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
                                 f"<td>{b['score']:.1f}</td>"
@@ -1924,7 +1944,7 @@ if st.session_state.initialized:
                                 unsafe_allow_html=True,
                             )
 
-                        # Build drag labels (plain text, circle emojis)
+                        # Build drag labels (plain text, circle emojis + gender)
                         row_labels = []
                         label_to_bout = {}
                         for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
@@ -1938,18 +1958,18 @@ if st.session_state.initialized:
                             color_name2 = team_color_for_roster.get(b["w2_team"])
                             icon1 = COLOR_ICON.get(color_name1, "●")
                             icon2 = COLOR_ICON.get(color_name2, "●")
+                            g1 = gender_display(b["w1_id"])
+                            g2 = gender_display(b["w2_id"])
 
                             label = (
                                 f"{early_prefix}"
                                 f"Slot {slot_index:02d} | Bout {bn:>3} | "
-                                f"{icon1} {b['w1_name']} ({b['w1_team']}, {b.get('w1_gender', '?')})  vs  "
-                                f"{icon2} {b['w2_name']} ({b['w2_team']}, {b.get('w2_gender', '?')})"
-                                f"  |  G {b.get('w1_gender', '?')}/{b.get('w2_gender', '?')}"
+                                f"{icon1} {b['w1_name']} ({b['w1_team']}, {g1})  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2})"
                                 f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                                 f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
                                 f"  |  Score {b['score']:.1f}"
                             )
-
                             row_labels.append(label)
                             label_to_bout[label] = bn
 
@@ -2256,7 +2276,7 @@ if st.session_state.initialized:
                         match_counts[wid] = {"Matches": 0}
                     match_counts[wid]["Matches"] += 1
 
-            # Build rows with full wrestler data
+            # Build rows with full wrestler data, including gender
             rows = []
             for w in st.session_state.active:
                 rows.append({
@@ -2266,6 +2286,7 @@ if st.session_state.initialized:
                     "Level": f"{w['level']:.1f}",
                     "Weight": w["weight"],           # keep as float for correct sorting
                     "Weight_display": f"{w['weight']:.0f}",  # nice display version
+                    "Gender": (w.get("gender") if w.get("gender") in ("M", "F") else "Unknown"),
                     "Matches": match_counts.get(w["id"], {}).get("Matches", 0),
                 })
 
@@ -2277,6 +2298,16 @@ if st.session_state.initialized:
             df_wc["Status"] = df_wc["Matches"].apply(
                 lambda m: "Below Min" if m < min_m else ("Above Max" if m > max_m else "OK")
             )
+
+            # NEW: gender filter
+            gender_options = ["M", "F", "Unknown"]
+            selected_genders = st.multiselect(
+                "Filter by gender",
+                options=gender_options,
+                default=gender_options,
+                key="summary_gender_filter"
+            )
+            df_wc = df_wc[df_wc["Gender"].isin(selected_genders)]
 
             # Default sort: Team → Wrestler name
             default_df = df_wc.sort_values(["Team", "Wrestler"]).reset_index(drop=True)
@@ -2296,7 +2327,7 @@ if st.session_state.initialized:
                 display_df = default_df
 
             # Final display (use pretty weight column)
-            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Matches", "Status"]]
+            final_display = display_df[["Wrestler", "Team", "Grade", "Level", "Weight_display", "Gender", "Matches", "Status"]]
             final_display = final_display.rename(columns={"Weight_display": "Weight"})
 
             st.dataframe(final_display, use_container_width=True, hide_index=True)
@@ -2438,5 +2469,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
