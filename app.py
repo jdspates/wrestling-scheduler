@@ -81,8 +81,8 @@ DEFAULT_CONFIG = {
 TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch,gender,cross_gender_ok
 John Doe,Stillwater,7,1.0,70,N,N,M,Y
 Jane Smith,Hastings,8,1.5,75,N,N,F,N
-Ben Carter,Cottage Grove,6,2.0,80,N,N,M,Y
 Ava Johnson,Woodbury,7,1.0,68,Y,N,F,Y
+Mike Brown,Forest Lake,6,1.0,72,N,N,M,N
 """
 
 # Load base config once (read-only default, e.g. from repo)
@@ -2436,3 +2436,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
