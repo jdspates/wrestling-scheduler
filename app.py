@@ -71,14 +71,18 @@ DEFAULT_CONFIG = {
 # ----------------------------------------------------------------------
 # ROSTER TEMPLATE (for new coaches)
 # ----------------------------------------------------------------------
-# Columns MUST match what the app expects below:
+# Required columns the app expects:
 # ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
-# Internal numeric IDs are generated automatically after upload.
-TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch
-John Doe,Stillwater,7,1.0,70,Y,N
-Jane Smith,Hastings,8,1.5,75,N,N
-Ben Carter,Cottage Grove,6,2.0,80,N,N
-Ava Johnson,Woodbury,7,1.0,68,Y,N
+# Optional columns:
+# ["gender", "cross_gender_ok"]
+#
+# - gender: M/F (or variants like Male/Female/Boy/Girl – normalized in code)
+# - cross_gender_ok: Y/N (or True/False-ish) – whether this wrestler allows cross-gender matches.
+TEMPLATE_CSV = """name,team,grade,level,weight,early_matches,scratch,gender,cross_gender_ok
+John Doe,Stillwater,7,1.0,70,N,N,M,Y
+Jane Smith,Hastings,8,1.5,75,N,N,F,N
+Ben Carter,Cottage Grove,6,2.0,80,N,N,M,Y
+Ava Johnson,Woodbury,7,1.0,68,Y,N,F,Y
 """
 
 # Load base config once (read-only default, e.g. from repo)
@@ -188,22 +192,85 @@ if "mat_overrides" not in st.session_state:
     st.session_state.mat_overrides = {}
 
 # ----------------------------------------------------------------------
+# GENDER HELPERS (NEW)
+# ----------------------------------------------------------------------
+def _parse_gender(val):
+    """Normalize gender value to 'M', 'F', or None."""
+    if pd.isna(val):
+        return None
+    s = str(val).strip().upper()
+    if s in ["M", "MALE", "B", "BOY"]:
+        return "M"
+    if s in ["F", "FEMALE", "G", "GIRL"]:
+        return "F"
+    return None  # unknown/unset
+
+
+def _parse_cross_gender_ok(val):
+    """
+    Normalize cross-gender flag to bool.
+    Default True for backwards compatibility (no column = no restriction).
+    """
+    if pd.isna(val):
+        return True
+    s = str(val).strip().upper()
+    return s in ["Y", "YES", "TRUE", "T", "1"]
+
+
+def genders_compatible(w1, w2):
+    """
+    Gender matching rule:
+
+    - If either wrestler has no gender recorded, allow (no gender constraint).
+    - If both same gender, always allow.
+    - If genders differ, allow only if BOTH have cross_gender_ok = True.
+    """
+    g1 = w1.get("gender")
+    g2 = w2.get("gender")
+
+    # If either missing/unknown, don't enforce gender constraint
+    if not g1 or not g2:
+        return True
+
+    # Same gender always OK
+    if g1 == g2:
+        return True
+
+    # Cross-gender only if BOTH have cross_gender_ok = True
+    c1 = w1.get("cross_gender_ok", True)
+    c2 = w2.get("cross_gender_ok", True)
+    return bool(c1 and c2)
+
+# ----------------------------------------------------------------------
 # CORE LOGIC
 # ----------------------------------------------------------------------
 def is_compatible(w1, w2):
-    return w1["team"] != w2["team"] and not (
-        (w1["grade"] == 5 and w2["grade"] in [7, 8]) or
-        (w2["grade"] == 5 and w1["grade"] in [7, 8])
+    """
+    Base compatibility check:
+      - different teams
+      - avoid 5th vs 7th/8th graders
+      - respect gender preferences (NEW)
+    """
+    return (
+        w1["team"] != w2["team"]
+        and not (
+            (w1["grade"] == 5 and w2["grade"] in [7, 8]) or
+            (w2["grade"] == 5 and w1["grade"] in [7, 8])
+        )
+        and genders_compatible(w1, w2)
     )
+
 
 def max_weight_diff(w):
     return max(CONFIG["MIN_WEIGHT_DIFF"], w * CONFIG["WEIGHT_DIFF_FACTOR"])
+
 
 def matchup_score(w1, w2):
     return round(
         abs(w1["weight"] - w2["weight"]) +
         abs(w1["level"] - w2["level"]) * 10, 1
     )
+
 
 def generate_initial_matchups(active):
     bouts = set()
@@ -255,19 +322,31 @@ def generate_initial_matchups(active):
         })
     return bout_list
 
+
 def build_suggestions(active, bout_list):
+    """
+    Suggest additional matches for wrestlers under MIN_MATCHES.
+    Now respects gender preferences via genders_compatible().
+    """
     under = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
     sugg = []
     for w in under:
         opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
         opps = [
             o for o in opps
-            if abs(w["weight"] - o["weight"]) <= \
+            if genders_compatible(w, o)  # NEW gender filter
+            and abs(w["weight"] - o["weight"]) <= \
                 min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
             and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
         ]
         if not opps:
-            opps = [o for o in active if o["id"] not in w["match_ids"] and o["id"] != w["id"]]
+            # Fallback – any opponent not yet matched, but still gender-compatible if possible
+            opps = [
+                o for o in active
+                if o["id"] not in w["match_ids"]
+                and o["id"] != w["id"]
+                and genders_compatible(w, o)
+            ]
         for o in sorted(opps, key=lambda o: matchup_score(w, o))[:3]:
             sugg.append({
                 "wrestler": w["name"], "team": w["team"],
@@ -280,6 +359,7 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
+
 
 def generate_mat_schedule(bout_list, gap=4):
     """Base scheduling algorithm (ignores manual ordering, respects manual removals)."""
@@ -389,6 +469,7 @@ def generate_mat_schedule(bout_list, gap=4):
 
     return schedules
 
+
 def apply_mat_order_to_global_schedule():
     """
     Take the base schedule, then:
@@ -431,6 +512,7 @@ def apply_mat_order_to_global_schedule():
             schedules.append(e)
 
     return schedules
+
 
 def compute_rest_conflicts(schedule, min_gap):
     """
@@ -481,6 +563,7 @@ def compute_rest_conflicts(schedule, min_gap):
 
     return conflicts
 
+
 def compute_multi_mat_assignments(schedule):
     """
     Find wrestlers who are scheduled on more than one mat.
@@ -528,6 +611,7 @@ def compute_multi_mat_assignments(schedule):
             })
 
     return multi
+
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
@@ -540,11 +624,13 @@ def color_dot_hex(hex_color: str) -> str:
         f"border-radius:50%;background:{hex_color};margin-right:6px;'></span>"
     )
 
+
 def push_action(action: dict):
     """Record an action so it can be undone later."""
     if "action_history" not in st.session_state:
         st.session_state.action_history = []
     st.session_state.action_history.append(action)
+
 
 def _undo_remove(bout_num: int):
     """Undo a previously removed bout."""
@@ -574,6 +660,7 @@ def _undo_remove(bout_num: int):
     st.session_state.sortable_version += 1
     st.success("Undo: restored last removed bout.")
 
+
 def _undo_drag(previous_mat_order: dict):
     """Undo a drag/reorder by restoring previous mat_order snapshot."""
     st.session_state.mat_order = {
@@ -583,6 +670,7 @@ def _undo_drag(previous_mat_order: dict):
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: last drag / reorder reverted.")
+
 
 def _undo_manual_add(bout_num: int):
     """Undo a manually-added match."""
@@ -614,6 +702,7 @@ def _undo_manual_add(bout_num: int):
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: manual match removed.")
+
 
 def _undo_suggest_add(bout_nums: list[int]):
     """Undo a batch of suggested matches that were added at once."""
@@ -647,6 +736,7 @@ def _undo_suggest_add(bout_nums: list[int]):
     st.session_state.sortable_version += 1
     st.success("Undo: suggested matches removed.")
 
+
 def _undo_scratch_update(snapshot: dict):
     """Undo a scratches update by restoring a saved snapshot."""
     # Restore from snapshot using deep copies so we don't share references
@@ -663,6 +753,7 @@ def _undo_scratch_update(snapshot: dict):
     st.session_state.pdf_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: scratches and schedule restored.")
+
 
 def undo_last_action():
     """Pop the last action off the history and undo it."""
@@ -689,6 +780,7 @@ def undo_last_action():
         return
 
     st.rerun()
+
 
 def remove_bout(bout_num: int):
     """Mark bout as manually removed, update wrestler match_ids, trim from mat_order."""
@@ -722,10 +814,12 @@ def remove_bout(bout_num: int):
     st.session_state.sortable_version += 1
     st.rerun()
 
+
 def validate_roster_df(df: pd.DataFrame):
     """Return list of error messages if roster has issues; empty list if OK."""
     errors = []
     # NOTE: no 'id' column required now – IDs are generated internally
+    # gender and cross_gender_ok are OPTIONAL
     required = ["name", "team", "grade", "level", "weight", "early_matches", "scratch"]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -786,6 +880,7 @@ def build_meet_snapshot():
         "mat_order": st.session_state.get("mat_order", {}),
     }
 
+
 def restore_meet_from_snapshot(data: dict):
     """Restore a meet snapshot into session_state."""
     # Load CONFIG from snapshot
@@ -814,6 +909,7 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.initialized = bool(st.session_state.roster)
     st.session_state.sortable_version += 1  # refresh drag widgets
     st.session_state.action_history = []  # clear undo history on restore
+
 
 def autosave_meet():
     try:
@@ -919,6 +1015,11 @@ if uploaded and not st.session_state.initialized:
                 str(w["scratch"]).strip().upper() == "Y"
                 or w["scratch"] in [1, True]
             )
+
+            # --- NEW: gender + cross_gender_ok (optional columns) ---
+            w["gender"] = _parse_gender(w.get("gender", None))
+            w["cross_gender_ok"] = _parse_cross_gender_ok(w.get("cross_gender_ok", None))
+
             w["match_ids"] = []
 
         st.session_state.roster = wrestlers
@@ -1472,17 +1573,29 @@ if st.session_state.initialized:
                     # Wrestlers who already have a match with Wrestler 1
                     w1_existing_opponents = set(id_to_wrestler[manual_w1_id]["match_ids"])
 
-                    # Filter: within window, not W1, not already matched with W1
+                    # Filter: within window, not W1, not already matched with W1,
+                    # and gender-compatible (Option A)
                     candidate_ids = [
                         wid for wid in sorted_all_ids[start:end]
-                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                        if wid != manual_w1_id
+                           and wid not in w1_existing_opponents
+                           and genders_compatible(
+                                id_to_wrestler[manual_w1_id],
+                                id_to_wrestler[wid]
+                            )
                     ]
 
-                    # Fallback: if window collapses, use all others not already opponents
+                    # Fallback: if window collapses, use all others not already opponents,
+                    # still respecting gender compatibility.
                     if not candidate_ids:
                         candidate_ids = [
                             wid for wid in sorted_all_ids
-                            if wid != manual_w1_id and wid not in w1_existing_opponents
+                            if wid != manual_w1_id
+                               and wid not in w1_existing_opponents
+                               and genders_compatible(
+                                    id_to_wrestler[manual_w1_id],
+                                    id_to_wrestler[wid]
+                                )
                         ]
                 else:
                     w1_existing_opponents = set(
@@ -1490,7 +1603,12 @@ if st.session_state.initialized:
                     )
                     candidate_ids = [
                         wid for wid in sorted_all_ids
-                        if wid != manual_w1_id and wid not in w1_existing_opponents
+                        if wid != manual_w1_id
+                           and wid not in w1_existing_opponents
+                           and genders_compatible(
+                                id_to_wrestler[manual_w1_id],
+                                id_to_wrestler[wid]
+                            )
                     ]
 
                 manual_w2_id = st.selectbox(
@@ -1522,6 +1640,15 @@ if st.session_state.initialized:
                 else:
                     w1 = next(w for w in raw_active if w["id"] == manual_w1_id)
                     w2 = next(w for w in raw_active if w["id"] == manual_w2_id)
+
+                    # Extra safety: don't allow gender-incompatible pair, even though
+                    # we filtered them out of the dropdown.
+                    if not genders_compatible(w1, w2):
+                        st.warning(
+                            "This manual pairing does not respect gender preferences and cannot be created. "
+                            "Adjust the wrestlers' gender or cross-gender settings if this match is intended."
+                        )
+                        st.stop()
 
                     # Check if they already have a match together (ignore Manually Removed bouts)
                     already_linked = any(
@@ -1646,7 +1773,6 @@ if st.session_state.initialized:
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
         
-
 
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
@@ -2240,6 +2366,13 @@ Your CSV **must** include these columns:
 | `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
 | `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
 
+Optional columns:
+
+| Column            | Description                                                                 | Example |
+|-------------------|-----------------------------------------------------------------------------|---------|
+| `gender`          | `M` / `F` (or similar; normalized internally)                              | `F`     |
+| `cross_gender_ok` | `Y`/`N`, whether this wrestler can wrestle someone of a different gender   | `N`     |
+
 You **do not** need to provide an `id` column – the app generates unique IDs internally.
 Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
@@ -2264,6 +2397,7 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
 - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
 - Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
+  - Wrestler 2 choices are filtered so that gender preferences are respected (cross-gender only if both wrestlers allow it).
 - In **Mat Previews**:
   - Drag to reorder bouts on each mat.
   - Use the per-mat dropdown to remove a bout.
@@ -2302,6 +2436,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
