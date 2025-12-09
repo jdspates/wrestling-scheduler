@@ -2325,25 +2325,31 @@ if st.session_state.initialized:
         else:
             st.caption("No actions yet to undo.")
 
-        # ---- COACH PACKETS (PER TEAM) ----
+        # ================================
+        # ---- COACH PACKETS (PER TEAM) ---
+        # ================================
         st.markdown("---")
-        st.subheader("Coach Packets (per team)")
+        st.markdown("### Coach Packets (per team)")
 
-        if st.button(
+        generate_coach = st.button(
             "Generate Coach Packets PDF",
-            help="Builds a page per team with all matches for each of their wrestlers.",
+            type="primary",  # red button
+            help="Builds a page per team with all matches for each wrestler.",
             key="generate_coach_packets_btn",
-        ):
+        )
+
+        if generate_coach:
             if not full_schedule:
                 st.warning("No schedule yet – build matchups first.")
             else:
                 try:
                     coach_pdf = generate_coach_packets_pdf(full_schedule)
                     st.session_state.coach_pdf_bytes = coach_pdf
-                    st.toast("Coach packets PDF generated.")
+                    st.toast("Coach packets PDF generated.", icon="📄")
                 except Exception as e:
                     st.error(f"Could not generate coach packets: {e}")
 
+        # Download button for coach packets
         if st.session_state.get("coach_pdf_bytes"):
             st.download_button(
                 "Download Coach Packets PDF",
@@ -2353,42 +2359,63 @@ if st.session_state.initialized:
                 use_container_width=True,
             )
 
-        # ---- GENERATE MEET ----
-        if st.button("Generate Documents", type="primary", help="Generate Excel + PDF for download"):
+        # ================================
+        # ---- MEET DOCUMENTS SECTION ----
+        # ================================
+        st.markdown("---")
+        st.markdown("### Meet Documents (Excel + Mat PDF)")
+
+        # ---- GENERATE MEET (Excel + Mat PDFs) ----
+        if st.button(
+            "Generate Documents",
+            type="primary",
+            help="Generate Excel + mat-by-mat PDF for download",
+            key="generate_meet_docs_btn",
+        ):
             with st.spinner("Generating files..."):
                 try:
                     final_sched = apply_mat_order_to_global_schedule()
                     st.session_state.mat_schedules = final_sched
 
-                    # Excel
+                    # -------- Excel generation --------
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                        # Roster sheet (active wrestlers only)
                         roster_df = pd.DataFrame(st.session_state.active)
-                        roster_df.to_excel(writer, sheet_name='Roster', index=False)
+                        roster_df.to_excel(writer, sheet_name="Roster", index=False)
 
+                        # All matchups sheet
                         matchups_df = pd.DataFrame(st.session_state.bout_list)
-                        matchups_df.to_excel(writer, sheet_name='Matchups', index=False)
+                        matchups_df.to_excel(writer, sheet_name="Matchups", index=False)
 
+                        # Remaining suggestions
                         suggestions_df = pd.DataFrame(st.session_state.suggestions)
-                        suggestions_df.to_excel(writer, sheet_name='Remaining Suggestions', index=False)
+                        suggestions_df.to_excel(writer, sheet_name="Remaining Suggestions", index=False)
 
+                        # Per-mat sheets
                         for m in range(1, CONFIG["NUM_MATS"] + 1):
                             data = [e for e in final_sched if e["mat"] == m]
                             if not data:
                                 pd.DataFrame(
                                     [["", "", ""]],
-                                    columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
+                                    columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"],
                                 ).to_excel(writer, f"Mat {m}", index=False)
                                 continue
+
                             df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
                             df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
                             df.to_excel(writer, f"Mat {m}", index=False)
+
+                            # Highlight early matches if openpyxl is available
                             if _EXCEL_AVAILABLE:
                                 ws = writer.book[f"Mat {m}"]
-                                fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                                fill = PatternFill(
+                                    start_color="FFFF99", end_color="FFFF99", fill_type="solid"
+                                )
                                 for i, _ in df.iterrows():
                                     if next(
-                                        b for b in st.session_state.bout_list
+                                        b
+                                        for b in st.session_state.bout_list
                                         if b["bout_num"] == data[i]["bout_num"]
                                     )["is_early"]:
                                         for c in range(1, 3 + 1):
@@ -2396,63 +2423,76 @@ if st.session_state.initialized:
 
                     st.session_state.excel_bytes = out.getvalue()
 
-                    # PDF
+                    # -------- Mat-by-mat PDF generation --------
                     buf = io.BytesIO()
                     doc = SimpleDocTemplate(buf, pagesize=letter)
                     elements = []
                     styles = getSampleStyleSheet()
+
                     for m in range(1, CONFIG["NUM_MATS"] + 1):
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
                             elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
-
                             elements.append(PageBreak())
                             continue
+
                         table = [["#", "Wrestler 1", "Wrestler 2"]]
                         for e in data:
                             b = next(
-                                x for x in st.session_state.bout_list
+                                x
+                                for x in st.session_state.bout_list
                                 if x["bout_num"] == e["bout_num"]
                             )
-                            table.append([
-                                e["mat_bout_num"],
-                                Paragraph(
-                                    f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}">'
-                                    f'<b>{b["w1_name"]}</b></font> ({b["w1_team"]})',
-                                    styles["Normal"]
-                                ),
-                                Paragraph(
-                                    f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}">'
-                                    f'<b>{b["w2_name"]}</b></font> ({b["w2_team"]})',
-                                    styles["Normal"]
-                                )
-                            ])
+                            table.append(
+                                [
+                                    e["mat_bout_num"],
+                                    Paragraph(
+                                        f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}">'
+                                        f"<b>{b['w1_name']}</b></font> ({b['w1_team']})",
+                                        styles["Normal"],
+                                    ),
+                                    Paragraph(
+                                        f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}">'
+                                        f"<b>{b['w2_name']}</b></font> ({b['w2_team']})",
+                                        styles["Normal"],
+                                    ),
+                                ]
+                            )
+
                         t = Table(table, colWidths=[0.5 * inch, 3 * inch, 3 * inch])
-                        s = TableStyle([
-                            ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
-                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                            ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
-                            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-                        ])
+                        s = TableStyle(
+                            [
+                                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
+                                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ]
+                        )
+
+                        # Highlight early matches
                         for r, _ in enumerate(table[1:], 1):
                             if next(
-                                b for b in st.session_state.bout_list
+                                b
+                                for b in st.session_state.bout_list
                                 if b["bout_num"] == data[r - 1]["bout_num"]
                             )["is_early"]:
-
                                 s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
+
                         t.setStyle(s)
                         elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
                         if m < CONFIG["NUM_MATS"]:
                             elements.append(PageBreak())
+
                     doc.build(elements)
                     st.session_state.pdf_bytes = buf.getvalue()
-                    st.toast("Files generated!")
+
+                    st.toast("Meet documents generated!", icon="✅")
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
-                    st.toast("Error – check console.")
+                    st.toast("Error – check console.", icon="⚠️")
 
+        # Download buttons for meet documents
         col_ex, col_pdf = st.columns(2)
         with col_ex:
             if st.session_state.excel_bytes is not None:
@@ -2461,18 +2501,17 @@ if st.session_state.initialized:
                     data=st.session_state.excel_bytes,
                     file_name="meet_schedule.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    use_container_width=True,
                 )
         with col_pdf:
             if st.session_state.pdf_bytes is not None:
                 st.download_button(
-                    label="Download PDF",
+                    label="Download Mat PDF",
                     data=st.session_state.pdf_bytes,
                     file_name="meet_schedule.pdf",
                     mime="application/pdf",
-                    use_container_width=True
+                    use_container_width=True,
                 )
-
     # ==========================================================
     # TAB 2 – MEET SUMMARY
     # ==========================================================
@@ -2718,6 +2757,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
