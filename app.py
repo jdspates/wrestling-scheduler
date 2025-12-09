@@ -14,6 +14,9 @@ import os
 import copy
 from streamlit_js_eval import streamlit_js_eval
 from datetime import datetime  # NEW: for autosave timestamp
+from collections import defaultdict
+import zipfile
+import re
 
 from streamlit_sortables import sort_items  # drag-and-drop component
 
@@ -149,7 +152,8 @@ CONFIG = st.session_state.CONFIG  # convenience reference
 for key in [
     "initialized", "bout_list", "mat_schedules", "suggestions",
     "active", "mat_order", "excel_bytes", "pdf_bytes",
-    "roster", "manual_match_warning", "action_history"
+    "roster", "manual_match_warning", "action_history",
+    "coach_zip_bytes",
 ]:
     if key not in st.session_state:
         if key in ["bout_list", "mat_schedules", "suggestions", "active", "action_history"]:
@@ -528,6 +532,183 @@ def compute_multi_mat_assignments(schedule):
             })
 
     return multi
+
+# ----------------------------------------------------------------------
+# COACH PACKET HELPERS
+# ----------------------------------------------------------------------
+def build_coach_rows_by_team(schedule, bout_list, active_wrestlers):
+    """
+    Build per-team coach packet data, using the final global schedule
+    (after mat orders and overrides).
+
+    schedule: list from apply_mat_order_to_global_schedule()
+    bout_list: st.session_state.bout_list
+    active_wrestlers: st.session_state.active
+
+    Returns:
+      coach_data: dict[team] -> {
+        "rows": [
+          {
+            "name": str,
+            "weight": float,
+            "grade": int,
+            "matches": [
+              {
+                "mat": int,
+                "slot": int,
+                "bout_num": int,
+                "opp_name": str,
+                "opp_team": str,
+                "is_early": bool,
+              },
+              ...
+            ],
+          },
+          ...
+        ],
+        "max_matches": int,   # max matches for any wrestler on that team
+      }
+    """
+    # Index bouts by bout_num (skip manually-removed bouts)
+    bout_index = {
+        b["bout_num"]: b
+        for b in bout_list
+        if b.get("manual") != "Manually Removed"
+    }
+
+    # Active wrestlers only
+    wrestlers_by_id = {w["id"]: w for w in active_wrestlers}
+
+    # Collect matches per wrestler ID
+    matches_by_wrestler = defaultdict(list)
+
+    for e in schedule:
+        b = bout_index.get(e["bout_num"])
+        if not b:
+            continue
+
+        for side in ("w1", "w2"):
+            wid = b[f"{side}_id"]
+            if wid not in wrestlers_by_id:
+                continue
+
+            # Opponent info
+            if side == "w1":
+                opp_name = b["w2_name"]
+                opp_team = b["w2_team"]
+            else:
+                opp_name = b["w1_name"]
+                opp_team = b["w1_team"]
+
+            matches_by_wrestler[wid].append({
+                "mat": e["mat"],
+                "slot": e["slot"],      # slot on that mat (your “time” ordering)
+                "bout_num": e["bout_num"],
+                "opp_name": opp_name,
+                "opp_team": opp_team,
+                "is_early": b["is_early"],
+            })
+
+    # Build rows per team, track max matches per team
+    rows_by_team = defaultdict(list)
+    max_matches_by_team = defaultdict(int)
+
+    for w in active_wrestlers:
+        wid = w["id"]
+        team = w["team"]
+
+        w_matches = matches_by_wrestler.get(wid, [])
+        # Sort in a logical order: by slot, then mat, then bout_num
+        w_matches.sort(key=lambda m: (m["slot"], m["mat"], m["bout_num"]))
+
+        row = {
+            "name": w["name"],
+            "weight": float(w["weight"]),
+            "grade": int(w["grade"]),
+            "matches": w_matches,
+        }
+
+        rows_by_team[team].append(row)
+
+        if len(w_matches) > max_matches_by_team[team]:
+            max_matches_by_team[team] = len(w_matches)
+
+    coach_data = {}
+    for team, rows in rows_by_team.items():
+        coach_data[team] = {
+            "rows": rows,
+            "max_matches": max_matches_by_team[team],
+        }
+
+    return coach_data
+
+def build_coach_pdf_for_team(team_name: str, rows: list, max_matches: int) -> bytes:
+    """
+    Build a single-team coach packet PDF and return the bytes.
+    Uses the dynamic Match 1..Match N logic.
+    """
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+
+    # Headers: Wrestler, Wt, Grade, Match 1..Match N
+    headers = ["Wrestler", "Wt", "Grade"] + [
+        f"Match {i+1}" for i in range(max_matches)
+    ]
+    table_data = [headers]
+
+    # One row per wrestler, padded to max_matches
+    for r in rows:
+        row = [
+            r["name"],
+            f"{r['weight']:.0f}",
+            str(r["grade"]),
+        ]
+
+        for m_info in r["matches"]:
+            cell_text = (
+                f"Mat {m_info['mat']} – Slot {m_info['slot']:02d} "
+                f"vs {m_info['opp_name']} ({m_info['opp_team']})"
+            )
+            if m_info["is_early"]:
+                cell_text = "EARLY – " + cell_text
+            row.append(cell_text)
+
+        # Pad out to 3 + max_matches
+        while len(row) < 3 + max_matches:
+            row.append("")
+
+        table_data.append(row)
+
+    # Dynamic column widths
+    content_width = 6.5 * inch  # ~letter width minus margins
+    fixed_widths = [2.2 * inch, 0.6 * inch, 0.7 * inch]  # Wrestler / Wt / Grade
+    remaining_width = max(content_width - sum(fixed_widths), 1.0 * inch)
+
+    if max_matches > 0:
+        match_col_width = remaining_width / max_matches
+        col_widths = fixed_widths + [match_col_width] * max_matches
+    else:
+        col_widths = fixed_widths
+
+    coach_table = Table(table_data, colWidths=col_widths)
+    coach_style = TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ])
+    coach_table.setStyle(coach_style)
+
+    elements = []
+    elements.append(Paragraph(f"Team: {team_name}", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(coach_table)
+
+    doc.build(elements)
+    return buf.getvalue()
+
 # ----------------------------------------------------------------------
 # HELPERS (undo + color dots)
 # ----------------------------------------------------------------------
@@ -571,6 +752,7 @@ def _undo_remove(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: restored last removed bout.")
 
@@ -581,6 +763,7 @@ def _undo_drag(previous_mat_order: dict):
     }
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: last drag / reorder reverted.")
 
@@ -612,6 +795,7 @@ def _undo_manual_add(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: manual match removed.")
 
@@ -644,6 +828,7 @@ def _undo_suggest_add(bout_nums: list[int]):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: suggested matches removed.")
 
@@ -661,6 +846,7 @@ def _undo_scratch_update(snapshot: dict):
     # the restored roster (w['scratch']) on the next run.
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.sortable_version += 1
     st.success("Undo: scratches and schedule restored.")
 
@@ -718,6 +904,7 @@ def remove_bout(bout_num: int):
     st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
 
     st.session_state.sortable_version += 1
     st.rerun()
@@ -811,6 +998,7 @@ def restore_meet_from_snapshot(data: dict):
     st.session_state.mat_order = data.get("mat_order", {})
     st.session_state.excel_bytes = None
     st.session_state.pdf_bytes = None
+    st.session_state.coach_zip_bytes = None
     st.session_state.initialized = bool(st.session_state.roster)
     st.session_state.sortable_version += 1  # refresh drag widgets
     st.session_state.action_history = []  # clear undo history on restore
@@ -927,6 +1115,7 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
         st.session_state.action_history = []
+        st.session_state.coach_zip_bytes = None
 
         st.success(
             f"Roster loaded ({len(wrestlers)} wrestlers, "
@@ -961,7 +1150,8 @@ if st.session_state.get("initialized") and st.session_state.get("roster"):
                 for key in [
                     "initialized", "bout_list", "mat_schedules", "suggestions",
                     "active", "mat_order", "excel_bytes", "pdf_bytes",
-                    "roster", "manual_match_warning", "action_history"
+                    "roster", "manual_match_warning", "action_history",
+                    "coach_zip_bytes",
                 ]:
                     st.session_state.pop(key, None)
 
@@ -1239,8 +1429,8 @@ if st.session_state.initialized:
    - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
 
 5. **Generate & download**
-   - Click **Generate Matches** to build the **Excel** and **PDF**.
-   - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
+   - Click **Generate Matches** to build the **Excel** and **Mat Sheets PDF**.
+   - Use **Generate Coach Packets** to build one PDF per team, zipped for coaches.
                 """
             )
 
@@ -1305,6 +1495,7 @@ if st.session_state.initialized:
                     st.session_state.mat_overrides = {}
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
+                    st.session_state.coach_zip_bytes = None
                     st.session_state.action_history = []
                     st.session_state.sortable_version += 1
 
@@ -1360,6 +1551,7 @@ if st.session_state.initialized:
                     # Invalidate exports; refresh drag widgets
                     st.session_state.excel_bytes = None
                     st.session_state.pdf_bytes = None
+                    st.session_state.coach_zip_bytes = None
                     st.session_state.sortable_version += 1
 
                     st.success(
@@ -1596,6 +1788,7 @@ if st.session_state.initialized:
                         # Invalidate exports
                         st.session_state.excel_bytes = None
                         st.session_state.pdf_bytes = None
+                        st.session_state.coach_zip_bytes = None
 
                         # Record action for undo
                         push_action({"type": "manual_add", "bout_num": new_bout_num})
@@ -1646,8 +1839,6 @@ if st.session_state.initialized:
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
         
-
-
         if search_term.strip():
             visible_conflicts = [c for c in conflicts_all if c["wrestler_id"] in filtered_ids]
         else:
@@ -1851,6 +2042,7 @@ if st.session_state.initialized:
                             st.session_state.mat_order[mat] = new_order
                             st.session_state.excel_bytes = None
                             st.session_state.pdf_bytes = None
+                            st.session_state.coach_zip_bytes = None
                             st.session_state.sortable_version += 1
                             st.rerun()
                         else:
@@ -1922,6 +2114,7 @@ if st.session_state.initialized:
                                     # Invalidate exports and refresh drag widgets
                                     st.session_state.excel_bytes = None
                                     st.session_state.pdf_bytes = None
+                                    st.session_state.coach_zip_bytes = None
                                     st.session_state.sortable_version += 1
 
                                     st.success(
@@ -1969,8 +2162,8 @@ if st.session_state.initialized:
         else:
             st.caption("No actions yet to undo.")
 
-        # ---- GENERATE MEET ----
-        if st.button("Generate Matches", type="primary", help="Generate Excel + PDF for download"):
+        # ---- GENERATE MEET (Excel + Mat Sheets PDF) ----
+        if st.button("Generate Matches", type="primary", help="Generate Excel + Mat Sheets PDF for download"):
             with st.spinner("Generating files..."):
                 try:
                     final_sched = apply_mat_order_to_global_schedule()
@@ -2012,7 +2205,7 @@ if st.session_state.initialized:
 
                     st.session_state.excel_bytes = out.getvalue()
 
-                    # PDF
+                    # PDF – Mat sheets per mat (no coach pages here)
                     buf = io.BytesIO()
                     doc = SimpleDocTemplate(buf, pagesize=letter)
                     elements = []
@@ -2021,8 +2214,8 @@ if st.session_state.initialized:
                         data = [e for e in final_sched if e["mat"] == m]
                         if not data:
                             elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
-
-                            elements.append(PageBreak())
+                            if m < CONFIG["NUM_MATS"]:
+                                elements.append(PageBreak())
                             continue
                         table = [["#", "Wrestler 1", "Wrestler 2"]]
                         for e in data:
@@ -2056,7 +2249,6 @@ if st.session_state.initialized:
                                 b for b in st.session_state.bout_list
                                 if b["bout_num"] == data[r - 1]["bout_num"]
                             )["is_early"]:
-
                                 s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
                         t.setStyle(s)
                         elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
@@ -2064,12 +2256,55 @@ if st.session_state.initialized:
                             elements.append(PageBreak())
                     doc.build(elements)
                     st.session_state.pdf_bytes = buf.getvalue()
+
+                    # When mat sheets regenerate, clear any old coach ZIP
+                    st.session_state.coach_zip_bytes = None
+
                     st.toast("Files generated!")
                 except Exception as e:
                     st.error(f"Generation failed: {e}")
                     st.toast("Error – check console.")
 
-        col_ex, col_pdf = st.columns(2)
+        # ---- GENERATE COACH PACKETS (ZIP of per-team PDFs) ----
+        if st.button(
+            "Generate Coach Packets (per-team PDFs)",
+            help="Build one PDF per team with dynamic Match columns, zipped for download.",
+        ):
+            if not st.session_state.bout_list:
+                st.warning("No bouts found – generate matches first.")
+            else:
+                with st.spinner("Building coach packets..."):
+                    try:
+                        full_schedule = apply_mat_order_to_global_schedule()
+                        coach_data = build_coach_rows_by_team(
+                            full_schedule,
+                            st.session_state.bout_list,
+                            st.session_state.active,
+                        )
+
+                        zip_buf = io.BytesIO()
+                        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                            for team_name, info in coach_data.items():
+                                rows = info["rows"]
+                                max_matches = info["max_matches"]
+                                if not rows:
+                                    continue
+
+                                pdf_bytes = build_coach_pdf_for_team(team_name, rows, max_matches)
+
+                                # Safe filename: TeamName_coach_packet.pdf
+                                safe_team = re.sub(r"[^A-Za-z0-9_]+", "_", team_name).strip("_") or "team"
+                                filename = f"{safe_team}_coach_packet.pdf"
+                                zf.writestr(filename, pdf_bytes)
+
+                        st.session_state.coach_zip_bytes = zip_buf.getvalue()
+                        st.toast("Coach packets generated!")
+                    except Exception as e:
+                        st.error(f"Failed to generate coach packets: {e}")
+                        st.session_state.coach_zip_bytes = None
+
+        # ---- DOWNLOAD BUTTONS ----
+        col_ex, col_pdf, col_coach = st.columns(3)
         with col_ex:
             if st.session_state.excel_bytes is not None:
                 st.download_button(
@@ -2082,10 +2317,19 @@ if st.session_state.initialized:
         with col_pdf:
             if st.session_state.pdf_bytes is not None:
                 st.download_button(
-                    label="Download PDF",
+                    label="Download Mat Sheets PDF",
                     data=st.session_state.pdf_bytes,
                     file_name="meet_schedule.pdf",
                     mime="application/pdf",
+                    use_container_width=True
+                )
+        with col_coach:
+            if st.session_state.coach_zip_bytes is not None:
+                st.download_button(
+                    label="Download Coach Packets (ZIP)",
+                    data=st.session_state.coach_zip_bytes,
+                    file_name="coach_packets.zip",
+                    mime="application/zip",
                     use_container_width=True
                 )
 
@@ -2283,8 +2527,9 @@ Download the template in **Step 1**, fill it out, and upload in **Step 2**.
             """
 - Click **Generate Matches** to build:
   - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
-  - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
-- Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
+  - A **Mat Sheets PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
+- Click **Generate Coach Packets** to build:
+  - **One PDF per team** with dynamic `Match 1…N` columns, zipped into `coach_packets.zip` for easy sharing with coaches.
             """
         )
 
@@ -2302,6 +2547,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
