@@ -1346,6 +1346,57 @@ div[data-testid="stExpander"] label {
     margin-bottom: 0.1rem !important;
 }
 
+/* ============================================================
+   POLISH UPGRADE – OPTION A (Subtle Professional Dashboard Style)
+   ============================================================ */
+
+/* Soft gradient background for main page */
+.main {
+    background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%) !important;
+}
+
+/* White card container around main content */
+.main .block-container {
+    background-color: #ffffff !important;
+    border-radius: 14px !important;
+    padding: 2rem 2rem !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.10) !important;
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Expander panels match the card aesthetic */
+div[data-testid="stExpander"] {
+    background-color: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+
+/* Expander header background subtle */
+div[data-testid="stExpander"] button[aria-expanded] {
+    background-color: #f3f4f6 !important;
+    border-radius: 10px 10px 0 0 !important;
+}
+
+/* Improve spacing around tab bar */
+.stTabs [role="tablist"] {
+    margin-top: 0.6rem !important;
+    margin-bottom: 1.2rem !important;
+}
+
+/* Style active tab subtly */
+.stTabs [aria-selected="true"] {
+    background-color: #ffffff !important;
+    border-bottom: 3px solid #b91c1c !important; /* matches your red accent */
+    font-weight: 600 !important;
+}
+
+/* Hover effect for tabs */
+.stTabs [role="tab"]:hover {
+    background-color: #f3f4f6 !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -3109,6 +3160,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
