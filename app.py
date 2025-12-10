@@ -1365,7 +1365,7 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                     "grade",
                     "level",
                     "weight",
-                    "early_match",      # canonical name in your app
+                    "early_matches",      # canonical name in your app
                     "scratch",
                     "gender",
                     "cross_gender_ok",
@@ -2844,6 +2844,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
