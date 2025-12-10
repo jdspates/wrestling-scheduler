@@ -2320,9 +2320,10 @@ if st.session_state.initialized:
                                 continue
                             b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
                             bout_label_map[bn] = (
-                                f"Slot {idx2} – Bout {bn}: "
+                                f"Slot {idx2}: "
                                 f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
                             )
+
 
                         valid_bouts = list(bout_label_map.keys())
                         if not valid_bouts:
@@ -2868,5 +2869,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
