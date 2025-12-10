@@ -1236,12 +1236,12 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error loading roster: {e}")
 
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET
+# ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET + MERGE ROSTERS
 # ----------------------------------------------------------------------
 with st.expander("Advanced options (Start Over, save / load meet)", expanded=False):
     st.caption(
-        "Optional tools for resetting this meet or saving/loading a meet file. "
+        "Optional tools for resetting this meet, saving/loading meet files, "
+        "or merging multiple team roster CSVs into one file. "
         "Most coaches won't need these every time."
     )
 
@@ -1338,11 +1338,12 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
             except Exception as e:
                 st.error(f"Could not restore autosave: {e}")
 
-    # ----- Merge multiple roster CSV files -----
+    # ----- Merge multiple roster CSV files (ALWAYS AVAILABLE) -----
     st.markdown("##### Merge multiple roster CSV files")
     st.caption(
         "Upload separate team roster CSV files and merge them into a single combined roster CSV. "
-        "This does not change the current meet; it just helps you avoid manual copy/paste."
+        "This does not change the current meet; it just helps you avoid manual copy/paste when "
+        "building a master roster."
     )
 
     merge_files = st.file_uploader(
@@ -1365,7 +1366,7 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                     "grade",
                     "level",
                     "weight",
-                    "early_matches",      # canonical name in your app
+                    "early_match",      # canonical name in your app
                     "scratch",
                     "gender",
                     "cross_gender_ok",
@@ -1398,7 +1399,7 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
 
                     # Remove exact duplicates
                     merged = merged.drop_duplicates()
-                    
+
                     # Remove duplicate wrestler entries (same kid listed twice)
                     merged = merged.drop_duplicates(subset=["name", "team", "grade"])
 
@@ -1406,7 +1407,7 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
 
                     with st.expander("Show full merged roster (optional review)", expanded=False):
                         st.dataframe(merged, use_container_width=True)
-                    
+
                     csv_bytes = merged.to_csv(index=False).encode("utf-8-sig")
                     st.download_button(
                         label="Download merged_roster.csv",
@@ -1416,10 +1417,9 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                         key="download_merged_roster",
                     )
 
-
                     # If in the future you want to auto-load this into the app, you could do:
                     # st.session_state["roster"] = merged.to_dict(orient="records")
-                    # and then st.rerun()
+                    # st.rerun()
 
             except Exception as e:
                 st.error(f"Error during merge: {e}")
@@ -2844,6 +2844,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
