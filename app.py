@@ -1396,6 +1396,12 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                 else:
                     merged = pd.concat(dfs, ignore_index=True)
 
+                    # Remove exact duplicates
+                    merged = merged.drop_duplicates()
+                    
+                    # Remove duplicate wrestler entries (same kid listed twice)
+                    merged = merged.drop_duplicates(subset=["name", "team", "grade"])
+
                     st.success("✅ Rosters merged successfully.")
 
                     with st.expander("Show full merged roster (optional review)", expanded=False):
@@ -2838,6 +2844,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
