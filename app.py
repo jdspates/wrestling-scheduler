@@ -2387,17 +2387,20 @@ if st.session_state.initialized:
                                     st.rerun()
 
                         # Per-mat rest warnings (all wrestlers)
-                        mat_conflicts = [
-                            c for c in visible_conflicts if c["mat"] == mat
-                        ]
+                        mat_conflicts = [c for c in visible_conflicts if c["mat"] == mat]
                         if mat_conflicts:
-                            st.markdown("**Rest warnings on this mat:**")
+                            lines = []
                             for c in mat_conflicts:
-                                st.markdown(
+                                lines.append(
                                     f"- {c['wrestler']} ({c['team']}): "
                                     f"Slot {c['slot1']} → Slot {c['slot2']} "
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
+                        
+                            st.warning(
+                                "**Rest warnings on this mat:**\n" + "\n".join(lines)
+                            )
+
 
 
         # ----- Unified Undo Button -----
@@ -2882,6 +2885,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
