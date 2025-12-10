@@ -1238,7 +1238,7 @@ if uploaded and not st.session_state.initialized:
 # ----------------------------------------------------------------------
 # ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET + MERGE ROSTERS
 # ----------------------------------------------------------------------
-with st.expander("Advanced options (Start Over, save / load meet)", expanded=False):
+with st.expander("Advanced options (Start Over, Save / Load meet / Merge CSV Roster Files)", expanded=False):
     st.caption(
         "Optional tools for resetting this meet, saving/loading meet files, "
         "or merging multiple team roster CSVs into one file. "
@@ -1351,6 +1351,13 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
         type=["csv"],
         accept_multiple_files=True,
         key="merge_rosters_simple",
+    )
+
+    # Helpful tip for coaches
+    st.caption(
+        "💡 *Tip:* After downloading a merged roster, you only need to come back here "
+        "if a coach sends an updated CSV. Add or remove a file, then click Merge again "
+        "to generate a new combined roster."
     )
 
     if merge_files:
@@ -1617,26 +1624,30 @@ if st.session_state.initialized:
         with st.expander("Quick Start Guide", expanded=False):
             st.markdown(
                 """
-1. **Import your roster CSV**
-   - Use **Step 1** to download the template and **Step 2** to upload your completed `roster.csv`.
-   - The app will auto-generate initial matchups once the file is uploaded.
-
-2. **Adjust meet settings (left sidebar)**
-   - Set **Min / Max Matches**, **Number of Mats**, **Max Level Diff**, and **Min Wt Diff**.
-   - Set **Min Rest Gap** so wrestlers don’t wrestle back-to-back.
-   - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
-
-3. **Apply scratches**
-   - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight if not already defined in the roster CSV.
-   - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout. Use **Start Over** if you want to completely rebuild from scratch.
-
-4. **Fine-tune matchups**
-   - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
-   - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
-
-5. **Generate & download**
-   - Click **Generate Documents** to build the **Excel** and **PDF**.
-   - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
+        1. **Import your roster**
+           - Use **Step 1** to download the roster template.
+           - If you have **multiple team CSVs**, you can optionally use  
+             **Advanced options → Merge multiple roster CSV files** to create a single combined `merged_roster.csv`.
+           - In **Step 2**, upload your completed `roster.csv` (or `merged_roster.csv` if you merged files).
+           - The app will auto-generate initial matchups once the file is uploaded.
+        
+        2. **Adjust meet settings (left sidebar)**
+           - Set **Min / Max Matches**, **Number of Mats**, **Max Level Diff**, and **Min Wt Diff**.
+           - Set **Min Rest Gap** so wrestlers don’t wrestle back-to-back.
+           - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
+        
+        3. **Apply scratches (before the meet)**
+           - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight (if they aren’t already flagged in the roster CSV).
+           - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout.
+           - Use **Start Over** if you want to completely rebuild from a fresh roster.
+        
+        4. **Fine-tune matchups**
+           - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
+           - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
+        
+        5. **Generate & download**
+           - Click **Generate Documents** to build the **Excel** and **PDF**.
+           - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
                 """
             )
 
@@ -2760,31 +2771,40 @@ if st.session_state.initialized:
         st.subheader("How to Use This Tool")
 
         st.markdown("##### 1. Build Your Roster CSV")
-        st.markdown(
-            """
-Your CSV **must** include these columns:
+st.markdown(
+    """
+Your roster CSV **must** include the following columns (in any order), and you may use  
+the **Advanced options → Merge multiple roster CSV files** tool if you need to combine  
+rosters from multiple teams.
+
+### Required Columns
 
 | Column          | Description                                          | Example      |
 |-----------------|------------------------------------------------------|--------------|
 | `name`          | Wrestler name                                        | `John Doe`   |
 | `team`          | Team name (used for colors & legends)                | `Stillwater` |
-| `grade`         | Numeric grade (5–8, etc)                             | `7`          |
-| `level`         | Level / experience (float, e.g. 1.0, 1.5, 2.0)       | `1.5`        |
+| `grade`         | Numeric grade (5–8, etc.)                            | `7`          |
+| `level`         | Level / experience (float: 1.0, 1.5, 2.0, etc.)      | `1.5`        |
 | `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches` | `Y`/`N` or `1`/`0` – needs early match?             | `Y`          |
-| `scratch`       | `Y`/`N` or `1`/`0` – remove from meet?              | `N`          |
+| `early_matches`   | `Y`/`N` – whether the wrestler needs an early match  | `Y`          |
+| `scratch`       | `Y`/`N` – marked out of the meet (can be changed later) | `N`       |
 
-Optional columns:
+### Optional Columns
 
-| Column            | Description                                                                 | Example |
-|-------------------|-----------------------------------------------------------------------------|---------|
-| `gender`          | `M` / `F` (or similar; normalized internally)                              | `F`     |
-| `cross_gender_ok` | `Y`/`N`, whether this wrestler can wrestle someone of a different gender   | `N`     |
+| Column            | Description                                                               | Example |
+|-------------------|---------------------------------------------------------------------------|---------|
+| `gender`          | `M` / `F` (or similar; the app normalizes internally)                    | `F`     |
+| `cross_gender_ok` | `Y`/`N` – whether this wrestler may wrestle someone of another gender    | `N`     |
 
-You **do not** need to provide an `id` column – the app generates unique IDs internally.
-Download the template in **Step 1**, fill it out, and upload in **Step 2**.
-            """
-        )
+You **do not** need to provide an `id` column – the app generates unique IDs automatically.
+
+### Tips
+- Use **Step 1** to download the official CSV template.
+- If you receive separate roster files from multiple teams, use  
+  **Advanced options → Merge multiple roster CSV files** to quickly create a single combined CSV.
+- Once your roster is ready, upload it in **Step 2** to generate matchups.
+"""
+)
 
         st.markdown("##### 2. Tune Meet Settings (Sidebar)")
         st.markdown(
@@ -2844,6 +2864,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
