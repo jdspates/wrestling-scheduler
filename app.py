@@ -2500,30 +2500,30 @@ if st.session_state.initialized:
                                 expanded=False
                             ):
                                st.markdown("**Remove bout on this mat**")   # Bold header matching button text
-
+                        
                                 selected_bout = st.selectbox(
                                     "",
                                     options=valid_bouts,
                                     format_func=lambda v: bout_label_map[v],
                                     key=f"remove_select_mat_{mat}",
                                 )
-
+                        
                                 if st.button(
                                     "Remove selected bout",
                                     key=f"remove_button_mat_{mat}",
                                     help="Removes the selected bout from this meet (Undo available below)."
                                 ):
                                     remove_bout(selected_bout)
-                        
+                            
                                 st.markdown("**Move selected bout to another mat**")
-
+                        
                                 move_target_mat = st.selectbox(
                                     "",
                                     options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
                                     key=f"move_target_mat_{mat}",
                                 )
-
                         
+                            
                                 move_button_area = st.container()
                                 with move_button_area:
                                     if st.button(
@@ -2534,27 +2534,26 @@ if st.session_state.initialized:
                                         overrides = st.session_state.get("mat_overrides", {})
                                         overrides[selected_bout] = move_target_mat
                                         st.session_state.mat_overrides = overrides
-                        
+                            
                                         src_order = st.session_state.mat_order.get(mat, [])
                                         if selected_bout in src_order:
                                             src_order.remove(selected_bout)
                                         st.session_state.mat_order[mat] = src_order
-                        
+                            
                                         dest_order = st.session_state.mat_order.get(move_target_mat, [])
                                         if selected_bout not in dest_order:
                                             dest_order.append(selected_bout)
                                         st.session_state.mat_order[move_target_mat] = dest_order
-                        
+                            
                                         st.session_state.excel_bytes = None
                                         st.session_state.pdf_bytes = None
                                         st.session_state.sortable_version += 1
-                        
+                            
                                         st.success(
                                             f"Match {selected_bout} moved to Mat {move_target_mat}. "
                                             "You can now reorder it on that mat."
                                         )
                                         st.rerun()
-
 
                         # Per-mat rest warnings (all wrestlers)
                         mat_conflicts = [c for c in visible_conflicts if c["mat"] == mat]
@@ -3075,6 +3074,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
