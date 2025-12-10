@@ -1134,23 +1134,141 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 st.markdown(
     """
+st.markdown(
+    """
 <style>
-    div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
-    .block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
-    .main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
-    h1 { margin-top:0 !important; }
+
+    /* ----------------------- GLOBAL LAYOUT ----------------------- */
+
+    body {
+        background-color: #f3f5f9 !important;
+        font-family: "Segoe UI", system-ui, sans-serif !important;
+    }
+
+    .block-container {
+        padding: 2rem 1rem !important;
+        max-width: 1250px !important;
+        margin: 0 auto !important;
+    }
+
+    h1, h2, h3, h4 {
+        font-weight: 600 !important;
+        color: #222 !important;
+        margin-top: 0.3rem !important;
+    }
+
+    /* ----------------------- CARD LOOK FOR SECTIONS ----------------------- */
+
+    .stApp > header {
+        background: transparent !important;
+    }
+
+    .stExpander {
+        background: #ffffff !important;
+        border-radius: 10px !important;
+        border: 1px solid #dcdcdc !important;
+        padding: 0 !important;
+        margin-bottom: 1rem !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    div[data-testid="stExpander"] > div > div {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    div[data-testid="stVerticalBlock"] > div { 
+        gap: 0 !important; 
+    }
+
+    /* ----------------------- TABLES ----------------------- */
+
+    table {
+        border-radius: 6px !important;
+        overflow: hidden !important;
+    }
+
+    thead tr th {
+        background-color: #fafbfc !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+        text-align: left !important;
+    }
+
+    tbody tr td {
+        text-align: left !important;
+        vertical-align: middle !important;
+        background-color: #ffffff !important;
+    }
+
+    /* highlight rows */
+    tbody tr:hover {
+        background: #f4f6fb !important;
+    }
+
+    /* ----------------------- WARNING BOXES ----------------------- */
+
+    .stAlert {
+        border-radius: 8px !important;
+        padding: 1rem !important;
+        background: #fffbe6 !important;
+        border: 1px solid #f0e9c3 !important;
+    }
+
+    /* ----------------------- INPUTS + BUTTONS ----------------------- */
+
+    .stTextInput > div > div > input {
+        border-radius: 6px !important;
+        border: 1px solid #bbb !important;
+        padding: 6px 10px !important;
+    }
+
+    .stTextInput > div > div > button {
+        background: transparent !important;
+        border: none !important;
+        color: #666 !important;
+    }
+
+    .stButton > button {
+        background-color: #d62828 !important;
+        color: #fff !important;
+        border: none !important;
+        padding: 0.55rem 1.2rem !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        transition: background 0.15s ease;
+    }
+
+    .stButton > button:hover {
+        background-color: #b71c1c !important;
+    }
+
+    /* Sidebar buttons */
     .stSidebar .stButton > button {
         padding: 0.5rem 1rem !important;
         height: auto !important;
         min-width: auto !important;
     }
-    .stTextInput > div > div > input { border-radius: 6px !important; }
-    .stTextInput > div > div > button {
-        background: transparent !important;
-        border: none !important;
-        color: #888 !important;
+
+    /* ----------------------- MAT PREVIEW / REST WARNINGS ----------------------- */
+
+    .mat-warning-row {
+        background: #fff3f3 !important;
+        color: #a30000 !important;
+        font-weight: 600 !important;
     }
+
+    .mat-section {
+        background: #ffffff !important;
+        border-radius: 8px !important;
+        border: 1px solid #e0e0e0 !important;
+        padding: 1rem !important;
+        margin-bottom: 1rem !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -2906,4 +3024,5 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
