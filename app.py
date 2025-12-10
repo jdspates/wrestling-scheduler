@@ -2743,7 +2743,7 @@ if st.session_state.initialized:
                     "# Bouts": count,
                     "Early Matches": early_count
                 })
-            st.dataframe(pd.DataFrame(mat_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(mat_rows), use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
@@ -2781,7 +2781,7 @@ if st.session_state.initialized:
                 f"There are **{len(conflicts_df)}** potential rest issues "
                 f"(gap < {rest_gap} matches on the same mat)."
             )
-            st.dataframe(conflicts_df, use_container_width=True)
+            st.dataframe(conflicts_df, use_container_width=True, hide_index=True)
 
         # ==========================================================
     # TAB 3 – HELP
@@ -2886,6 +2886,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
