@@ -1330,13 +1330,14 @@ h1 { margin-top:0 !important; }
     color: #888 !important;
 }
 
-/* 🔽 NEW: tighten spacing under headings inside expanders */
-div[data-testid="stExpander"] .stMarkdown p {
-    margin-bottom: 0.25rem !important;  /* try 0 or 0.1rem if you want it tighter */
+/* 🔽 NEW: tighten spacing between expander headings and selectboxes */
+div[data-testid="stExpander"] .stMarkdown {
+    margin-bottom: 0.2rem !important;  /* can go to 0.1rem or 0rem if you want it tighter */
 }
 
-div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
-    margin-top: 0rem !important;
+/* Directly target the selectbox container inside expanders */
+div[data-testid="stExpander"] div[data-baseweb="select"] {
+    margin-top: 0rem !important;      /* remove extra gap above the select */
 }
 
 </style>
@@ -3103,6 +3104,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
