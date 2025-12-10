@@ -1135,142 +1135,154 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown(
     """
 <style>
+/* ---------------- GLOBAL LAYOUT ---------------- */
 
-    /* ----------------------- GLOBAL LAYOUT ----------------------- */
+.main {
+    background-color: #e5e7eb !important;  /* light gray main background */
+}
 
-    body {
-        background-color: #f3f5f9 !important;
-        font-family: "Segoe UI", system-ui, sans-serif !important;
-    }
+.main .block-container {
+    padding: 2rem 1.5rem !important;
+    max-width: 1250px !important;
+    margin: 0 auto !important;
+}
 
-    .block-container {
-        padding: 2rem 1rem !important;
-        max-width: 1250px !important;
-        margin: 0 auto !important;
-    }
+h1 {
+    margin-top: 0 !important;
+    font-weight: 700 !important;
+}
 
-    h1, h2, h3, h4 {
-        font-weight: 600 !important;
-        color: #222 !important;
-        margin-top: 0.3rem !important;
-    }
+/* ---------------- SIDEBAR ---------------- */
 
-    /* ----------------------- CARD LOOK FOR SECTIONS ----------------------- */
+section[data-testid="stSidebar"] {
+    background-color: #111827 !important;   /* dark sidebar */
+    color: #f9fafb !important;
+}
 
-    .stApp > header {
-        background: transparent !important;
-    }
+section[data-testid="stSidebar"] * {
+    color: #f9fafb !important;
+}
 
-    .stExpander {
-        background: #ffffff !important;
-        border-radius: 10px !important;
-        border: 1px solid #dcdcdc !important;
-        padding: 0 !important;
-        margin-bottom: 1rem !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
+/* Sidebar buttons */
+.stSidebar .stButton > button {
+    padding: 0.5rem 1rem !important;
+    height: auto !important;
+    min-width: auto !important;
+    border-radius: 999px !important;
+    background-color: #ef4444 !important;  /* bright red */
+    border: none !important;
+    font-weight: 600 !important;
+}
 
-    div[data-testid="stExpander"] > div > div {
-        padding: 0 !important;
-        margin: 0 !important;
-    }
+/* ---------------- BUTTONS (MAIN AREA) ---------------- */
 
-    div[data-testid="stVerticalBlock"] > div { 
-        gap: 0 !important; 
-    }
+.stButton > button {
+    border-radius: 999px !important;
+    padding: 0.5rem 1.2rem !important;
+    font-weight: 600 !important;
+    border: none !important;
+    background-color: #b91c1c !important;   /* deep red */
+    color: white !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15) !important;
+}
 
-    /* ----------------------- TABLES ----------------------- */
+.stButton > button:hover {
+    background-color: #7f1d1d !important;
+}
 
-    table {
-        border-radius: 6px !important;
-        overflow: hidden !important;
-    }
+/* ---------------- TEXT INPUTS ---------------- */
 
-    thead tr th {
-        background-color: #fafbfc !important;
-        font-weight: 600 !important;
-        color: #333 !important;
-        text-align: left !important;
-    }
+.stTextInput > div > div > input {
+    border-radius: 999px !important;
+    border: 1px solid #9ca3af !important;
+    padding: 0.4rem 0.8rem !important;
+    background-color: #ffffff !important;
+}
 
-    tbody tr td {
-        text-align: left !important;
-        vertical-align: middle !important;
-        background-color: #ffffff !important;
-    }
+.stTextInput > div > div > button {
+    background: transparent !important;
+    border: none !important;
+    color: #6b7280 !important;
+}
 
-    /* highlight rows */
-    tbody tr:hover {
-        background: #f4f6fb !important;
-    }
+/* ---------------- EXPANDERS (ADVANCED + MATS) ---------------- */
 
-    /* ----------------------- WARNING BOXES ----------------------- */
+div[data-testid="stExpander"] {
+    border-radius: 10px !important;
+    border: 1px solid #d1d5db !important;
+    background-color: #f9fafb !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    margin-bottom: 0.75rem !important;
+}
 
-    .stAlert {
-        border-radius: 8px !important;
-        padding: 1rem !important;
-        background: #fffbe6 !important;
-        border: 1px solid #f0e9c3 !important;
-    }
+/* Your original padding / gap rules preserved */
+div[data-testid="stExpander"] > div > div { 
+    padding:0 !important; 
+    margin:0 !important; 
+}
+div[data-testid="stVerticalBlock"] > div { 
+    gap:0 !important; 
+}
 
-    /* ----------------------- INPUTS + BUTTONS ----------------------- */
+/* Expander header button */
+div[data-testid="stExpander"] button[aria-expanded] {
+    background-color: #e5e7eb !important;
+    border-radius: 10px 10px 0 0 !important;
+}
 
-    .stTextInput > div > div > input {
-        border-radius: 6px !important;
-        border: 1px solid #bbb !important;
-        padding: 6px 10px !important;
-    }
+/* Content inside expanders */
+div[data-testid="stExpander"] .stMarkdown,
+div[data-testid="stExpander"] [data-testid="stDataFrame"] {
+    padding: 0.6rem 0.9rem 0.8rem 0.9rem !important;
+}
 
-    .stTextInput > div > div > button {
-        background: transparent !important;
-        border: none !important;
-        color: #666 !important;
-    }
+/* ---------------- TABLES / DATAFRAMES ---------------- */
 
-    .stButton > button {
-        background-color: #d62828 !important;
-        color: #fff !important;
-        border: none !important;
-        padding: 0.55rem 1.2rem !important;
-        border-radius: 6px !important;
-        font-weight: 500 !important;
-        cursor: pointer;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        transition: background 0.15s ease;
-    }
+[data-testid="stDataFrame"] {
+    border-radius: 8px !important;
+    border: 1px solid #d1d5db !important;
+    overflow: hidden !important;
+}
 
-    .stButton > button:hover {
-        background-color: #b71c1c !important;
-    }
+[data-testid="stDataFrame"] th {
+    background-color: #e5e7eb !important;
+    font-weight: 600 !important;
+    text-align: left !important;
+}
 
-    /* Sidebar buttons */
-    .stSidebar .stButton > button {
-        padding: 0.5rem 1rem !important;
-        height: auto !important;
-        min-width: auto !important;
-    }
+[data-testid="stDataFrame"] td {
+    text-align: left !important;
+}
 
-    /* ----------------------- MAT PREVIEW / REST WARNINGS ----------------------- */
+/* Hover effect on table rows */
+[data-testid="stDataFrame"] tbody tr:hover td {
+    background-color: #f3f4f6 !important;
+}
 
-    .mat-warning-row {
-        background: #fff3f3 !important;
-        color: #a30000 !important;
-        font-weight: 600 !important;
-    }
+/* ---------------- ALERTS (warnings / info) ---------------- */
 
-    .mat-section {
-        background: #ffffff !important;
-        border-radius: 8px !important;
-        border: 1px solid #e0e0e0 !important;
-        padding: 1rem !important;
-        margin-bottom: 1rem !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-    }
+div[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    border: 1px solid #fbbf24 !important;
+    background-color: #fffbeb !important;
+}
+
+/* ---------------- HEADERS / SECTION TITLES ---------------- */
+
+.stMarkdown h2, .stMarkdown h3 {
+    padding: 6px 12px;
+    background-color: #f3f4f6;
+    border-left: 4px solid #b91c1c;
+    border-radius: 4px;
+    margin-top: 1.4rem;
+    margin-bottom: 0.6rem;
+}
 
 </style>
 """,
     unsafe_allow_html=True,
 )
+
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
 st.title("Wrestling Meet Scheduler")
@@ -3022,6 +3034,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
