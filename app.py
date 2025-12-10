@@ -1399,6 +1399,10 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                     st.success("✅ Rosters merged successfully.")
                     st.dataframe(merged.head(), use_container_width=True)
 
+                    with st.expander("Show full merged roster"):
+                        st.dataframe(merged, use_container_width=True)
+
+
                     csv_bytes = merged.to_csv(index=False).encode("utf-8-sig")
                     st.download_button(
                         label="Download merged_roster.csv",
@@ -2835,6 +2839,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
