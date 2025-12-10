@@ -2158,24 +2158,22 @@ if st.session_state.initialized:
                             g2 = gender_display(b["w2_id"])
 
                             table_rows.append(
-                                f"<tr>"
-                                f"<td>{e['mat_bout_num']}</td>"
-                                f"<td>{b['bout_num']}</td>"
-                                f"<td>{early_flag}</td>"
-                                f"<td>{dot1}{b['w1_name']} ({b['w1_team']}, {g1})</td>"
-                                f"<td>{dot2}{b['w2_name']} ({b['w2_team']}, {g2})</td>"
-                                f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
-                                f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
-                                f"<td>{b['score']:.1f}</td>"
-                                f"</tr>"
-                            )
-
+                            f"<tr>"
+                            f"<td>{e['mat_bout_num']}</td>"
+                            f"<td>{early_flag}</td>"
+                            f"<td>{dot1}{b['w1_name']} ({b['w1_team']}, {g1})</td>"
+                            f"<td>{dot2}{b['w2_name']} ({b['w2_team']}, {g2})</td>"
+                            f"<td>{b['w1_level']:.1f}/{b['w2_level']:.1f}</td>"
+                            f"<td>{b['w1_weight']:.0f}/{b['w2_weight']:.0f}</td>"
+                            f"<td>{b['score']:.1f}</td>"
+                            f"</tr>"
+                        )
+                        
                         table_html = (
                             "<table style='width:100%;border-collapse:collapse;font-size:0.80rem;'>"
                             "<thead>"
                             "<tr style='background:#f0f0f0;'>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
-                            "<th style='border:1px solid #ddd;padding:4px;'>Bout</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Early</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 1</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 2</th>"
@@ -2869,26 +2867,4 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
