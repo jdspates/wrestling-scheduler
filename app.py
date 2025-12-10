@@ -2191,17 +2191,19 @@ if st.session_state.initialized:
                         st.markdown(table_html, unsafe_allow_html=True)
 
                         # Per-mat rest warnings for visible wrestlers
-                        mat_conflicts = [
-                            c for c in visible_conflicts if c["mat"] == mat
-                        ]
+                        mat_conflicts = [c for c in visible_conflicts if c["mat"] == mat]
                         if mat_conflicts:
-                            st.markdown("**Rest warnings on this mat (filtered wrestlers):**")
+                            lines = []
                             for c in mat_conflicts:
-                                st.markdown(
+                                lines.append(
                                     f"- {c['wrestler']} ({c['team']}): "
                                     f"Slot {c['slot1']} → Slot {c['slot2']} "
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
+                        
+                            st.warning(
+                                "**Rest warnings on this mat (filtered wrestlers):**\n" + "\n".join(lines)
+                            )
 
                 st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
 
@@ -2884,6 +2886,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
