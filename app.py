@@ -2067,7 +2067,7 @@ if st.session_state.initialized:
             )
             with st.expander("Show wrestlers on multiple mats", expanded=False):
                 for issue in multi_mat_issues:
-                    # Build per-mat slot display like: "1 (Slot 3), 2 (Slots 4, 9)"
+                    # Build per-mat slot display like: "1 (Match 3), 2 (Match 4, 9)"
                     parts = []
                     for mat in issue["mats"]:
                         slots_on_mat = sorted(
@@ -2076,9 +2076,9 @@ if st.session_state.initialized:
                             if m["mat"] == mat
                         )
                         if len(slots_on_mat) == 1:
-                            slot_text = f"Slot {slots_on_mat[0]}"
+                            slot_text = f"Match {slots_on_mat[0]}"
                         else:
-                            slot_text = "Slots " + ", ".join(str(s) for s in slots_on_mat)
+                            slot_text = "Match " + ", ".join(str(s) for s in slots_on_mat)
         
                         parts.append(f"{mat} ({slot_text})")
         
@@ -2173,7 +2173,7 @@ if st.session_state.initialized:
                             "<table style='width:100%;border-collapse:collapse;font-size:0.80rem;'>"
                             "<thead>"
                             "<tr style='background:#f0f0f0;'>"
-                            "<th style='border:1px solid #ddd;padding:4px;'>Slot</th>"
+                            "<th style='border:1px solid #ddd;padding:4px;'>Match</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Early</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 1</th>"
                             "<th style='border:1px solid #ddd;padding:4px;'>Wrestler 2</th>"
@@ -2197,7 +2197,7 @@ if st.session_state.initialized:
                             for c in mat_conflicts:
                                 lines.append(
                                     f"- {c['wrestler']} ({c['team']}): "
-                                    f"Slot {c['slot1']} → Slot {c['slot2']} "
+                                    f"Match {c['slot1']} → Match {c['slot2']} "
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
                         
@@ -2270,7 +2270,7 @@ if st.session_state.initialized:
 
                             label = (
                             f"{early_prefix}"
-                            f"Slot {slot_index:02d} | "
+                            f"Match {slot_index:02d} | "
                             f"{icon1} {b['w1_name']} ({b['w1_team']}, {g1})  vs  "
                             f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2})"
                             f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
@@ -2312,7 +2312,7 @@ if st.session_state.initialized:
                         else:
                             st.session_state.mat_order[mat] = new_order
 
-                        st.caption("Drag rows above – top row is Slot 1, next is Slot 2, etc. for this mat.")
+                        st.caption("Drag rows above – top row is Match 1, next is Match 2, etc. for this mat.")
 
                         # Per-mat remove + move
                         bout_label_map = {}
@@ -2321,7 +2321,7 @@ if st.session_state.initialized:
                                 continue
                             b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
                             bout_label_map[bn] = (
-                                f"Slot {idx2}: "
+                                f"Match {idx2}: "
                                 f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
                             )
 
@@ -2394,7 +2394,7 @@ if st.session_state.initialized:
                             for c in mat_conflicts:
                                 lines.append(
                                     f"- {c['wrestler']} ({c['team']}): "
-                                    f"Slot {c['slot1']} → Slot {c['slot2']} "
+                                    f"Match {c['slot1']} → Match {c['slot2']} "
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
                         
@@ -2772,8 +2772,8 @@ if st.session_state.initialized:
                 "wrestler": "Wrestler",
                 "team": "Team",
                 "mat": "Mat",
-                "slot1": "Slot A",
-                "slot2": "Slot B",
+                "slot1": "Match A",
+                "slot2": "Match B",
                 "gap": "Gap",
             })
         
@@ -2886,6 +2886,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
