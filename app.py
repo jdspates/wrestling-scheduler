@@ -1313,9 +1313,26 @@ div[data-testid="stExpander"] .stMarkdown li {
     margin-bottom: 0.1rem !important;
 }
 
-/* Tighten spacing inside the “Advanced” expander */
-div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
-    margin-top: 0.25rem !important;
+div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
+div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
+.block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
+.main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
+h1 { margin-top:0 !important; }
+.stSidebar .stButton > button {
+    padding: 0.5rem 1rem !important;
+    height: auto !important;
+    min-width: auto !important;
+}
+.stTextInput > div > div > input { border-radius: 6px !important; }
+.stTextInput > div > div > button {
+    background: transparent !important;
+    border: none !important;
+    color: #888 !important;
+}
+
+/* 🔽 NEW: tighten spacing under headings inside expanders */
+div[data-testid="stExpander"] .stMarkdown p {
+    margin-bottom: 0.25rem !important;  /* try 0 or 0.1rem if you want it tighter */
 }
 
 div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
@@ -3086,6 +3103,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
