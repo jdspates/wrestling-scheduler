@@ -2747,6 +2747,19 @@ if st.session_state.initialized:
         if not conflicts_all:
             st.caption(f"No rest conflicts detected (min gap {rest_gap} matches).")
         else:
+            # Ensure slot numbers match the current mat schedule
+            slot_lookup = {
+                (e["mat"], e["bout_num"]): e["slot"]
+                for e in full_schedule
+            }
+            for c in conflicts_all:
+                key1 = (c["mat"], c["bout1"])
+                key2 = (c["mat"], c["bout2"])
+                if key1 in slot_lookup:
+                    c["slot1"] = slot_lookup[key1]
+                if key2 in slot_lookup:
+                    c["slot2"] = slot_lookup[key2]
+        
             conflicts_df = pd.DataFrame(conflicts_all)
             conflicts_df = conflicts_df[
                 ["wrestler", "team", "mat", "bout1", "slot1", "bout2", "slot2", "gap"]
@@ -2765,6 +2778,7 @@ if st.session_state.initialized:
                 f"(gap < {rest_gap} matches on the same mat)."
             )
             st.dataframe(conflicts_df, use_container_width=True)
+
 
         # ==========================================================
     # TAB 3 – HELP
@@ -2869,6 +2883,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
