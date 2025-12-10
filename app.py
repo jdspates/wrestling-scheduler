@@ -2490,16 +2490,16 @@ if st.session_state.initialized:
                                 f"{b['w1_name']} ({b['w1_team']}) vs {b['w2_name']} ({b['w2_team']})"
                             )
 
-
                         valid_bouts = list(bout_label_map.keys())
                         if not valid_bouts:
                             st.caption("No bouts left on this mat.")
                         else:
                             with st.expander(
-                                """**Advanced: Remove or move a match on this mat**""",
-                                expanded=False
+                                "Advanced: Remove or move a match on this mat",
+                                expanded=False,
                             ):
-                               st.markdown("**Remove bout on this mat**")   # Bold header matching button text
+                                # ---- Remove bout on this mat ----
+                                st.markdown("**Remove bout on this mat**")
                         
                                 selected_bout = st.selectbox(
                                     "",
@@ -2511,10 +2511,11 @@ if st.session_state.initialized:
                                 if st.button(
                                     "Remove selected bout",
                                     key=f"remove_button_mat_{mat}",
-                                    help="Removes the selected bout from this meet (Undo available below)."
+                                    help="Removes the selected bout from this meet (Undo available below).",
                                 ):
                                     remove_bout(selected_bout)
-                            
+                        
+                                # ---- Move bout to another mat ----
                                 st.markdown("**Move selected bout to another mat**")
                         
                                 move_target_mat = st.selectbox(
@@ -2523,32 +2524,34 @@ if st.session_state.initialized:
                                     key=f"move_target_mat_{mat}",
                                 )
                         
-                            
                                 move_button_area = st.container()
                                 with move_button_area:
                                     if st.button(
                                         "Move to mat",
                                         key=f"move_button_mat_{mat}",
-                                        help="Move the selected bout to the chosen mat."
+                                        help="Move the selected bout to the chosen mat.",
                                     ):
                                         overrides = st.session_state.get("mat_overrides", {})
                                         overrides[selected_bout] = move_target_mat
                                         st.session_state.mat_overrides = overrides
-                            
+                        
+                                        # Remove from current mat order
                                         src_order = st.session_state.mat_order.get(mat, [])
                                         if selected_bout in src_order:
                                             src_order.remove(selected_bout)
                                         st.session_state.mat_order[mat] = src_order
-                            
+                        
+                                        # Add to target mat order
                                         dest_order = st.session_state.mat_order.get(move_target_mat, [])
                                         if selected_bout not in dest_order:
                                             dest_order.append(selected_bout)
                                         st.session_state.mat_order[move_target_mat] = dest_order
-                            
+                        
+                                        # Invalidate exports & refresh
                                         st.session_state.excel_bytes = None
                                         st.session_state.pdf_bytes = None
                                         st.session_state.sortable_version += 1
-                            
+                        
                                         st.success(
                                             f"Match {selected_bout} moved to Mat {move_target_mat}. "
                                             "You can now reorder it on that mat."
@@ -3074,6 +3077,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
