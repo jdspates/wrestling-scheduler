@@ -2552,7 +2552,7 @@ if st.session_state.initialized:
                             
                                     # --- MOVE BOUT ---
                                     move_target_mat = st.selectbox(
-                                        "Move selected bout to another mat",
+                                        """**Move selected bout to another mat**""",
                                         options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
                                         key=f"move_target_mat_{mat}",
                                     )
@@ -3109,6 +3109,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
