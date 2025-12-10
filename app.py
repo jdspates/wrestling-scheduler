@@ -2499,12 +2499,15 @@ if st.session_state.initialized:
                                 """**Advanced: Remove or move a match on this mat**""",
                                 expanded=False
                             ):
+                               st.markdown("**Remove bout on this mat**")   # Bold header matching button text
+
                                 selected_bout = st.selectbox(
-                                    "Remove bout on this mat:",
+                                    "",
                                     options=valid_bouts,
                                     format_func=lambda v: bout_label_map[v],
-                                    key=f"remove_select_mat_{mat}"
+                                    key=f"remove_select_mat_{mat}",
                                 )
+
                                 if st.button(
                                     "Remove selected bout",
                                     key=f"remove_button_mat_{mat}",
@@ -2513,12 +2516,13 @@ if st.session_state.initialized:
                                     remove_bout(selected_bout)
                         
                                 st.markdown("**Move selected bout to another mat**")
-                        
+
                                 move_target_mat = st.selectbox(
-                                    "Target mat",
+                                    "",
                                     options=[m for m in range(1, CONFIG["NUM_MATS"] + 1) if m != mat],
                                     key=f"move_target_mat_{mat}",
                                 )
+
                         
                                 move_button_area = st.container()
                                 with move_button_area:
@@ -3071,6 +3075,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
