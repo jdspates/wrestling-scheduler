@@ -2745,7 +2745,10 @@ if st.session_state.initialized:
                 })
             mat_df = pd.DataFrame(mat_rows)
 
-            styled_mat_df = mat_df.style.set_properties(**{"text-align": "left"})
+            # Cast to string so alignment styling isn't overridden by numeric types
+            mat_df_display = mat_df.astype(str)
+            
+            styled_mat_df = mat_df_display.style.set_properties(**{"text-align": "left"})
             styled_mat_df = styled_mat_df.set_table_styles(
                 [dict(selector="th", props=[("text-align", "left")])]
             )
@@ -2789,7 +2792,10 @@ if st.session_state.initialized:
                 f"There are **{len(conflicts_df)}** potential rest issues "
                 f"(gap < {rest_gap} matches on the same mat)."
             )
-            styled_conflicts = conflicts_df.style.set_properties(**{"text-align": "left"})
+            # Cast to string for consistent left alignment
+            conflicts_display = conflicts_df.astype(str)
+            
+            styled_conflicts = conflicts_display.style.set_properties(**{"text-align": "left"})
             styled_conflicts = styled_conflicts.set_table_styles(
                 [dict(selector="th", props=[("text-align", "left")])]
             )
@@ -2900,16 +2906,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
-
-
-
-
-
-
-
