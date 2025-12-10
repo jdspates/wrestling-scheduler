@@ -1159,7 +1159,14 @@ section[data-testid="stSidebar"] {
     color: #f9fafb !important;
 }
 
-section[data-testid="stSidebar"] * {
+/* Sidebar text elements */
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] span {
     color: #f9fafb !important;
 }
 
@@ -3034,6 +3041,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
