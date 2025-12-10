@@ -1397,12 +1397,10 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                     merged = pd.concat(dfs, ignore_index=True)
 
                     st.success("✅ Rosters merged successfully.")
-                    st.dataframe(merged.head(), use_container_width=True)
 
-                    with st.expander("Show full merged roster"):
+                    with st.expander("Show full merged roster (optional review)", expanded=False):
                         st.dataframe(merged, use_container_width=True)
-
-
+                    
                     csv_bytes = merged.to_csv(index=False).encode("utf-8-sig")
                     st.download_button(
                         label="Download merged_roster.csv",
@@ -1411,6 +1409,7 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                         mime="text/csv",
                         key="download_merged_roster",
                     )
+
 
                     # If in the future you want to auto-load this into the app, you could do:
                     # st.session_state["roster"] = merged.to_dict(orient="records")
@@ -2839,6 +2838,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
