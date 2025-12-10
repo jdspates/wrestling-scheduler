@@ -1646,8 +1646,10 @@ if st.session_state.initialized:
            - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
         
         5. **Generate & download**
-           - Click **Generate Documents** to build the **Excel** and **PDF**.
-           - Use **Download Excel** and **Download PDF** at the bottom of the **Match Builder** tab.
+           - Click **Generate Coach Packets PDF** to build the Coach Packets that only contain team matches.
+             - Use **Download Coach Packets PDF** to download document.
+           - Click **Generate Documents** to build the **Excel Master Document** and **PDF Mat Printouts**.
+             - Use **Download Excel** and **Download PDF** to download documents.
                 """
             )
 
@@ -2843,10 +2845,14 @@ You **do not** need to provide an `id` column – the app generates unique IDs a
         st.markdown("##### 4. Exports")
         st.markdown(
             """
+- Click **Generate Coach Packets PDF" to build:
+  - A **PDF** with all matches for a specific team will be generated.
+- Then use **Download Coach Packet PDF** to download document.
+
 - Click **Generate Documents** to build:
   - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
   - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
-- Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
+- Then use the **Download Excel / Download PDF** buttons to download document.
 """
         )
 else:
@@ -2863,6 +2869,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
