@@ -2765,93 +2765,90 @@ if st.session_state.initialized:
             st.dataframe(conflicts_df, use_container_width=True)
 
     # ==========================================================
-# TAB 3 – HELP
-# ==========================================================
-with tab_help:
-    st.subheader("How to Use This Tool")
-
-    st.markdown("##### 1. Build Your Roster CSV")
-    st.markdown(
-        """
-Your roster CSV **must** include the following columns (in any order), and you may use  
-the **Advanced options → Merge multiple roster CSV files** tool if you need to combine  
-rosters from multiple teams.
-
-### Required Columns
-
-| Column          | Description                                          | Example      |
-|-----------------|------------------------------------------------------|--------------|
-| `name`          | Wrestler name                                        | `John Doe`   |
-| `team`          | Team name (used for colors & legends)                | `Stillwater` |
-| `grade`         | Numeric grade (5–8, etc.)                            | `7`          |
-| `level`         | Level / experience (float: 1.0, 1.5, 2.0, etc.)      | `1.5`        |
-| `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches` | `Y`/`N` – whether the wrestler needs an early match  | `Y`          |
-| `scratch`       | `Y`/`N` – marked out of the meet (can be changed later) | `N`       |
-
-### Optional Columns
-
-| Column            | Description                                                               | Example |
-|-------------------|---------------------------------------------------------------------------|---------|
-| `gender`          | `M` / `F` (or similar; the app normalizes internally)                    | `F`     |
-| `cross_gender_ok` | `Y`/`N` – whether this wrestler may wrestle someone of another gender    | `N`     |
-
-You **do not** need to provide an `id` column – the app generates unique IDs automatically.
-
-### Tips
-- Use **Step 1** to download the official CSV template.
-- If you receive separate roster files from multiple teams, use  
-  **Advanced options → Merge multiple roster CSV files** to quickly create a single combined CSV.
-- Once your roster is ready, upload it in **Step 2** to generate matchups.
-"""
-    )
-
-    st.markdown("##### 2. Tune Meet Settings (Sidebar)")
-    st.markdown(
-        """
-- **Min / Max Matches** – target range for bouts per wrestler.
-- **Number of Mats** – how many mats are running at once.
-- **Max Level Diff / Weight Diff** – how strict the matching is.
-- **Min Rest Gap** – how many bouts must be between two matches for the same wrestler.
-- **Team Colors** – after you upload a roster, each team appears here so you can assign colors used in:
-  - Circle emojis in the drag rows
-  - PDF/Excel exports
-  - Legends in the mat previews
-        """
-    )
-
+    # TAB 3 – HELP
+    # ==========================================================
+    with tab_help:
+        st.subheader("How to Use This Tool")
+    
+        st.markdown("##### 1. Build Your Roster CSV")
+        st.markdown(
+            """
+    Your roster CSV **must** include the following columns (in any order), and you may use  
+    the **Advanced options → Merge multiple roster CSV files** tool if you need to combine  
+    rosters from multiple teams.
+    
+    ### Required Columns
+    
+    | Column          | Description                                          | Example      |
+    |-----------------|------------------------------------------------------|--------------|
+    | `name`          | Wrestler name                                        | `John Doe`   |
+    | `team`          | Team name (used for colors & legends)                | `Stillwater` |
+    | `grade`         | Numeric grade (5–8, etc.)                            | `7`          |
+    | `level`         | Level / experience (float: 1.0, 1.5, 2.0, etc.)      | `1.5`        |
+    | `weight`        | Weight in pounds (numeric)                           | `75`         |
+    | `early_match`   | `Y`/`N` – whether the wrestler needs an early match  | `Y`          |
+    | `scratch`       | `Y`/`N` – marked out of the meet (can be changed later) | `N`       |
+    
+    ### Optional Columns
+    
+    | Column            | Description                                                               | Example |
+    |-------------------|---------------------------------------------------------------------------|---------|
+    | `gender`          | `M` / `F` (or similar; the app normalizes internally)                    | `F`     |
+    | `cross_gender_ok` | `Y`/`N` – whether this wrestler may wrestle someone of another gender    | `N`     |
+    
+    You **do not** need to provide an `id` column – the app generates unique IDs automatically.
+    
+    ### Tips
+    - Use **Step 1** to download the official CSV template.
+    - If you receive separate roster files from multiple teams, use  
+      **Advanced options → Merge multiple roster CSV files** to quickly create a single combined CSV.
+    - Once your roster is ready, upload it in **Step 2** to generate matchups.
+    """
+        )
+    
+        st.markdown("##### 2. Tune Meet Settings (Sidebar)")
+        st.markdown(
+            """
+    - **Min / Max Matches** – target range for bouts per wrestler.
+    - **Number of Mats** – how many mats are running at once.
+    - **Max Level Diff / Weight Diff** – how strict the matching is.
+    - **Min Rest Gap** – how many bouts must be between two matches for the same wrestler.
+    - **Team Colors** – after you upload a roster, each team appears here so you can assign colors used in:
+      - Circle emojis in the drag rows
+      - PDF/Excel exports
+      - Legends in the mat previews
+    """
+        )
+    
         st.markdown("##### 3. Build & Adjust the Meet")
         st.markdown(
             """
-- Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
-- Use **Manual Match Creator** to fill gaps for wrestlers under the minumum and when coaches want specific bouts.
-  - Wrestler 2 choices are filtered so that gender preferences are respected (cross-gender only if both wrestlers allow it).
-- In **Mat Previews**:
-  - Drag to reorder bouts on each mat.
-  - Use the per-mat dropdown to remove a bout.
-  - Use the **Move to mat** control to move a bout from one mat to another.
-  - Watch the *rest warnings* and *multi-mat warnings* to avoid conflicts.
-- Use the single **Undo** button to step backwards through:
-  - Bout removals  
-  - Drag/reorder changes  
-  - Manual matches  
-  - Added suggested matches  
-  - Scratches updates (in edited mode)
-            """
+    - Use **Pre-Meet Scratches** to quickly remove wrestlers from the meet.
+    - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific bouts.
+      - Wrestler 2 choices are filtered so that gender preferences are respected (cross-gender only if both wrestlers allow it).
+    - In **Mat Previews**:
+      - Drag to reorder bouts on each mat.
+      - Use the per-mat dropdown to remove a bout.
+      - Use the **Move to mat** control to move a bout from one mat to another.
+      - Watch the *rest warnings* and *multi-mat warnings* to avoid conflicts.
+    - Use the single **Undo** button to step backwards through:
+      - Bout removals  
+      - Drag/reorder changes  
+      - Manual matches  
+      - Added suggested matches  
+      - Scratches updates (in edited mode)
+    """
         )
-
+    
         st.markdown("##### 4. Exports")
         st.markdown(
             """
-- Click **Generate Documents** to build:
-  - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
-  - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
-- Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
-            """
+    - Click **Generate Documents** to build:
+      - An **Excel** file with roster, all matchups, remaining suggestions, and mat sheets.
+      - A **PDF** with mat-by-mat bout sheets, including early-match highlighting and team colors.
+    - Then use the **Download Excel / Download PDF** buttons at the bottom of the *Match Builder* tab.
+    """
         )
-
-else:
-    st.info("Upload a roster CSV in **Step 2** to unlock Match Builder, Meet Summary, and Help tabs.")
 
 # ----------------------------------------------------------------------
 # AUTOSAVE AT END OF RUN
@@ -2864,6 +2861,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
