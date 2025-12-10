@@ -2747,7 +2747,7 @@ if st.session_state.initialized:
         if not conflicts_all:
             st.caption(f"No rest conflicts detected (min gap {rest_gap} matches).")
         else:
-            # Ensure slot numbers match the current mat schedule
+            # Make sure slots in the warnings match the current schedule
             slot_lookup = {
                 (e["mat"], e["bout_num"]): e["slot"]
                 for e in full_schedule
@@ -2760,25 +2760,24 @@ if st.session_state.initialized:
                 if key2 in slot_lookup:
                     c["slot2"] = slot_lookup[key2]
         
+            # Build a table that only shows slots (no bout numbers)
             conflicts_df = pd.DataFrame(conflicts_all)
             conflicts_df = conflicts_df[
-                ["wrestler", "team", "mat", "bout1", "slot1", "bout2", "slot2", "gap"]
+                ["wrestler", "team", "mat", "slot1", "slot2", "gap"]
             ].rename(columns={
                 "wrestler": "Wrestler",
                 "team": "Team",
                 "mat": "Mat",
-                "bout1": "Bout A",
                 "slot1": "Slot A",
-                "bout2": "Bout B",
                 "slot2": "Slot B",
-                "gap": "Gap"
+                "gap": "Gap",
             })
+        
             st.warning(
                 f"There are **{len(conflicts_df)}** potential rest issues "
                 f"(gap < {rest_gap} matches on the same mat)."
             )
             st.dataframe(conflicts_df, use_container_width=True)
-
 
         # ==========================================================
     # TAB 3 – HELP
@@ -2883,6 +2882,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
