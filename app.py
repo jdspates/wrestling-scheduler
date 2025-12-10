@@ -2229,26 +2229,28 @@ if st.session_state.initialized:
                 f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
             )
             with st.expander("Show wrestlers on multiple mats", expanded=False):
-                for issue in multi_mat_issues:
-                    # Build per-mat slot display like: "1 (Match 3), 2 (Match 4, 9)"
-                    parts = []
-                    for mat in issue["mats"]:
-                        slots_on_mat = sorted(
-                            m["slot"]
-                            for m in issue["matches"]
-                            if m["mat"] == mat
-                        )
-                        if len(slots_on_mat) == 1:
-                            slot_text = f"Match {slots_on_mat[0]}"
-                        else:
-                            slot_text = "Match " + ", ".join(str(s) for s in slots_on_mat)
-        
-                        parts.append(f"{mat} ({slot_text})")
-        
-                    mat_slot_text = ", ".join(parts)
-                    st.markdown(
-                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_slot_text}"
+            lines = []
+            for issue in multi_mat_issues:
+                parts = []
+                for mat in issue["mats"]:
+                    slots_on_mat = sorted(
+                        m["slot"]
+                        for m in issue["matches"]
+                        if m["mat"] == mat
                     )
+                    if len(slots_on_mat) == 1:
+                        slot_text = f"Match {slots_on_mat[0]}"
+                    else:
+                        slot_text = "Matches " + ", ".join(str(s) for s in slots_on_mat)
+                    parts.append(f"{mat} ({slot_text})")
+        
+                mat_slot_text = ", ".join(parts)
+                lines.append(
+                    f"- **{issue['name']}** ({issue['team']}): Mats {mat_slot_text}"
+                )
+        
+            st.markdown("\n".join(lines))
+
         else:
             st.caption("All wrestlers are currently assigned to a single mat.")
         
@@ -3069,6 +3071,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
