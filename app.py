@@ -2537,7 +2537,7 @@ if st.session_state.initialized:
                                 ):
                                     # --- REMOVE BOUT ---
                                     selected_bout = st.selectbox(
-                                        "Remove bout on this mat",
+                                        """**Remove bout on this mat**""",
                                         options=valid_bouts,
                                         format_func=lambda v: bout_label_map[v],
                                         key=f"remove_select_mat_{mat}",
@@ -3109,6 +3109,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
