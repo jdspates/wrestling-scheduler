@@ -2395,10 +2395,10 @@ if st.session_state.initialized:
                             for c in mat_conflicts:
                                 st.markdown(
                                     f"- {c['wrestler']} ({c['team']}): "
-                                    f"Bout {c['bout1']} (Slot {c['slot1']}) → "
-                                    f"Bout {c['bout2']} (Slot {c['slot2']}) "
+                                    f"Slot {c['slot1']} → Slot {c['slot2']} "
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
+
 
         # ----- Unified Undo Button -----
         st.markdown("---")
@@ -2869,6 +2869,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
