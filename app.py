@@ -1315,8 +1315,7 @@ div[data-testid="stExpander"] .stMarkdown li {
 
 div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
 div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
-.block-container { padding:2rem 1rem !important; max-width:1200px !important; margin:0 auto !important; }
-.main .block-container { padding-left:2rem !important; padding-right:2rem !important; }
+
 h1 { margin-top:0 !important; }
 .stSidebar .stButton > button {
     padding: 0.5rem 1rem !important;
@@ -3160,6 +3159,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
