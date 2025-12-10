@@ -2845,7 +2845,7 @@ You **do not** need to provide an `id` column – the app generates unique IDs a
         st.markdown("##### 4. Exports")
         st.markdown(
             """
-- Click **Generate Coach Packets PDF" to build:
+- Click **Generate Coach Packets PDF** to build:
   - A **PDF** with all matches for a specific team will be generated.
 - Then use **Download Coach Packet PDF** to download document.
 
@@ -2869,6 +2869,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
