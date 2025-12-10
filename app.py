@@ -1313,6 +1313,11 @@ div[data-testid="stExpander"] .stMarkdown li {
     margin-bottom: 0.1rem !important;
 }
 
+/* Tighten spacing inside the “Advanced” expander */
+div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
+    margin-top: 0.25rem !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -3077,6 +3082,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
