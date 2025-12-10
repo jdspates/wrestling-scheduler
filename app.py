@@ -1297,6 +1297,21 @@ div[data-testid="stAlert"] {
     padding-bottom: 0 !important;
 }
 
+/* Fix spacing inside expander Markdown blocks */
+div[data-testid="stExpander"] .stMarkdown p {
+    margin-top: 0.1rem !important;
+    margin-bottom: 0.1rem !important;
+}
+
+div[data-testid="stExpander"] .stMarkdown ul {
+    margin-top: 0.2rem !important;
+    margin-bottom: 0.2rem !important;
+}
+
+div[data-testid="stExpander"] .stMarkdown li {
+    margin-top: 0.1rem !important;
+    margin-bottom: 0.1rem !important;
+}
 
 </style>
 """,
@@ -3054,6 +3069,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
