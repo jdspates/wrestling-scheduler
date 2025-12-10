@@ -1340,6 +1340,12 @@ div[data-testid="stExpander"] div[data-baseweb="select"] {
     margin-top: 0rem !important;      /* remove extra gap above the select */
 }
 
+/* Make form labels inside expanders bold and tighten spacing */
+div[data-testid="stExpander"] label {
+    font-weight: 600 !important;
+    margin-bottom: 0.1rem !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -3103,6 +3109,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
