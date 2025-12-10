@@ -1285,6 +1285,19 @@ div[data-testid="stAlert"] {
     margin-bottom: 0.6rem;
 }
 
+/* Reduce spacing inside UL/LI lists */
+.stMarkdown ul {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.25rem !important;
+    padding-left: 1.2rem !important;
+}
+
+.stMarkdown ul li {
+    margin-bottom: 0.15rem !important;
+    padding-bottom: 0 !important;
+}
+
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -3041,6 +3054,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
