@@ -1236,6 +1236,7 @@ if uploaded and not st.session_state.initialized:
         st.error(f"Error loading roster: {e}")
 
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # ADVANCED OPTIONS – START OVER + SAVE / LOAD MEET
 # ----------------------------------------------------------------------
 with st.expander("Advanced options (Start Over, save / load meet)", expanded=False):
@@ -1336,6 +1337,83 @@ with st.expander("Advanced options (Start Over, save / load meet)", expanded=Fal
                 st.rerun()
             except Exception as e:
                 st.error(f"Could not restore autosave: {e}")
+
+    # ----- Merge multiple roster CSV files -----
+    st.markdown("##### Merge multiple roster CSV files")
+    st.caption(
+        "Upload separate team roster CSV files and merge them into a single combined roster CSV. "
+        "This does not change the current meet; it just helps you avoid manual copy/paste."
+    )
+
+    merge_files = st.file_uploader(
+        "Select one or more roster CSV files",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="merge_rosters_simple",
+    )
+
+    if merge_files:
+        st.write("Files selected:")
+        for f in merge_files:
+            st.write("•", f.name)
+
+        if st.button("Merge selected roster files", key="merge_rosters_button"):
+            try:
+                EXPECTED_COLUMNS = [
+                    "name",
+                    "team",
+                    "grade",
+                    "level",
+                    "weight",
+                    "early_match",      # canonical name in your app
+                    "scratch",
+                    "gender",
+                    "cross_gender_ok",
+                ]
+
+                dfs = []
+                for f in merge_files:
+                    df = pd.read_csv(f)
+
+                    # Normalize column names
+                    df.columns = [c.strip() for c in df.columns]
+
+                    # Handle early_match vs early_matc typo
+                    if "early_matc" in df.columns and "early_match" not in df.columns:
+                        df = df.rename(columns={"early_matc": "early_match"})
+
+                    # Ensure all expected columns exist
+                    for col in EXPECTED_COLUMNS:
+                        if col not in df.columns:
+                            df[col] = None
+
+                    # Reorder to your standard structure
+                    df = df[EXPECTED_COLUMNS]
+                    dfs.append(df)
+
+                if not dfs:
+                    st.error("No valid data found in the uploaded files.")
+                else:
+                    merged = pd.concat(dfs, ignore_index=True)
+
+                    st.success("✅ Rosters merged successfully.")
+                    st.dataframe(merged.head(), use_container_width=True)
+
+                    csv_bytes = merged.to_csv(index=False).encode("utf-8-sig")
+                    st.download_button(
+                        label="Download merged_roster.csv",
+                        data=csv_bytes,
+                        file_name="merged_roster.csv",
+                        mime="text/csv",
+                        key="download_merged_roster",
+                    )
+
+                    # If in the future you want to auto-load this into the app, you could do:
+                    # st.session_state["roster"] = merged.to_dict(orient="records")
+                    # and then st.rerun()
+
+            except Exception as e:
+                st.error(f"Error during merge: {e}")
 
 st.markdown("---")
 
@@ -2757,6 +2835,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
