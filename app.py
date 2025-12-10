@@ -1318,6 +1318,10 @@ div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
     margin-top: 0.25rem !important;
 }
 
+div[data-testid="stExpander"] .stMarkdown + div[data-baseweb="select"] {
+    margin-top: 0rem !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -3082,6 +3086,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
