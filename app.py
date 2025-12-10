@@ -1134,8 +1134,6 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 
 st.markdown(
     """
-st.markdown(
-    """
 <style>
 
     /* ----------------------- GLOBAL LAYOUT ----------------------- */
@@ -3024,5 +3022,6 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
