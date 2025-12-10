@@ -2765,14 +2765,14 @@ if st.session_state.initialized:
             st.dataframe(conflicts_df, use_container_width=True)
 
     # ==========================================================
-    # TAB 3 – HELP
-    # ==========================================================
-    with tab_help:
-        st.subheader("How to Use This Tool")
+# TAB 3 – HELP
+# ==========================================================
+with tab_help:
+    st.subheader("How to Use This Tool")
 
-        st.markdown("##### 1. Build Your Roster CSV")
-st.markdown(
-    """
+    st.markdown("##### 1. Build Your Roster CSV")
+    st.markdown(
+        """
 Your roster CSV **must** include the following columns (in any order), and you may use  
 the **Advanced options → Merge multiple roster CSV files** tool if you need to combine  
 rosters from multiple teams.
@@ -2786,7 +2786,7 @@ rosters from multiple teams.
 | `grade`         | Numeric grade (5–8, etc.)                            | `7`          |
 | `level`         | Level / experience (float: 1.0, 1.5, 2.0, etc.)      | `1.5`        |
 | `weight`        | Weight in pounds (numeric)                           | `75`         |
-| `early_matches`   | `Y`/`N` – whether the wrestler needs an early match  | `Y`          |
+| `early_matches` | `Y`/`N` – whether the wrestler needs an early match  | `Y`          |
 | `scratch`       | `Y`/`N` – marked out of the meet (can be changed later) | `N`       |
 
 ### Optional Columns
@@ -2804,11 +2804,11 @@ You **do not** need to provide an `id` column – the app generates unique IDs a
   **Advanced options → Merge multiple roster CSV files** to quickly create a single combined CSV.
 - Once your roster is ready, upload it in **Step 2** to generate matchups.
 """
-)
+    )
 
-        st.markdown("##### 2. Tune Meet Settings (Sidebar)")
-        st.markdown(
-            """
+    st.markdown("##### 2. Tune Meet Settings (Sidebar)")
+    st.markdown(
+        """
 - **Min / Max Matches** – target range for bouts per wrestler.
 - **Number of Mats** – how many mats are running at once.
 - **Max Level Diff / Weight Diff** – how strict the matching is.
@@ -2817,8 +2817,8 @@ You **do not** need to provide an `id` column – the app generates unique IDs a
   - Circle emojis in the drag rows
   - PDF/Excel exports
   - Legends in the mat previews
-            """
-        )
+        """
+    )
 
         st.markdown("##### 3. Build & Adjust the Meet")
         st.markdown(
@@ -2864,6 +2864,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
