@@ -2496,8 +2496,8 @@ if st.session_state.initialized:
                             st.caption("No bouts left on this mat.")
                         else:
                             with st.expander(
-                                **Advanced: Remove or move a match on this mat**,
-                                expanded=False
+                                """**Advanced: Remove or move a match on this mat**,
+                                expanded=False"""
                             ):
                                 selected_bout = st.selectbox(
                                     "Remove bout on this mat:",
@@ -3071,6 +3071,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
