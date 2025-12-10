@@ -2203,7 +2203,6 @@ if st.session_state.initialized:
                                     f"(gap {c['gap']} < required {rest_gap})"
                                 )
 
-
                 st.caption("Reordering and removal are disabled while search is active. Clear the search box to edit mats.")
 
             # ---------- EDIT MODE (drag + per-mat remove + move) ----------
@@ -2885,6 +2884,7 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
+
 
 
 
