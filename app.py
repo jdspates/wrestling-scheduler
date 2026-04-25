@@ -1982,6 +1982,11 @@ if uploaded and not st.session_state.initialized:
         st.session_state.suggestions = build_suggestions(st.session_state.active, st.session_state.bout_list)
         st.session_state.initialized = True
         st.session_state.action_history = []
+        st.session_state.mat_order = {}
+        st.session_state.mat_overrides = {}
+        st.session_state.excel_bytes = None
+        st.session_state.pdf_bytes = None
+        st.session_state.coach_pdf_bytes = None
 
         st.success(
             f"Roster loaded ({len(wrestlers)} wrestlers, "
