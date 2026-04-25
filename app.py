@@ -3162,6 +3162,7 @@ if st.session_state.initialized:
                                 f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2}, {w2_matches}m)"
                                 f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
                                 f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                                f"  |  Score {b['score']:.1f}"
                             )
 
                             row_labels.append(label)
