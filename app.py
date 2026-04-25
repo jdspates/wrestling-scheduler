@@ -2319,11 +2319,11 @@ if st.session_state.initialized:
                             for m in range(1, CONFIG["NUM_MATS"] + 1):
                                 data = [e for e in final_sched if e["mat"] == m]
                                 if not data:
-                                    pd.DataFrame([["", "", ""]], columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]).to_excel(writer, f"Mat {m}", index=False)
+                                    pd.DataFrame([["", "", ""]], columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]).to_excel(writer, sheet_name=f"Mat {m}", index=False)
                                     continue
                                 df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
                                 df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
-                                df.to_excel(writer, f"Mat {m}", index=False)
+                                df.to_excel(writer, sheet_name=f"Mat {m}", index=False)
                                 if _EXCEL_AVAILABLE:
                                     ws = writer.book[f"Mat {m}"]
                                     fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
