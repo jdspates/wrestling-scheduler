@@ -1585,31 +1585,27 @@ st.set_page_config(page_title="Wrestling Scheduler", layout="wide")
 st.markdown(
     """
 <style>
-/* ---------------- GLOBAL LAYOUT ---------------- */
-
+/* ── GLOBAL ─────────────────────────────────────────────────────── */
 .main {
-    background-color: #e5e7eb !important;  /* light gray main background */
+    background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%) !important;
 }
-
 .main .block-container {
-    padding: 2rem 1.5rem !important;
+    background-color: #ffffff !important;
+    border-radius: 14px !important;
+    padding: 1.5rem 2rem 2rem 2rem !important;
     max-width: 1250px !important;
-    margin: 0 auto !important;
+    margin: 0.75rem auto !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.10) !important;
 }
+h1 { margin-top: 0 !important; font-weight: 700 !important; font-size: 1.6rem !important; }
+h2 { font-size: 1.2rem !important; }
+h3 { font-size: 1.05rem !important; }
 
-h1 {
-    margin-top: 0 !important;
-    font-weight: 700 !important;
-}
-
-/* ---------------- SIDEBAR ---------------- */
-
+/* ── SIDEBAR ─────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
-    background-color: #111827 !important;   /* dark sidebar */
+    background-color: #111827 !important;
     color: #f9fafb !important;
 }
-
-/* Sidebar text elements */
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
@@ -1619,231 +1615,173 @@ section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] span {
     color: #f9fafb !important;
 }
-
-/* Sidebar buttons */
 .stSidebar .stButton > button {
-    padding: 0.5rem 1rem !important;
+    padding: 0.4rem 1rem !important;
     height: auto !important;
-    min-width: auto !important;
     border-radius: 999px !important;
-    background-color: #ef4444 !important;  /* bright red */
+    background-color: #ef4444 !important;
     border: none !important;
     font-weight: 600 !important;
 }
 
-/* ---------------- BUTTONS (MAIN AREA) ---------------- */
-
+/* ── BUTTONS ─────────────────────────────────────────────────────── */
 .stButton > button {
     border-radius: 999px !important;
-    padding: 0.5rem 1.2rem !important;
+    padding: 0.45rem 1.2rem !important;
     font-weight: 600 !important;
     border: none !important;
-    background-color: #b91c1c !important;   /* deep red */
+    background-color: #b91c1c !important;
     color: white !important;
     box-shadow: 0 2px 4px rgba(0,0,0,0.15) !important;
+    transition: background-color 0.15s ease !important;
+}
+.stButton > button:hover { background-color: #7f1d1d !important; }
+.stButton > button:disabled {
+    background-color: #d1d5db !important;
+    color: #9ca3af !important;
+    box-shadow: none !important;
 }
 
-.stButton > button:hover {
-    background-color: #7f1d1d !important;
+/* ── HEADER UNDO BUTTON ──────────────────────────────────────────── */
+div[data-testid="column"]:last-child .stButton > button {
+    background-color: #1d4ed8 !important;  /* blue for undo — visually distinct */
+    font-size: 0.85rem !important;
+    padding: 0.4rem 0.8rem !important;
+}
+div[data-testid="column"]:last-child .stButton > button:hover {
+    background-color: #1e3a8a !important;
+}
+div[data-testid="column"]:last-child .stButton > button:disabled {
+    background-color: #e5e7eb !important;
+    color: #9ca3af !important;
 }
 
-/* ---------------- TEXT INPUTS ---------------- */
-
+/* ── TEXT INPUTS ─────────────────────────────────────────────────── */
 .stTextInput > div > div > input {
     border-radius: 999px !important;
     border: 1px solid #9ca3af !important;
     padding: 0.4rem 0.8rem !important;
     background-color: #ffffff !important;
 }
-
 .stTextInput > div > div > button {
     background: transparent !important;
     border: none !important;
     color: #6b7280 !important;
 }
 
-/* ---------------- EXPANDERS (ADVANCED + MATS) ---------------- */
+/* ── SECTION HEADERS ─────────────────────────────────────────────── */
+.stMarkdown h2, .stMarkdown h3 {
+    padding: 5px 12px;
+    background-color: #f3f4f6;
+    border-left: 4px solid #b91c1c;
+    border-radius: 4px;
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+}
 
+/* ── EXPANDERS ───────────────────────────────────────────────────── */
 div[data-testid="stExpander"] {
+    background-color: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 10px !important;
-    border: 1px solid #d1d5db !important;
-    background-color: #f9fafb !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-    margin-bottom: 0.75rem !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+    margin-bottom: 0.5rem !important;
 }
-
-/* Your original padding / gap rules preserved */
-div[data-testid="stExpander"] > div > div { 
-    padding:0 !important; 
-    margin:0 !important; 
+div[data-testid="stExpander"] > div > div {
+    padding: 0 !important;
+    margin: 0 !important;
 }
-div[data-testid="stVerticalBlock"] > div { 
-    gap:0 !important; 
-}
-
-/* Expander header button */
+div[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
 div[data-testid="stExpander"] button[aria-expanded] {
-    background-color: #e5e7eb !important;
+    background-color: #f3f4f6 !important;
     border-radius: 10px 10px 0 0 !important;
 }
-
-/* Content inside expanders */
 div[data-testid="stExpander"] .stMarkdown,
 div[data-testid="stExpander"] [data-testid="stDataFrame"] {
-    padding: 0.6rem 0.9rem 0.8rem 0.9rem !important;
+    padding: 0.5rem 0.9rem 0.7rem 0.9rem !important;
 }
+div[data-testid="stExpander"] .stMarkdown { margin-bottom: 0.2rem !important; }
+div[data-testid="stExpander"] div[data-baseweb="select"] { margin-top: 0rem !important; }
+div[data-testid="stExpander"] label {
+    font-weight: 600 !important;
+    margin-bottom: 0.1rem !important;
+}
+div[data-testid="stExpander"] .stMarkdown p { margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
+div[data-testid="stExpander"] .stMarkdown ul { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
+div[data-testid="stExpander"] .stMarkdown li { margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
 
-/* ---------------- TABLES / DATAFRAMES ---------------- */
-
+/* ── TABLES ──────────────────────────────────────────────────────── */
 [data-testid="stDataFrame"] {
     border-radius: 8px !important;
     border: 1px solid #d1d5db !important;
     overflow: hidden !important;
 }
-
 [data-testid="stDataFrame"] th {
     background-color: #e5e7eb !important;
     font-weight: 600 !important;
     text-align: left !important;
 }
+[data-testid="stDataFrame"] td { text-align: left !important; }
+[data-testid="stDataFrame"] tbody tr:hover td { background-color: #f3f4f6 !important; }
 
-[data-testid="stDataFrame"] td {
-    text-align: left !important;
-}
-
-/* Hover effect on table rows */
-[data-testid="stDataFrame"] tbody tr:hover td {
-    background-color: #f3f4f6 !important;
-}
-
-/* ---------------- ALERTS (warnings / info) ---------------- */
-
+/* ── ALERTS ──────────────────────────────────────────────────────── */
 div[data-testid="stAlert"] {
     border-radius: 8px !important;
     border: 1px solid #fbbf24 !important;
     background-color: #fffbeb !important;
 }
 
-/* ---------------- HEADERS / SECTION TITLES ---------------- */
-
-.stMarkdown h2, .stMarkdown h3 {
-    padding: 6px 12px;
-    background-color: #f3f4f6;
-    border-left: 4px solid #b91c1c;
-    border-radius: 4px;
-    margin-top: 1.4rem;
-    margin-bottom: 0.6rem;
+/* ── TABS ────────────────────────────────────────────────────────── */
+.stTabs [role="tablist"] {
+    margin-top: 0.4rem !important;
+    margin-bottom: 0.8rem !important;
+    border-bottom: 2px solid #e5e7eb !important;
 }
+.stTabs [aria-selected="true"] {
+    background-color: #ffffff !important;
+    border-bottom: 3px solid #b91c1c !important;
+    font-weight: 700 !important;
+    color: #b91c1c !important;
+}
+.stTabs [role="tab"]:hover { background-color: #f3f4f6 !important; }
 
-/* Reduce spacing inside UL/LI lists */
+/* ── LISTS ───────────────────────────────────────────────────────── */
 .stMarkdown ul {
     margin-top: 0.25rem !important;
     margin-bottom: 0.25rem !important;
     padding-left: 1.2rem !important;
 }
+.stMarkdown ul li { margin-bottom: 0.15rem !important; padding-bottom: 0 !important; }
 
-.stMarkdown ul li {
-    margin-bottom: 0.15rem !important;
-    padding-bottom: 0 !important;
+/* ── STATUS BAR (when roster loaded) ────────────────────────────── */
+.status-bar {
+    display: flex;
+    gap: 1.5rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.6rem 1.2rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    align-items: center;
+    flex-wrap: wrap;
 }
+.status-item { color: #374151; }
+.status-item strong { color: #111827; }
+.status-ok { color: #059669 !important; font-weight: 600; }
+.status-warn { color: #d97706 !important; font-weight: 600; }
+.status-error { color: #dc2626 !important; font-weight: 600; }
 
-/* Fix spacing inside expander Markdown blocks */
-div[data-testid="stExpander"] .stMarkdown p {
-    margin-top: 0.1rem !important;
-    margin-bottom: 0.1rem !important;
-}
-
-div[data-testid="stExpander"] .stMarkdown ul {
-    margin-top: 0.2rem !important;
-    margin-bottom: 0.2rem !important;
-}
-
-div[data-testid="stExpander"] .stMarkdown li {
-    margin-top: 0.1rem !important;
-    margin-bottom: 0.1rem !important;
-}
-
-div[data-testid="stExpander"] > div > div { padding:0 !important; margin:0 !important; }
-div[data-testid="stVerticalBlock"] > div { gap:0 !important; }
-
-h1 { margin-top:0 !important; }
-.stSidebar .stButton > button {
-    padding: 0.5rem 1rem !important;
-    height: auto !important;
-    min-width: auto !important;
-}
-.stTextInput > div > div > input { border-radius: 6px !important; }
-.stTextInput > div > div > button {
-    background: transparent !important;
-    border: none !important;
-    color: #888 !important;
-}
-
-/* 🔽 NEW: tighten spacing between expander headings and selectboxes */
-div[data-testid="stExpander"] .stMarkdown {
-    margin-bottom: 0.2rem !important;  /* can go to 0.1rem or 0rem if you want it tighter */
-}
-
-/* Directly target the selectbox container inside expanders */
-div[data-testid="stExpander"] div[data-baseweb="select"] {
-    margin-top: 0rem !important;      /* remove extra gap above the select */
-}
-
-/* Make form labels inside expanders bold and tighten spacing */
-div[data-testid="stExpander"] label {
-    font-weight: 600 !important;
-    margin-bottom: 0.1rem !important;
-}
-
-/* ============================================================
-   POLISH UPGRADE – OPTION A (Subtle Professional Dashboard Style)
-   ============================================================ */
-
-/* Soft gradient background for main page */
-.main {
-    background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%) !important;
-}
-
-/* White card container around main content */
-.main .block-container {
-    background-color: #ffffff !important;
-    border-radius: 14px !important;
-    padding: 2rem 2rem !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.10) !important;
-    margin-top: 1rem !important;
-    margin-bottom: 1rem !important;
-}
-
-/* Expander panels match the card aesthetic */
-div[data-testid="stExpander"] {
-    background-color: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
-    border-radius: 10px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-}
-
-/* Expander header background subtle */
-div[data-testid="stExpander"] button[aria-expanded] {
-    background-color: #f3f4f6 !important;
-    border-radius: 10px 10px 0 0 !important;
-}
-
-/* Improve spacing around tab bar */
-.stTabs [role="tablist"] {
-    margin-top: 0.6rem !important;
-    margin-bottom: 1.2rem !important;
-}
-
-/* Style active tab subtly */
-.stTabs [aria-selected="true"] {
-    background-color: #ffffff !important;
-    border-bottom: 3px solid #b91c1c !important; /* matches your red accent */
-    font-weight: 600 !important;
-}
-
-/* Hover effect for tabs */
-.stTabs [role="tab"]:hover {
-    background-color: #f3f4f6 !important;
+/* ── ACTION TOOLBAR ──────────────────────────────────────────────── */
+.action-toolbar {
+    display: flex;
+    gap: 0.75rem;
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 </style>
@@ -1853,33 +1791,53 @@ div[data-testid="stExpander"] button[aria-expanded] {
 
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
-st.title("Wrestling Meet Scheduler")
-st.caption("Upload roster → Generate → Edit → Download. **No data stored.**")
-
-# ---- STEP 1: DOWNLOAD ROSTER TEMPLATE ----
-st.markdown("### Step 1 – Download roster template (CSV)")
-st.markdown(
-    "Download the example file, add your wrestlers, save it as a `.csv`, "
-    "then upload it in Step 2 below."
-)
-
-st.download_button(
-    label="⬇️ Download roster template CSV",
-    data=TEMPLATE_CSV.encode("utf-8"),
-    file_name="roster_template.csv",
-    mime="text/csv",
-    use_container_width=False,
-)
+# ── Header row: title + undo always visible ──────────────────────────
+hdr_left, hdr_right = st.columns([3, 1])
+with hdr_left:
+    st.title("🤼 Wrestling Meet Scheduler")
+with hdr_right:
+    if st.session_state.get("initialized"):
+        last_action = st.session_state.action_history[-1] if st.session_state.action_history else None
+        if last_action:
+            t = last_action.get("type")
+            undo_labels = {
+                "remove": "↩ Undo Remove",
+                "drag": "↩ Undo Reorder",
+                "manual_add": "↩ Undo Manual Match",
+                "suggest_add": "↩ Undo Suggestions",
+                "scratch_update": "↩ Undo Scratches",
+            }
+            undo_label = undo_labels.get(t, "↩ Undo")
+            if st.button(undo_label, key="header_undo_btn", use_container_width=True):
+                undo_last_action()
+        else:
+            st.button("↩ Undo", disabled=True, key="header_undo_disabled", use_container_width=True)
 
 st.markdown("---")
 
-# ---- STEP 2: UPLOAD ROSTER ----
-st.markdown("### Step 2 – Upload your completed `roster.csv`")
+# ── SETUP SECTION: only shown before roster is loaded ────────────────
+if not st.session_state.get("initialized"):
+    st.markdown("### Step 1 – Download roster template (CSV)")
+    st.markdown(
+        "Download the example file, add your wrestlers, save it as a `.csv`, "
+        "then upload it in Step 2 below."
+    )
+    st.download_button(
+        label="⬇️ Download roster template CSV",
+        data=TEMPLATE_CSV.encode("utf-8"),
+        file_name="roster_template.csv",
+        mime="text/csv",
+        use_container_width=False,
+    )
+    st.markdown("---")
+    st.markdown("### Step 2 – Upload your completed `roster.csv`")
 
+# ── Upload widget always present (needed for versioned key) ──────────
 uploaded = st.file_uploader(
-    "Upload your roster.csv file",
+    "Upload your roster.csv file" if not st.session_state.get("initialized") else " ",
     type="csv",
     key=f"roster_csv_uploader_v{st.session_state.roster_uploader_version}",
+    label_visibility="visible" if not st.session_state.get("initialized") else "collapsed",
 )
 
 # Process upload once per meet
@@ -2286,7 +2244,32 @@ if st.session_state.initialized:
     raw_active = st.session_state.active
     roster = st.session_state.roster
 
-    tab_build, tab_summary, tab_help = st.tabs(["Match Builder", "Meet Summary", "Help"])
+    # ── Status bar ──────────────────────────────────────────────────
+    full_schedule_for_status = apply_mat_order_to_global_schedule() if st.session_state.bout_list else []
+    num_active = len(raw_active)
+    num_scratched = len([w for w in roster if w.get("scratch")])
+    total_bouts_status = len([b for b in st.session_state.bout_list if b.get("manual") != "Manually Removed"])
+    under_min_count = len([w for w in raw_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
+    multi_mat_count = len(compute_multi_mat_assignments(full_schedule_for_status)) if full_schedule_for_status else 0
+    rest_conflicts_count = len(compute_rest_conflicts(full_schedule_for_status, CONFIG.get("REST_GAP", 4))) if full_schedule_for_status else 0
+    num_teams = len({w["team"] for w in roster})
+
+    under_cls = "status-warn" if under_min_count > 0 else "status-ok"
+    multi_cls = "status-warn" if multi_mat_count > 0 else "status-ok"
+    rest_cls = "status-warn" if rest_conflicts_count > 0 else "status-ok"
+
+    st.markdown(
+        f"""<div class="status-bar">
+        <span class="status-item">🤼 <strong>{num_active}</strong> wrestlers &nbsp;|&nbsp; <strong>{num_teams}</strong> teams &nbsp;|&nbsp; <strong>{num_scratched}</strong> scratched</span>
+        <span class="status-item">📋 <strong>{total_bouts_status}</strong> bouts</span>
+        <span class="status-item {under_cls}">{'⚠️' if under_min_count else '✅'} {under_min_count} below min</span>
+        <span class="status-item {multi_cls}">{'⚠️' if multi_mat_count else '✅'} {multi_mat_count} multi-mat</span>
+        <span class="status-item {rest_cls}">{'⚠️' if rest_conflicts_count else '✅'} {rest_conflicts_count} rest conflicts</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    tab_build, tab_summary, tab_help = st.tabs(["🏟️ Match Builder", "📊 Meet Summary", "❓ Help"])
 
     # ==========================================================
     # TAB 1 – MATCH BUILDER
@@ -2297,7 +2280,6 @@ if st.session_state.initialized:
         palette = list(COLOR_ICON.keys())
         team_color_for_roster = {}
 
-        # First, use explicit config team colors (TEAM_COLOR_NAMES)
         for team_name in roster_teams:
             cfg_color = TEAM_COLOR_NAMES.get(team_name)
             if cfg_color:
@@ -2315,87 +2297,129 @@ if st.session_state.initialized:
             used_colors.add(color_name)
             idx += 1
 
-        # ---------- QUICK START HELP (in-context) ----------
-        st.markdown("### ❓ Quick Start")
-        with st.expander("Quick Start Guide", expanded=False):
-            st.markdown(
-                """
-        1. **Import your roster**
-           - Use **Step 1** to download the roster template.
-           - If you have **multiple team CSVs**, use **Advanced options → Merge multiple roster CSV files**.
-           - In **Step 2**, upload your completed roster.csv. Matchups generate automatically.
+        # ---------- EXPORTS AT TOP (always accessible) ----------
+        st.markdown("### 📥 Generate & Download")
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        with exp_col1:
+            if st.button("📋 Generate Coach Packets PDF", key="generate_coach_packets_btn_top", use_container_width=True):
+                full_sched_top = apply_mat_order_to_global_schedule()
+                if not full_sched_top:
+                    st.warning("No schedule yet – build matchups first.")
+                else:
+                    try:
+                        coach_pdf = generate_coach_packets_pdf(full_sched_top)
+                        st.session_state.coach_pdf_bytes = coach_pdf
+                        st.toast("Coach packets PDF generated.", icon="📄")
+                    except Exception as e:
+                        st.error(f"Could not generate coach packets: {e}")
+            if st.session_state.get("coach_pdf_bytes"):
+                st.download_button(
+                    "⬇️ Download Coach Packets PDF",
+                    data=st.session_state.coach_pdf_bytes,
+                    file_name="coach_packets.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_coach_top",
+                )
+        with exp_col2:
+            if st.button("📊 Generate Excel + Mat PDF", key="generate_meet_docs_btn_top", use_container_width=True):
+                with st.spinner("Generating files..."):
+                    try:
+                        final_sched = apply_mat_order_to_global_schedule()
+                        st.session_state.mat_schedules = final_sched
+                        out = io.BytesIO()
+                        with pd.ExcelWriter(out, engine="openpyxl") as writer:
+                            pd.DataFrame(st.session_state.active).to_excel(writer, sheet_name="Roster", index=False)
+                            pd.DataFrame(st.session_state.bout_list).to_excel(writer, sheet_name="Matchups", index=False)
+                            pd.DataFrame(st.session_state.suggestions).to_excel(writer, sheet_name="Remaining Suggestions", index=False)
+                            for m in range(1, CONFIG["NUM_MATS"] + 1):
+                                data = [e for e in final_sched if e["mat"] == m]
+                                if not data:
+                                    pd.DataFrame([["", "", ""]], columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]).to_excel(writer, f"Mat {m}", index=False)
+                                    continue
+                                df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
+                                df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
+                                df.to_excel(writer, f"Mat {m}", index=False)
+                                if _EXCEL_AVAILABLE:
+                                    ws = writer.book[f"Mat {m}"]
+                                    fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                                    for i, _ in df.iterrows():
+                                        if next(b for b in st.session_state.bout_list if b["bout_num"] == data[i]["bout_num"])["is_early"]:
+                                            for c in range(1, 4):
+                                                ws.cell(row=i + 2, column=c).fill = fill
+                        st.session_state.excel_bytes = out.getvalue()
+                        buf = io.BytesIO()
+                        doc = SimpleDocTemplate(buf, pagesize=letter)
+                        elements = []
+                        styles = getSampleStyleSheet()
+                        for m in range(1, CONFIG["NUM_MATS"] + 1):
+                            data = [e for e in final_sched if e["mat"] == m]
+                            if not data:
+                                elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
+                                elements.append(PageBreak())
+                                continue
+                            table = [["#", "Wrestler 1", "Wrestler 2"]]
+                            for e in data:
+                                b = next(x for x in st.session_state.bout_list if x["bout_num"] == e["bout_num"])
+                                table.append([e["mat_bout_num"],
+                                    Paragraph(f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}"><b>{b["w1_name"]}</b></font> ({b["w1_team"]})', styles["Normal"]),
+                                    Paragraph(f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}"><b>{b["w2_name"]}</b></font> ({b["w2_team"]})', styles["Normal"]),
+                                ])
+                            t = Table(table, colWidths=[0.5 * inch, 3 * inch, 3 * inch])
+                            s = TableStyle([("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey), ("ALIGN", (0, 0), (-1, -1), "LEFT"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")])
+                            for r, _ in enumerate(table[1:], 1):
+                                if next(b for b in st.session_state.bout_list if b["bout_num"] == data[r - 1]["bout_num"])["is_early"]:
+                                    s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
+                            t.setStyle(s)
+                            elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
+                            if m < CONFIG["NUM_MATS"]:
+                                elements.append(PageBreak())
+                        doc.build(elements)
+                        st.session_state.pdf_bytes = buf.getvalue()
+                        st.toast("Documents generated!", icon="✅")
+                    except Exception as e:
+                        st.error(f"Generation failed: {e}")
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                if st.session_state.excel_bytes is not None:
+                    st.download_button("⬇️ Excel", data=st.session_state.excel_bytes, file_name="meet_schedule.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with dl_col2:
+                if st.session_state.pdf_bytes is not None:
+                    st.download_button("⬇️ Mat PDF", data=st.session_state.pdf_bytes, file_name="meet_schedule.pdf", mime="application/pdf", use_container_width=True)
+        with exp_col3:
+            # Quick Start collapsed by default
+            with st.expander("❓ Quick Start Guide", expanded=False):
+                st.markdown(
+                    """
+1. Upload roster CSV (Step 2 above) — matchups generate automatically.
+2. Check **Roster Imbalance Report** for problem weight bands.
+3. Apply **Pre-Meet Scratches** for absent wrestlers.
+4. Use **Manual Match Creator** to fill gaps.
+5. Drag Mat Previews to reorder bouts.
+6. Use **↩ Undo** button (top right) to reverse any change.
+7. Generate & download above when ready.
+                    """
+                )
 
-        2. **Review the Roster Imbalance Report**
-           - After uploading, check the Roster Imbalance Report at the top.
-           - Red = no match possible. Orange = same-team forced. Yellow = limited options.
-           - The auto-generator handles these automatically and flags them in Mat Previews.
+        st.markdown("---")
 
-        3. **Adjust meet settings (left sidebar)**
-           - Set Min/Max Matches, Number of Mats, Max Level Diff, and Min Wt Diff.
-           - Set Min Rest Gap so wrestlers do not wrestle back-to-back.
-           - Assign team colors after uploading a roster.
-
-        4. **Apply scratches (before the meet)**
-           - In Pre-Meet Scratches, select wrestlers who are not wrestling tonight.
-           - Click Apply scratches and regenerate schedule.
-
-        5. **Fine-tune matchups**
-           - Use Manual Match Creator for specific pairings.
-           - Use AI Match Suggestions for Claude-powered recommendations for wrestlers below minimum.
-           - In Mat Previews, drag rows to reorder, remove, or move bouts between mats.
-
-        6. **After the meet — save to AI history**
-           - Click Save meet to AI history so Claude learns from your manual decisions.
-           - Suggestions improve over time as the AI learns your preferences.
-
-        7. **Generate and download**
-           - Click Generate Coach Packets PDF for per-team match sheets.
-           - Click Generate Documents for the Excel master doc and PDF mat printouts.
-                """
-            )
-
-        # ----- Roster Imbalance Report -----
-        st.markdown("### 📊 Roster Imbalance Report")
+        # ----- Roster Imbalance Report (collapsed if no problems) -----
         imbalance_bands = analyze_roster_imbalance(raw_active)
-
         problem_bands = [b for b in imbalance_bands if b["risk"] != "OK"]
-        if not problem_bands:
-            st.success("No weight-band imbalances detected — matchup coverage looks good across all teams.")
-        else:
-            st.warning(
-                f"**{len(problem_bands)} weight band(s)** have potential matchup issues. "
-                "Review before generating documents."
-            )
+        RISK_COLOR = {"OK": "🟢", "Limited options": "🟡", "Same-team only": "🟠", "No match possible": "🔴"}
 
-        with st.expander(
-            f"Weight Band Breakdown ({len(imbalance_bands)} bands)",
-            expanded=bool(problem_bands),
-        ):
-            RISK_COLOR = {
-                "OK": "🟢",
-                "Limited options": "🟡",
-                "Same-team only": "🟠",
-                "No match possible": "🔴",
-            }
-
+        imbalance_label = f"📊 Roster Imbalance Report — {'⚠️ ' + str(len(problem_bands)) + ' issue(s)' if problem_bands else '✅ No issues'}"
+        with st.expander(imbalance_label, expanded=bool(problem_bands)):
+            if not problem_bands:
+                st.success("Matchup coverage looks good across all weight bands.")
             for band in imbalance_bands:
                 icon = RISK_COLOR.get(band["risk"], "⚪")
-                team_breakdown = "  |  ".join(
-                    f"{team}: {len(wrestlers)}" for team, wrestlers in sorted(band["teams"].items())
-                )
-                st.markdown(
-                    f"{icon} **{band['band']}** — {band['total']} wrestler(s), "
-                    f"{band['num_teams']} team(s) — {team_breakdown} — *{band['risk']}*"
-                )
+                team_breakdown = "  |  ".join(f"{team}: {len(wrestlers)}" for team, wrestlers in sorted(band["teams"].items()))
+                st.markdown(f"{icon} **{band['band']}** — {band['total']} wrestler(s), {band['num_teams']} team(s) — {team_breakdown} — *{band['risk']}*")
                 if band["risk"] in ("Same-team only", "No match possible"):
                     for team, wrestlers in sorted(band["teams"].items()):
                         st.caption(f"  &nbsp;&nbsp;{team}: {', '.join(wrestlers)}")
-
-            st.caption(
-                "🔴 No match possible = only 1 wrestler in this weight range. "
-                "🟠 Same-team only = all wrestlers in this band are from one team. "
-                "🟡 Limited options = one team dominates this band."
-            )
+            st.caption("🔴 No match possible = 1 wrestler in range. 🟠 Same-team only = all one team. 🟡 Limited options.")
 
         st.markdown("---")
 
@@ -2419,7 +2443,7 @@ if st.session_state.initialized:
 
             st.caption(
                 "Tip: After manual editing, applying scratches will only remove matches involving scratched wrestlers "
-                "and keep your mat layout. Use **Start Over** if you want to completely rebuild all matchups."
+                "and keep your mat layout. Use **Start Over** (Advanced options) to completely rebuild."
             )
 
             if apply_clicked:
@@ -2803,39 +2827,74 @@ if st.session_state.initialized:
         rest_gap = CONFIG.get("REST_GAP", 4)
         conflicts_all = compute_rest_conflicts(full_schedule, rest_gap) if full_schedule else []
 
-        # NEW: multi-mat warning
+        # Multi-mat warning with one-click fix
         multi_mat_issues = compute_multi_mat_assignments(full_schedule) if full_schedule else []
         multi_mat_ids = {issue["wrestler_id"] for issue in multi_mat_issues} if multi_mat_issues else set()
-        
+
         if multi_mat_issues:
             st.warning(
-                f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat."
+                f"{len(multi_mat_issues)} wrestler(s) are assigned to matches on more than one mat. "
+                "Use the **Fix** buttons below to move minority bouts to the wrestler's primary mat."
             )
-            with st.expander("Show wrestlers on multiple mats", expanded=False):
-                lines = []
+            with st.expander("Show wrestlers on multiple mats", expanded=True):
                 for issue in multi_mat_issues:
-                    parts = []
-                    for mat in issue["mats"]:
-                        slots_on_mat = sorted(
-                            m["slot"]
-                            for m in issue["matches"]
-                            if m["mat"] == mat
-                        )
-                        if len(slots_on_mat) == 1:
-                            slot_text = f"Match {slots_on_mat[0]}"
-                        else:
-                            slot_text = "Matches " + ", ".join(str(s) for s in slots_on_mat)
-                        parts.append(f"{mat} ({slot_text})")
-            
-                    mat_slot_text = ", ".join(parts)
-                    lines.append(
-                        f"- **{issue['name']}** ({issue['team']}): Mats {mat_slot_text}"
-                    )
-            
-                st.markdown("\n".join(lines))
+                    # Find majority mat (most bouts there)
+                    from collections import Counter
+                    mat_counts = Counter(m["mat"] for m in issue["matches"])
+                    majority_mat = mat_counts.most_common(1)[0][0]
+                    minority_bouts = [
+                        m for m in issue["matches"] if m["mat"] != majority_mat
+                    ]
 
+                    # Build display text
+                    parts = []
+                    for mat in sorted(set(m["mat"] for m in issue["matches"])):
+                        slots = sorted(m["slot"] for m in issue["matches"] if m["mat"] == mat)
+                        slot_text = f"Match {slots[0]}" if len(slots) == 1 else "Matches " + ", ".join(str(s) for s in slots)
+                        parts.append(f"Mat {mat} ({slot_text})")
+
+                    col_desc, col_btn = st.columns([4, 1])
+                    with col_desc:
+                        st.markdown(
+                            f"**{issue['name']}** ({issue['team']}): "
+                            + " | ".join(parts)
+                            + f" → primary mat: **{majority_mat}**"
+                        )
+                    with col_btn:
+                        if st.button(
+                            "Fix",
+                            key=f"fix_multimat_{issue['wrestler_id']}",
+                            help=f"Move minority bout(s) to Mat {majority_mat}",
+                        ):
+                            overrides = st.session_state.get("mat_overrides", {})
+                            for m in minority_bouts:
+                                bn = m["bout_num"]
+                                overrides[bn] = majority_mat
+                                # Update mat_order: remove from old mat, append to majority mat
+                                old_mat = m["mat"]
+                                src_order = st.session_state.mat_order.get(old_mat, [])
+                                if bn in src_order:
+                                    src_order.remove(bn)
+                                st.session_state.mat_order[old_mat] = src_order
+                                dest_order = st.session_state.mat_order.get(majority_mat, [])
+                                if bn not in dest_order:
+                                    dest_order.append(bn)
+                                st.session_state.mat_order[majority_mat] = dest_order
+                            st.session_state.mat_overrides = overrides
+                            st.session_state.excel_bytes = None
+                            st.session_state.pdf_bytes = None
+                            st.session_state.sortable_version += 1
+                            st.success(
+                                f"Fixed: {issue['name']}'s bout(s) moved to Mat {majority_mat}."
+                            )
+                            st.rerun()
+
+                st.caption(
+                    "💡 Tip: After fixing, you can drag the moved bout to the right position "
+                    "within that mat's order in the Mat Previews below."
+                )
         else:
-            st.caption("All wrestlers are currently assigned to a single mat.")
+            st.caption("✅ All wrestlers are assigned to a single mat.")
         
 
         if search_term.strip():
@@ -3157,31 +3216,6 @@ if st.session_state.initialized:
 
 
 
-        # ----- Unified Undo Button -----
-        st.markdown("---")
-
-        last_action = st.session_state.action_history[-1] if st.session_state.action_history else None
-
-        if last_action:
-            t = last_action.get("type")
-            if t == "remove":
-                label = "Undo Last Remove"
-            elif t == "drag":
-                label = "Undo Last Drag / Reorder"
-            elif t == "manual_add":
-                label = "Undo Last Manual Match"
-            elif t == "suggest_add":
-                label = "Undo Last Suggested Matches"
-            elif t == "scratch_update":
-                label = "Undo Last Scratches Update"
-            else:
-                label = "Undo Last Action"
-
-            if st.button(label, help="Undo the most recent change (remove/drag/manual/suggested/scratches)"):
-                undo_last_action()
-        else:
-            st.caption("No actions yet to undo.")
-
         # ================================
         # ---- AI MATCH SUGGESTIONS ------
         # ================================
@@ -3309,193 +3343,6 @@ if st.session_state.initialized:
             else:
                 st.info("No manual or flagged matches found to save — nothing recorded.")
 
-        # ================================
-        # ---- COACH PACKETS (PER TEAM) ---
-        # ================================
-        st.markdown("---")
-        st.markdown("### Coach Packets (per team)")
-
-        generate_coach = st.button(
-            "Generate Coach Packets PDF",
-            type="primary",  # red button
-            help="Builds a page per team with all matches for each wrestler.",
-            key="generate_coach_packets_btn",
-        )
-
-        if generate_coach:
-            if not full_schedule:
-                st.warning("No schedule yet – build matchups first.")
-            else:
-                try:
-                    coach_pdf = generate_coach_packets_pdf(full_schedule)
-                    st.session_state.coach_pdf_bytes = coach_pdf
-                    st.toast("Coach packets PDF generated.", icon="📄")
-                except Exception as e:
-                    st.error(f"Could not generate coach packets: {e}")
-
-        # Download button for coach packets
-        if st.session_state.get("coach_pdf_bytes"):
-            st.download_button(
-                "Download Coach Packets PDF",
-                data=st.session_state.coach_pdf_bytes,
-                file_name="coach_packets.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-
-        # ================================
-        # ---- MEET DOCUMENTS SECTION ----
-        # ================================
-        st.markdown("---")
-        st.markdown("### Meet Documents (Excel + Mat PDF)")
-
-        # ---- GENERATE MEET (Excel + Mat PDFs) ----
-        if st.button(
-            "Generate Documents",
-            type="primary",
-            help="Generate Excel + mat-by-mat PDF for download",
-            key="generate_meet_docs_btn",
-        ):
-            with st.spinner("Generating files..."):
-                try:
-                    final_sched = apply_mat_order_to_global_schedule()
-                    st.session_state.mat_schedules = final_sched
-
-                    # -------- Excel generation --------
-                    out = io.BytesIO()
-                    with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                        # Roster sheet (active wrestlers only)
-                        roster_df = pd.DataFrame(st.session_state.active)
-                        roster_df.to_excel(writer, sheet_name="Roster", index=False)
-
-                        # All matchups sheet
-                        matchups_df = pd.DataFrame(st.session_state.bout_list)
-                        matchups_df.to_excel(writer, sheet_name="Matchups", index=False)
-
-                        # Remaining suggestions
-                        suggestions_df = pd.DataFrame(st.session_state.suggestions)
-                        suggestions_df.to_excel(writer, sheet_name="Remaining Suggestions", index=False)
-
-                        # Per-mat sheets
-                        for m in range(1, CONFIG["NUM_MATS"] + 1):
-                            data = [e for e in final_sched if e["mat"] == m]
-                            if not data:
-                                pd.DataFrame(
-                                    [["", "", ""]],
-                                    columns=["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"],
-                                ).to_excel(writer, f"Mat {m}", index=False)
-                                continue
-
-                            df = pd.DataFrame(data)[["mat_bout_num", "w1", "w2"]]
-                            df.columns = ["#", "Wrestler 1 (Team)", "Wrestler 2 (Team)"]
-                            df.to_excel(writer, f"Mat {m}", index=False)
-
-                            # Highlight early matches if openpyxl is available
-                            if _EXCEL_AVAILABLE:
-                                ws = writer.book[f"Mat {m}"]
-                                fill = PatternFill(
-                                    start_color="FFFF99", end_color="FFFF99", fill_type="solid"
-                                )
-                                for i, _ in df.iterrows():
-                                    if next(
-                                        b
-                                        for b in st.session_state.bout_list
-                                        if b["bout_num"] == data[i]["bout_num"]
-                                    )["is_early"]:
-                                        for c in range(1, 3 + 1):
-                                            ws.cell(row=i + 2, column=c).fill = fill
-
-                    st.session_state.excel_bytes = out.getvalue()
-
-                    # -------- Mat-by-mat PDF generation --------
-                    buf = io.BytesIO()
-                    doc = SimpleDocTemplate(buf, pagesize=letter)
-                    elements = []
-                    styles = getSampleStyleSheet()
-
-                    for m in range(1, CONFIG["NUM_MATS"] + 1):
-                        data = [e for e in final_sched if e["mat"] == m]
-                        if not data:
-                            elements.append(Paragraph(f"Mat {m} - No matches", styles["Title"]))
-                            elements.append(PageBreak())
-                            continue
-
-                        table = [["#", "Wrestler 1", "Wrestler 2"]]
-                        for e in data:
-                            b = next(
-                                x
-                                for x in st.session_state.bout_list
-                                if x["bout_num"] == e["bout_num"]
-                            )
-                            table.append(
-                                [
-                                    e["mat_bout_num"],
-                                    Paragraph(
-                                        f'<font color="{TEAM_COLORS.get(b["w1_team"], "#000")}">'
-                                        f"<b>{b['w1_name']}</b></font> ({b['w1_team']})",
-                                        styles["Normal"],
-                                    ),
-                                    Paragraph(
-                                        f'<font color="{TEAM_COLORS.get(b["w2_team"], "#000")}">'
-                                        f"<b>{b['w2_name']}</b></font> ({b['w2_team']})",
-                                        styles["Normal"],
-                                    ),
-                                ]
-                            )
-
-                        t = Table(table, colWidths=[0.5 * inch, 3 * inch, 3 * inch])
-                        s = TableStyle(
-                            [
-                                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.black),
-                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.lightgrey),
-                                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                            ]
-                        )
-
-                        # Highlight early matches
-                        for r, _ in enumerate(table[1:], 1):
-                            if next(
-                                b
-                                for b in st.session_state.bout_list
-                                if b["bout_num"] == data[r - 1]["bout_num"]
-                            )["is_early"]:
-                                s.add("BACKGROUND", (0, r), (-1, r), HexColor("#FFFF99"))
-
-                        t.setStyle(s)
-                        elements += [Paragraph(f"Mat {m}", styles["Title"]), Spacer(1, 12), t]
-                        if m < CONFIG["NUM_MATS"]:
-                            elements.append(PageBreak())
-
-                    doc.build(elements)
-                    st.session_state.pdf_bytes = buf.getvalue()
-
-                    st.toast("Meet documents generated!", icon="✅")
-                except Exception as e:
-                    st.error(f"Generation failed: {e}")
-                    st.toast("Error – check console.", icon="⚠️")
-
-        # Download buttons for meet documents
-        col_ex, col_pdf = st.columns(2)
-        with col_ex:
-            if st.session_state.excel_bytes is not None:
-                st.download_button(
-                    label="Download Excel",
-                    data=st.session_state.excel_bytes,
-                    file_name="meet_schedule.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
-        with col_pdf:
-            if st.session_state.pdf_bytes is not None:
-                st.download_button(
-                    label="Download Mat PDF",
-                    data=st.session_state.pdf_bytes,
-                    file_name="meet_schedule.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
     # ==========================================================
     # TAB 2 – MEET SUMMARY
     # ==========================================================
