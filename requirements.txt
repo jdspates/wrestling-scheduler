@@ -5,3 +5,4 @@ reportlab==4.0.9
 streamlit-sortables
 streamlit-js-eval
 streamlit-javascript
+anthropic
