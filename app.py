@@ -377,9 +377,10 @@ def generate_initial_matchups(active):
 
             # Sort by scarcity: wrestlers with fewest valid cross-team options go first
             # Ties broken by weight (extremes first) so edge weights get matched early
+            avg_weight = sum(e["weight"] for e in eligible) / len(eligible) if eligible else 0
             eligible.sort(key=lambda w: (
                 count_valid_opponents(w, active),
-                -abs(w["weight"] - sum(e["weight"] for e in eligible) / len(eligible))
+                -abs(w["weight"] - avg_weight)
             ))
 
             made_match = False
@@ -3665,28 +3666,3 @@ if st.session_state.get("initialized"):
 
 st.markdown("---")
 st.caption("**Privacy**: Your roster is processed in your browser. Nothing is uploaded or stored.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
