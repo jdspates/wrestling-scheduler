@@ -1642,20 +1642,6 @@ section[data-testid="stSidebar"] span {
     box-shadow: none !important;
 }
 
-/* ── HEADER UNDO BUTTON ──────────────────────────────────────────── */
-div[data-testid="column"]:last-child .stButton > button {
-    background-color: #1d4ed8 !important;  /* blue for undo — visually distinct */
-    font-size: 0.85rem !important;
-    padding: 0.4rem 0.8rem !important;
-}
-div[data-testid="column"]:last-child .stButton > button:hover {
-    background-color: #1e3a8a !important;
-}
-div[data-testid="column"]:last-child .stButton > button:disabled {
-    background-color: #e5e7eb !important;
-    color: #9ca3af !important;
-}
-
 /* ── TEXT INPUTS ─────────────────────────────────────────────────── */
 .stTextInput > div > div > input {
     border-radius: 999px !important;
@@ -1791,28 +1777,8 @@ div[data-testid="stAlert"] {
 
 st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 
-# ── Header row: title + undo always visible ──────────────────────────
-hdr_left, hdr_right = st.columns([3, 1])
-with hdr_left:
-    st.title("🤼 Wrestling Meet Scheduler")
-with hdr_right:
-    if st.session_state.get("initialized"):
-        last_action = st.session_state.action_history[-1] if st.session_state.action_history else None
-        if last_action:
-            t = last_action.get("type")
-            undo_labels = {
-                "remove": "↩ Undo Remove",
-                "drag": "↩ Undo Reorder",
-                "manual_add": "↩ Undo Manual Match",
-                "suggest_add": "↩ Undo Suggestions",
-                "scratch_update": "↩ Undo Scratches",
-            }
-            undo_label = undo_labels.get(t, "↩ Undo")
-            if st.button(undo_label, key="header_undo_btn", use_container_width=True):
-                undo_last_action()
-        else:
-            st.button("↩ Undo", disabled=True, key="header_undo_disabled", use_container_width=True)
-
+# ── Header ───────────────────────────────────────────────────────────
+st.title("🤼 Wrestling Meet Scheduler")
 st.markdown("---")
 
 # ── SETUP SECTION: only shown before roster is loaded ────────────────
@@ -2091,6 +2057,24 @@ st.markdown("---")
 # SIDEBAR SETTINGS
 # ----------------------------------------------------------------------
 st.sidebar.header("Meet Settings")
+
+# ── Undo always visible at top of sidebar ───────────────────────────
+if st.session_state.get("initialized"):
+    last_action = st.session_state.action_history[-1] if st.session_state.action_history else None
+    if last_action:
+        undo_labels = {
+            "remove": "↩ Undo: Remove Bout",
+            "drag": "↩ Undo: Reorder",
+            "manual_add": "↩ Undo: Manual Match",
+            "suggest_add": "↩ Undo: Suggestions",
+            "scratch_update": "↩ Undo: Scratches",
+        }
+        undo_label = undo_labels.get(last_action.get("type"), "↩ Undo Last Action")
+        if st.sidebar.button(undo_label, use_container_width=True, key="sidebar_undo_btn"):
+            undo_last_action()
+    else:
+        st.sidebar.button("↩ Undo", disabled=True, use_container_width=True, key="sidebar_undo_disabled")
+    st.sidebar.markdown("---")
 st.sidebar.subheader("Search Wrestlers")
 search_term = st.sidebar.text_input(
     "Filter by name or team",
