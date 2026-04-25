@@ -1852,40 +1852,67 @@ st.markdown(f"<style>{SORTABLE_STYLE}</style>", unsafe_allow_html=True)
 st.title("🤼 Wrestling Meet Scheduler")
 st.markdown("---")
 
+# ── Coach resources — always visible ─────────────────────────────────
+st.markdown("### Step 1 – Download coach resources")
+st.markdown(
+    "Send the **roster template** to each of your coaches to fill out. "
+    "Attach the **coach guide PDF** to the same email so they know how to fill it in."
+)
+
+_template_xlsx = _load_template_xlsx()
+_coach_guide_path = os.path.join(
+    os.path.dirname(__file__) if "__file__" in dir() else ".",
+    "coach_roster_guide.pdf"
+)
+_coach_guide_bytes = open(_coach_guide_path, "rb").read() if os.path.exists(_coach_guide_path) else None
+
+res_col1, res_col2, res_col3 = st.columns(3)
+with res_col1:
+    if _template_xlsx:
+        st.download_button(
+            label="⬇️ Roster Template (Excel)",
+            data=_template_xlsx,
+            file_name="coach_roster_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            help="Send this to each coach to fill out.",
+            key="dl_template_xlsx_step1",
+        )
+    else:
+        st.caption("Excel template not found in repo — commit coach_roster_template.xlsx to GitHub.")
+with res_col2:
+    if _coach_guide_bytes:
+        st.download_button(
+            label="⬇️ Coach Guide PDF",
+            data=_coach_guide_bytes,
+            file_name="coach_roster_guide.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            help="One-page instructions for coaches on how to fill out the template.",
+            key="dl_coach_guide_step1",
+        )
+    else:
+        st.caption("Coach guide PDF not found — commit coach_roster_guide.pdf to GitHub.")
+with res_col3:
+    st.download_button(
+        label="⬇️ Roster Template (CSV)",
+        data=TEMPLATE_CSV.encode("utf-8"),
+        file_name="roster_template.csv",
+        mime="text/csv",
+        use_container_width=True,
+        help="Plain CSV fallback for coaches comfortable with spreadsheets.",
+        key="dl_template_csv_step1",
+    )
+
+st.markdown("---")
+
 # ── SETUP SECTION: only shown before roster is loaded ────────────────
 if not st.session_state.get("initialized"):
-    st.markdown("### Step 1 – Download the coach roster template")
-    st.markdown(
-        "Share this file with your coaches. They fill it out and send it back. "
-        "Then merge all files in **Advanced options** and upload the combined roster in Step 2."
-    )
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        template_xlsx = _load_template_xlsx()
-        if template_xlsx:
-            st.download_button(
-                label="⬇️ Download Excel Template (recommended)",
-                data=template_xlsx,
-                file_name="coach_roster_template.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                help="Pre-formatted Excel file with dropdowns and instructions. Easiest for coaches.",
-                key="dl_template_xlsx_step1",
-            )
-        else:
-            st.caption("Excel template not found — use CSV template.")
-    with col_t2:
-        st.download_button(
-            label="⬇️ Download CSV Template (advanced)",
-            data=TEMPLATE_CSV.encode("utf-8"),
-            file_name="roster_template.csv",
-            mime="text/csv",
-            use_container_width=True,
-            help="Plain CSV format for coaches comfortable with spreadsheets.",
-            key="dl_template_csv_step1",
-        )
-    st.markdown("---")
     st.markdown("### Step 2 – Upload your completed roster")
+    st.markdown(
+        "Once coaches have returned their files, merge them in **Advanced options → Merge multiple roster files**, "
+        "then upload the combined file below."
+    )
 
 # ── Upload widget always present (needed for versioned key) ──────────
 uploaded = st.file_uploader(
@@ -3776,22 +3803,11 @@ Generate these when your schedule is finalized. You can regenerate as many times
                 "You can also download the one-page PDF version below to attach to your email."
             )
 
-            # Download the PDF guide
-            coach_pdf_path = os.path.join(
-                os.path.dirname(__file__) if "__file__" in dir() else ".",
-                "coach_roster_guide.pdf"
+            # Reference Step 1 instead of duplicating the download
+            st.info(
+                "📥 The **Coach Guide PDF** and **Roster Template** are available at the top of the page "
+                "(Step 1) — always visible, no roster upload required. Download them there to share with coaches."
             )
-            if os.path.exists(coach_pdf_path):
-                with open(coach_pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
-                st.download_button(
-                    "⬇️ Download Coach Guide PDF (attach to your email)",
-                    data=pdf_bytes,
-                    file_name="coach_roster_guide.pdf",
-                    mime="application/pdf",
-                    use_container_width=False,
-                    key="dl_coach_guide_pdf",
-                )
             st.markdown("---")
 
             # Email template
