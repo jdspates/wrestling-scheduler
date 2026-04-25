@@ -1899,13 +1899,17 @@ if uploaded and not st.session_state.initialized:
     try:
         # Read CSV or Excel
         if uploaded.name.lower().endswith(".xlsx"):
-            df = pd.read_excel(uploaded, sheet_name="Roster")
-            # Drop the instruction row (row index 0 after header) if it looks like instructions
+            df = pd.read_excel(uploaded, sheet_name="Roster", header=1)
+            # Drop the instruction row (row 0 after header = the grey instruction row)
             if df.shape[0] > 0:
                 first_val = str(df.iloc[0, 0]).strip().lower()
-                if any(kw in first_val for kw in ["first", "last", "name", "enter", "example", "alex", "jamie", "morgan"]):
+                if any(kw in first_val for kw in ["first and last", "first", "instruction", "enter", "example"]):
                     df = df.iloc[1:].reset_index(drop=True)
-            # Drop completely empty rows
+            # Drop the example rows (light blue) and note row
+            df = df[~df.iloc[:, 0].astype(str).str.strip().str.lower().isin([
+                "alex johnson", "jamie smith", "morgan lee",
+                "↑ delete", "nan", ""
+            ])]
             df = df.dropna(how="all").reset_index(drop=True)
         else:
             df = pd.read_csv(uploaded)
@@ -2104,12 +2108,14 @@ with st.expander("Advanced options (Start Over, Save / Load meet / Merge CSV Ros
                 dfs = []
                 for f in merge_files:
                     if f.name.lower().endswith(".xlsx"):
-                        df = pd.read_excel(f, sheet_name="Roster")
-                        # Drop instruction/example rows
+                        df = pd.read_excel(f, sheet_name="Roster", header=1)
                         if df.shape[0] > 0:
                             first_val = str(df.iloc[0, 0]).strip().lower()
-                            if any(kw in first_val for kw in ["first", "last", "name", "enter", "example", "alex", "jamie", "morgan"]):
+                            if any(kw in first_val for kw in ["first and last", "first", "instruction", "enter", "example"]):
                                 df = df.iloc[1:].reset_index(drop=True)
+                        df = df[~df.iloc[:, 0].astype(str).str.strip().str.lower().isin([
+                            "alex johnson", "jamie smith", "morgan lee", "↑ delete", "nan", ""
+                        ])]
                         df = df.dropna(how="all").reset_index(drop=True)
                     else:
                         df = pd.read_csv(f)
