@@ -797,10 +797,12 @@ def assign_bouts_to_mats(valid, num_mats):
         elif w2_mat:
             chosen = w2_mat
         else:
-            # Neither assigned — pick mat closest to weight-zone target
+            # Neither assigned — distribute evenly by weight zone.
+            # Target for mat m = roughly target * m/num_mats bouts by the time
+            # we reach that weight zone. Pick the mat most under its fair share.
             zone = min(
                 range(1, num_mats + 1),
-                key=lambda m: abs(mat_counts[m] - target * (m - 1) / num_mats)
+                key=lambda m: abs(mat_counts[m] - target * m / num_mats)
             )
             under_target = [m for m in range(1, num_mats + 1) if mat_counts[m] < target + 1]
             if under_target:
