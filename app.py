@@ -29,6 +29,7 @@ except Exception:
 # ----------------------------------------------------------------------
 CONFIG_FILE = "config.json"
 AUTOSAVE_FILE = "autosave_meet.json"  # server-side autosave file
+AI_HISTORY_FILE = "matchup_history.json"  # persistent AI learning history
 
 # 9-color palette that matches circle emojis
 COLOR_MAP = {
@@ -272,43 +273,48 @@ def matchup_score(w1, w2):
     )
 
 
-def generate_initial_matchups(active):
-    bouts = set()
-    for level in sorted({w["level"] for w in active}, reverse=True):
-        group = [w for w in active if w["level"] == level]
-        while True:
-            added = False
-            random.shuffle(group)
-            for w in group:
-                if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]:
-                    continue
-                opps = [
-                    o for o in active
-                    if o["id"] not in w["match_ids"]
-                    and o["id"] != w["id"]
-                    and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
-                    and is_compatible(w, o)
-                    and abs(w["weight"] - o["weight"]) <= \
-                        min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
-                    and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
-                ]
-                if not opps:
-                    continue
-                best = min(opps, key=lambda o: matchup_score(w, o))
-                w["match_ids"].append(best["id"])
-                best["match_ids"].append(w["id"])
-                bouts.add(frozenset({w["id"], best["id"]}))
-                added = True
-                break
-            if not added:
-                break
+def count_valid_opponents(w, active):
+    """
+    Count how many wrestlers in active could still be a valid cross-team opponent
+    for w (not yet matched, under max, compatible, within weight/level rules).
+    Used to prioritize wrestlers with fewest options first (scarcity).
+    """
+    return sum(
+        1 for o in active
+        if o["id"] != w["id"]
+        and o["id"] not in w["match_ids"]
+        and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
+        and is_compatible(w, o)
+        and abs(w["weight"] - o["weight"]) <= min(max_weight_diff(w["weight"]), max_weight_diff(o["weight"]))
+        and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
+    )
 
-    bout_list = []
-    for idx, b in enumerate(bouts, 1):
-        w1 = next(w for w in active if w["id"] == list(b)[0])
-        w2 = next(w for w in active if w["id"] == list(b)[1])
-        bout_list.append({
-            "bout_num": idx,
+
+def generate_initial_matchups(active):
+    """
+    Smarter matchup generator:
+    1. Works level group by level group, highest level first.
+    2. Within each group, prioritizes wrestlers with the FEWEST valid opponents
+       (scarcity-first) — so wrestlers at extreme weights who only have 1-2 possible
+       opponents get matched before those opponents are taken.
+    3. Always prefers cross-team matches within weight/level rules.
+    4. If no cross-team match exists, automatically creates a same-team match
+       (flagged as 'Same Team') rather than leaving the wrestler unmatched.
+    5. If still no match after same-team attempt, expands weight window by 1.5x
+       before giving up — so wrestlers at weight extremes have a better chance.
+    """
+    bouts = []
+    used_pairs = set()
+
+    def add_bout(w1, w2, flag=""):
+        pair = frozenset({w1["id"], w2["id"]})
+        if pair in used_pairs:
+            return False
+        used_pairs.add(pair)
+        w1["match_ids"].append(w2["id"])
+        w2["match_ids"].append(w1["id"])
+        bouts.append({
+            "bout_num": len(bouts) + 1,
             "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
             "w1_level": w1["level"], "w1_weight": w1["weight"],
             "w1_grade": w1["grade"], "w1_early": w1["early"],
@@ -318,9 +324,117 @@ def generate_initial_matchups(active):
             "score": matchup_score(w1, w2),
             "avg_weight": (w1["weight"] + w2["weight"]) / 2,
             "is_early": w1["early"] or w2["early"],
-            "manual": ""
+            "manual": flag,
         })
-    return bout_list
+        return True
+
+    def find_best_cross_team(w, pool, weight_multiplier=1.0):
+        """Find best cross-team opponent from pool within expanded weight window."""
+        wt_limit = min(max_weight_diff(w["weight"]), max_weight_diff(w["weight"])) * weight_multiplier
+        wt_limit = max(CONFIG["MIN_WEIGHT_DIFF"] * weight_multiplier, w["weight"] * CONFIG["WEIGHT_DIFF_FACTOR"] * weight_multiplier)
+        candidates = [
+            o for o in pool
+            if o["id"] != w["id"]
+            and o["id"] not in w["match_ids"]
+            and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
+            and is_compatible(w, o)
+            and abs(w["weight"] - o["weight"]) <= wt_limit
+            and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
+        ]
+        return min(candidates, key=lambda o: matchup_score(w, o)) if candidates else None
+
+    def find_best_same_team(w, pool):
+        """Find best same-team opponent as last resort (still respects weight/level/gender)."""
+        expanded_wt = max(CONFIG["MIN_WEIGHT_DIFF"] * 1.5, w["weight"] * CONFIG["WEIGHT_DIFF_FACTOR"] * 1.5)
+        candidates = [
+            o for o in pool
+            if o["id"] != w["id"]
+            and o["id"] not in w["match_ids"]
+            and len(o["match_ids"]) < CONFIG["MAX_MATCHES"]
+            and genders_compatible(w, o)
+            and abs(w["weight"] - o["weight"]) <= expanded_wt
+            and abs(w["level"] - o["level"]) <= CONFIG["MAX_LEVEL_DIFF"]
+            and not (
+                (w["grade"] == 5 and o["grade"] in [7, 8]) or
+                (o["grade"] == 5 and w["grade"] in [7, 8])
+            )
+        ]
+        return min(candidates, key=lambda o: matchup_score(w, o)) if candidates else None
+
+    # Process level groups from highest to lowest
+    for level in sorted({w["level"] for w in active}, reverse=True):
+        group = [w for w in active if w["level"] == level]
+
+        # Keep looping until no more matches can be added in this level group
+        while True:
+            # Find eligible wrestlers in this group who still need matches
+            eligible = [
+                w for w in group
+                if len(w["match_ids"]) < CONFIG["MAX_MATCHES"]
+            ]
+            if not eligible:
+                break
+
+            # Sort by scarcity: wrestlers with fewest valid cross-team options go first
+            # Ties broken by weight (extremes first) so edge weights get matched early
+            eligible.sort(key=lambda w: (
+                count_valid_opponents(w, active),
+                -abs(w["weight"] - sum(e["weight"] for e in eligible) / len(eligible))
+            ))
+
+            made_match = False
+            for w in eligible:
+                if len(w["match_ids"]) >= CONFIG["MAX_MATCHES"]:
+                    continue
+
+                # Pass 1: standard cross-team match
+                best = find_best_cross_team(w, active, weight_multiplier=1.0)
+                if best:
+                    add_bout(w, best)
+                    made_match = True
+                    break
+
+                # Pass 2: slightly expanded weight window (1.5x) cross-team
+                best = find_best_cross_team(w, active, weight_multiplier=1.5)
+                if best:
+                    add_bout(w, best, flag="Expanded Weight")
+                    made_match = True
+                    break
+
+                # Pass 3: same-team fallback (flagged)
+                best = find_best_same_team(w, active)
+                if best:
+                    add_bout(w, best, flag="Same Team – Auto")
+                    made_match = True
+                    break
+
+            if not made_match:
+                break
+
+    # Second pass: try to get under-minimum wrestlers more matches
+    # across ALL level groups, using the same scarcity-first logic
+    under_min = [w for w in active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
+    under_min.sort(key=lambda w: len(w["match_ids"]))  # fewest matches first
+
+    for w in under_min:
+        while len(w["match_ids"]) < CONFIG["MIN_MATCHES"]:
+            best = find_best_cross_team(w, active, weight_multiplier=1.0)
+            if not best:
+                best = find_best_cross_team(w, active, weight_multiplier=1.5)
+            if not best:
+                best = find_best_same_team(w, active)
+            if not best:
+                break
+            flag = "Same Team – Auto" if best["team"] == w["team"] else (
+                "Expanded Weight" if abs(w["weight"] - best["weight"]) > max_weight_diff(w["weight"]) else ""
+            )
+            add_bout(w, best, flag=flag)
+
+    # Renumber sequentially
+    for i, b in enumerate(bouts, 1):
+        b["bout_num"] = i
+
+    return bouts
 
 
 def build_suggestions(active, bout_list):
@@ -359,6 +473,221 @@ def build_suggestions(active, bout_list):
                 "_w_id": w["id"], "_o_id": o["id"]
             })
     return sugg
+
+
+# ----------------------------------------------------------------------
+# ROSTER IMBALANCE ANALYSIS
+# ----------------------------------------------------------------------
+def analyze_roster_imbalance(active):
+    """
+    Break roster into weight bands and show per-team counts.
+    Flags bands where one team has 2+ wrestlers and others have 0
+    (forced same-team situation) and bands with only 1 wrestler total
+    (guaranteed no match).
+
+    Returns a list of band dicts for display.
+    """
+    if not active:
+        return []
+
+    weights = [w["weight"] for w in active]
+    min_w, max_w = min(weights), max(weights)
+    band_size = 15  # lbs per band
+
+    # Build bands
+    bands = []
+    lo = min_w
+    while lo <= max_w:
+        hi = lo + band_size
+        in_band = [w for w in active if lo <= w["weight"] < hi]
+        if not in_band:
+            lo = hi
+            continue
+
+        teams_in_band = {}
+        for w in in_band:
+            teams_in_band.setdefault(w["team"], []).append(w["name"])
+
+        total = len(in_band)
+        num_teams = len(teams_in_band)
+
+        # Determine risk level
+        if total == 1:
+            risk = "No match possible"
+        elif num_teams == 1:
+            risk = "Same-team only"
+        elif max(len(v) for v in teams_in_band.values()) >= total - 1 and num_teams == 2:
+            risk = "Limited options"
+        else:
+            risk = "OK"
+
+        bands.append({
+            "band": f"{lo:.0f}–{hi:.0f} lbs",
+            "total": total,
+            "num_teams": num_teams,
+            "teams": teams_in_band,
+            "risk": risk,
+        })
+        lo = hi
+
+    return bands
+
+
+# ----------------------------------------------------------------------
+# AI MATCHUP HISTORY
+# ----------------------------------------------------------------------
+def load_matchup_history():
+    """Load historical matchup data from local JSON file."""
+    if os.path.exists(AI_HISTORY_FILE):
+        try:
+            with open(AI_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {"meets": []}
+    return {"meets": []}
+
+
+def save_matchup_history(history):
+    """Save matchup history to local JSON file."""
+    try:
+        with open(AI_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def record_meet_to_history(bout_list, active):
+    """
+    After a meet, record all manual matches (Coach Manual Match, Same Team – Auto,
+    Expanded Weight) into the history file so AI can learn from them.
+    """
+    history = load_matchup_history()
+
+    manual_bouts = [
+        b for b in bout_list
+        if b.get("manual") and b["manual"] != "Manually Removed"
+    ]
+
+    if not manual_bouts:
+        return False
+
+    meet_record = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "num_teams": len({w["team"] for w in active}),
+        "num_wrestlers": len(active),
+        "manual_matches": [
+            {
+                "w1_name": b["w1_name"], "w1_team": b["w1_team"],
+                "w1_weight": b["w1_weight"], "w1_level": b["w1_level"],
+                "w1_grade": b["w1_grade"],
+                "w2_name": b["w2_name"], "w2_team": b["w2_team"],
+                "w2_weight": b["w2_weight"], "w2_level": b["w2_level"],
+                "w2_grade": b["w2_grade"],
+                "weight_diff": abs(b["w1_weight"] - b["w2_weight"]),
+                "level_diff": abs(b["w1_level"] - b["w2_level"]),
+                "same_team": b["w1_team"] == b["w2_team"],
+                "flag": b.get("manual", ""),
+            }
+            for b in manual_bouts
+        ],
+    }
+
+    history["meets"].append(meet_record)
+    save_matchup_history(history)
+    return True
+
+
+async def get_ai_match_suggestions(active, bout_list, history):
+    """
+    Call Claude API to suggest manual matches for under-minimum wrestlers,
+    informed by historical matchup patterns.
+    Returns a list of suggestion dicts: {w1_id, w2_id, w1_name, w2_name,
+    w1_team, w2_team, reason, confidence}.
+    """
+    import anthropic
+
+    under_min = [
+        w for w in active
+        if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]
+    ]
+    if not under_min:
+        return []
+
+    # Build a concise summary of past manual patterns
+    past_patterns = []
+    for meet in history.get("meets", [])[-5:]:  # last 5 meets
+        for m in meet.get("manual_matches", []):
+            past_patterns.append(
+                f"  - {m['w1_weight']:.0f}lbs Lvl{m['w1_level']} ({m['w1_team']}) vs "
+                f"{m['w2_weight']:.0f}lbs Lvl{m['w2_level']} ({m['w2_team']}) | "
+                f"wt_diff={m['weight_diff']:.0f} lvl_diff={m['level_diff']:.1f} "
+                f"same_team={m['same_team']}"
+            )
+
+    patterns_text = "\n".join(past_patterns) if past_patterns else "No history yet."
+
+    # Build wrestler summaries for under-minimum wrestlers
+    under_summaries = []
+    for w in under_min:
+        matches_so_far = len(w["match_ids"])
+        under_summaries.append(
+            f"  - {w['name']} ({w['team']}) | Wt:{w['weight']:.0f} Lvl:{w['level']:.1f} "
+            f"Gr:{w['grade']} | Matches:{matches_so_far}/{CONFIG['MIN_MATCHES']}"
+        )
+
+    # Build pool of potential opponents
+    pool_summaries = []
+    for w in active:
+        pool_summaries.append(
+            f"  - ID:{w['id']} {w['name']} ({w['team']}) | Wt:{w['weight']:.0f} "
+            f"Lvl:{w['level']:.1f} Gr:{w['grade']} | Matches:{len(w['match_ids'])}"
+        )
+
+    prompt = f"""You are a wrestling meet scheduling assistant. Your job is to suggest the best manual matchups for wrestlers who are below their minimum match count.
+
+MEET SETTINGS:
+- Min matches per wrestler: {CONFIG['MIN_MATCHES']}
+- Max matches per wrestler: {CONFIG['MAX_MATCHES']}
+- Max level difference: {CONFIG['MAX_LEVEL_DIFF']}
+- Min weight difference: {CONFIG['MIN_WEIGHT_DIFF']} lbs
+- Weight diff factor: {CONFIG['WEIGHT_DIFF_FACTOR']} (so max wt diff ≈ weight × factor)
+
+WRESTLERS BELOW MINIMUM (need matches):
+{chr(10).join(under_summaries)}
+
+ALL ACTIVE WRESTLERS (potential opponents, with current match counts):
+{chr(10).join(pool_summaries)}
+
+HISTORICAL MANUAL MATCH PATTERNS (what the meet director has accepted before):
+{patterns_text}
+
+RULES:
+1. Prefer cross-team matches. Same-team only as absolute last resort.
+2. Keep weight difference reasonable (use history as a guide for how flexible the director has been).
+3. Don't exceed MAX matches for any wrestler.
+4. Don't suggest a pair that already has a match (check the wrestler's match count context).
+5. Grade 5 wrestlers cannot match grade 7 or 8 wrestlers.
+
+Respond ONLY with a JSON array. Each element:
+{{"w1_id": <int>, "w2_id": <int>, "w1_name": "...", "w2_name": "...", "w1_team": "...", "w2_team": "...", "weight_diff": <float>, "level_diff": <float>, "same_team": <bool>, "reason": "brief explanation", "confidence": "High|Medium|Low"}}
+
+Suggest only pairings you are confident are good. Return an empty array [] if no good options exist."""
+
+    client = anthropic.Anthropic()
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = message.content[0].text.strip()
+        # Strip markdown fences if present
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        suggestions = json.loads(raw)
+        return suggestions if isinstance(suggestions, list) else []
+    except Exception as e:
+        return []
 
 
 def generate_mat_schedule(bout_list, gap=4):
@@ -1872,32 +2201,82 @@ if st.session_state.initialized:
                 """
         1. **Import your roster**
            - Use **Step 1** to download the roster template.
-           - If you have **multiple team CSVs**, you can optionally use  
-             **Advanced options → Merge multiple roster CSV files** to create a single combined `merged_roster.csv`.
-           - In **Step 2**, upload your completed `roster.csv` (or `merged_roster.csv` if you merged files).
-           - The app will auto-generate initial matchups once the file is uploaded.
-        
-        2. **Adjust meet settings (left sidebar)**
-           - Set **Min / Max Matches**, **Number of Mats**, **Max Level Diff**, and **Min Wt Diff**.
-           - Set **Min Rest Gap** so wrestlers don’t wrestle back-to-back.
-           - After a roster is loaded, assign **team colors** (used in legends, emojis, Excel, and PDFs).
-        
-        3. **Apply scratches (before the meet)**
-           - In **Pre-Meet Scratches**, select wrestlers who are not wrestling tonight (if they aren’t already flagged in the roster CSV).
-           - Click **Apply scratches & regenerate schedule**. Early in the workflow (before manual edits), this will rebuild all matchups. After you’ve done manual editing, it will only remove matches involving scratched wrestlers and keep your mat layout.
-           - Use **Start Over** if you want to completely rebuild from a fresh roster.
-        
-        4. **Fine-tune matchups**
-           - Use **Manual Match Creator** to fill gaps for wrestlers under the minimum and when coaches want specific pairings.
-           - In **Mat Previews**, drag rows to change bout order and remove individual bouts if needed.
-        
-        5. **Generate & download**
-           - Click **Generate Coach Packets PDF** to build the Coach Packets that only contain team matches.
-             - Use **Download Coach Packets PDF** to download document.
-           - Click **Generate Documents** to build the **Excel Master Document** and **PDF Mat Printouts**.
-             - Use **Download Excel** and **Download PDF** to download documents.
+           - If you have **multiple team CSVs**, use **Advanced options → Merge multiple roster CSV files**.
+           - In **Step 2**, upload your completed roster.csv. Matchups generate automatically.
+
+        2. **Review the Roster Imbalance Report**
+           - After uploading, check the Roster Imbalance Report at the top.
+           - Red = no match possible. Orange = same-team forced. Yellow = limited options.
+           - The auto-generator handles these automatically and flags them in Mat Previews.
+
+        3. **Adjust meet settings (left sidebar)**
+           - Set Min/Max Matches, Number of Mats, Max Level Diff, and Min Wt Diff.
+           - Set Min Rest Gap so wrestlers do not wrestle back-to-back.
+           - Assign team colors after uploading a roster.
+
+        4. **Apply scratches (before the meet)**
+           - In Pre-Meet Scratches, select wrestlers who are not wrestling tonight.
+           - Click Apply scratches and regenerate schedule.
+
+        5. **Fine-tune matchups**
+           - Use Manual Match Creator for specific pairings.
+           - Use AI Match Suggestions for Claude-powered recommendations for wrestlers below minimum.
+           - In Mat Previews, drag rows to reorder, remove, or move bouts between mats.
+
+        6. **After the meet — save to AI history**
+           - Click Save meet to AI history so Claude learns from your manual decisions.
+           - Suggestions improve over time as the AI learns your preferences.
+
+        7. **Generate and download**
+           - Click Generate Coach Packets PDF for per-team match sheets.
+           - Click Generate Documents for the Excel master doc and PDF mat printouts.
                 """
             )
+
+        # ----- Roster Imbalance Report -----
+        st.markdown("### 📊 Roster Imbalance Report")
+        imbalance_bands = analyze_roster_imbalance(raw_active)
+
+        problem_bands = [b for b in imbalance_bands if b["risk"] != "OK"]
+        if not problem_bands:
+            st.success("No weight-band imbalances detected — matchup coverage looks good across all teams.")
+        else:
+            st.warning(
+                f"**{len(problem_bands)} weight band(s)** have potential matchup issues. "
+                "Review before generating documents."
+            )
+
+        with st.expander(
+            f"Weight Band Breakdown ({len(imbalance_bands)} bands)",
+            expanded=bool(problem_bands),
+        ):
+            RISK_COLOR = {
+                "OK": "🟢",
+                "Limited options": "🟡",
+                "Same-team only": "🟠",
+                "No match possible": "🔴",
+            }
+
+            for band in imbalance_bands:
+                icon = RISK_COLOR.get(band["risk"], "⚪")
+                team_breakdown = "  |  ".join(
+                    f"{team}: {len(wrestlers)}" for team, wrestlers in sorted(band["teams"].items())
+                )
+                st.markdown(
+                    f"{icon} **{band['band']}** — {band['total']} wrestler(s), "
+                    f"{band['num_teams']} team(s) — {team_breakdown} — *{band['risk']}*"
+                )
+                if band["risk"] in ("Same-team only", "No match possible"):
+                    for team, wrestlers in sorted(band["teams"].items()):
+                        st.caption(f"  &nbsp;&nbsp;{team}: {', '.join(wrestlers)}")
+
+            st.caption(
+                "🔴 No match possible = only 1 wrestler in this weight range. "
+                "🟠 Same-team only = all wrestlers in this band are from one team. "
+                "🟡 Limited options = one team dominates this band."
+            )
+
+        st.markdown("---")
 
         # ----- Pre-Meet Scratches -----
         st.subheader("Pre-Meet Scratches")
@@ -2681,6 +3060,133 @@ if st.session_state.initialized:
                 undo_last_action()
         else:
             st.caption("No actions yet to undo.")
+
+        # ================================
+        # ---- AI MATCH SUGGESTIONS ------
+        # ================================
+        st.markdown("---")
+        st.markdown("### 🤖 AI Match Suggestions")
+
+        ai_history = load_matchup_history()
+        num_meets_in_history = len(ai_history.get("meets", []))
+        total_manual_in_history = sum(
+            len(m.get("manual_matches", [])) for m in ai_history.get("meets", [])
+        )
+
+        under_min_wrestlers = [
+            w for w in raw_active
+            if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]
+        ]
+
+        col_ai1, col_ai2 = st.columns([3, 1])
+        with col_ai1:
+            st.caption(
+                f"AI has learned from **{num_meets_in_history} past meet(s)** "
+                f"({total_manual_in_history} manual matches recorded). "
+                f"Currently **{len(under_min_wrestlers)}** wrestler(s) are below minimum."
+            )
+        with col_ai2:
+            get_suggestions_btn = st.button(
+                "Get AI Suggestions",
+                key="get_ai_suggestions_btn",
+                help="Ask Claude to suggest the best manual matches for under-minimum wrestlers, informed by your history.",
+                disabled=len(under_min_wrestlers) == 0,
+            )
+
+        if get_suggestions_btn:
+            if not under_min_wrestlers:
+                st.info("All wrestlers are at or above minimum matches — no suggestions needed.")
+            else:
+                with st.spinner("Asking Claude for match suggestions..."):
+                    import asyncio
+                    try:
+                        suggestions = asyncio.run(
+                            get_ai_match_suggestions(raw_active, st.session_state.bout_list, ai_history)
+                        )
+                        st.session_state["ai_suggestions"] = suggestions
+                    except Exception as e:
+                        st.error(f"Could not get AI suggestions: {e}")
+                        st.session_state["ai_suggestions"] = []
+
+        ai_suggestions = st.session_state.get("ai_suggestions", [])
+        if ai_suggestions:
+            st.markdown(f"**{len(ai_suggestions)} suggestion(s):**")
+            id_to_w = {w["id"]: w for w in raw_active}
+
+            for i, s in enumerate(ai_suggestions):
+                conf_icon = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}.get(s.get("confidence", "Low"), "⚪")
+                same_team_flag = " ⚠️ Same team" if s.get("same_team") else ""
+                st.markdown(
+                    f"{conf_icon} **{s['w1_name']} ({s['w1_team']})** vs "
+                    f"**{s['w2_name']} ({s['w2_team']})**"
+                    f"{same_team_flag} — Wt diff: {s.get('weight_diff', '?'):.0f} lbs, "
+                    f"Lvl diff: {s.get('level_diff', '?'):.1f} — *{s.get('reason', '')}*"
+                )
+                if st.button(f"Add this match", key=f"ai_add_{i}"):
+                    w1 = id_to_w.get(s["w1_id"])
+                    w2 = id_to_w.get(s["w2_id"])
+                    if w1 and w2:
+                        already = any(
+                            (b["w1_id"] == w1["id"] and b["w2_id"] == w2["id"]) or
+                            (b["w1_id"] == w2["id"] and b["w2_id"] == w1["id"])
+                            for b in st.session_state.bout_list
+                            if b.get("manual") != "Manually Removed"
+                        )
+                        if already:
+                            st.warning("These wrestlers already have a match together.")
+                        else:
+                            if w2["id"] not in w1["match_ids"]:
+                                w1["match_ids"].append(w2["id"])
+                            if w1["id"] not in w2["match_ids"]:
+                                w2["match_ids"].append(w1["id"])
+                            new_num = (max(b["bout_num"] for b in st.session_state.bout_list) + 1) if st.session_state.bout_list else 1
+                            flag = "Same Team – AI Suggested" if s.get("same_team") else "AI Suggested"
+                            st.session_state.bout_list.append({
+                                "bout_num": new_num,
+                                "w1_id": w1["id"], "w1_name": w1["name"], "w1_team": w1["team"],
+                                "w1_level": w1["level"], "w1_weight": w1["weight"],
+                                "w1_grade": w1["grade"], "w1_early": w1["early"],
+                                "w2_id": w2["id"], "w2_name": w2["name"], "w2_team": w2["team"],
+                                "w2_level": w2["level"], "w2_weight": w2["weight"],
+                                "w2_grade": w2["grade"], "w2_early": w2["early"],
+                                "score": matchup_score(w1, w2),
+                                "avg_weight": (w1["weight"] + w2["weight"]) / 2,
+                                "is_early": w1["early"] or w2["early"],
+                                "manual": flag,
+                            })
+                            st.session_state.bout_list.sort(key=lambda x: x["avg_weight"])
+                            st.session_state.mat_order = {}
+                            push_action({"type": "manual_add", "bout_num": new_num})
+                            st.session_state.excel_bytes = None
+                            st.session_state.pdf_bytes = None
+                            st.session_state.sortable_version += 1
+                            # Remove from suggestion list
+                            st.session_state["ai_suggestions"] = [
+                                x for j, x in enumerate(ai_suggestions) if j != i
+                            ]
+                            st.success(f"Added: {w1['name']} vs {w2['name']}")
+                            st.rerun()
+                    else:
+                        st.error("Wrestler not found — suggestions may be stale. Click Get AI Suggestions again.")
+        elif get_suggestions_btn:
+            st.info("No suggestions generated — all wrestlers may already have valid options, or history is too sparse. Try creating matches manually.")
+
+        # ----- Save Meet to AI History -----
+        st.markdown("---")
+        st.markdown("#### 💾 Save This Meet to AI History")
+        st.caption(
+            "After the meet is complete, save it so the AI can learn from your manual matchup decisions. "
+            "This records all manually created and auto-flagged (same-team, expanded weight) matches."
+        )
+        if st.button("Save meet to AI history", key="save_to_history_btn"):
+            saved = record_meet_to_history(st.session_state.bout_list, raw_active)
+            if saved:
+                st.success(
+                    "Meet saved to AI history. The AI will use these matchups to improve "
+                    "suggestions at future meets."
+                )
+            else:
+                st.info("No manual or flagged matches found to save — nothing recorded.")
 
         # ================================
         # ---- COACH PACKETS (PER TEAM) ---
