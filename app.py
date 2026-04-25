@@ -2258,25 +2258,61 @@ if st.session_state.initialized:
     num_active = len(raw_active)
     num_scratched = len([w for w in roster if w.get("scratch")])
     total_bouts_status = len([b for b in st.session_state.bout_list if b.get("manual") != "Manually Removed"])
-    under_min_count = len([w for w in raw_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]])
+    under_min_wrestlers = [w for w in raw_active if len(w["match_ids"]) < CONFIG["MIN_MATCHES"]]
+    under_min_count = len(under_min_wrestlers)
     multi_mat_count = len(compute_multi_mat_assignments(full_schedule_for_status)) if full_schedule_for_status else 0
     rest_conflicts_count = len(compute_rest_conflicts(full_schedule_for_status, CONFIG.get("REST_GAP", 4))) if full_schedule_for_status else 0
     num_teams = len({w["team"] for w in roster})
+
+    # Per-team below-minimum breakdown
+    under_min_by_team = {}
+    for w in under_min_wrestlers:
+        under_min_by_team.setdefault(w["team"], []).append(w["name"])
 
     under_cls = "status-warn" if under_min_count > 0 else "status-ok"
     multi_cls = "status-warn" if multi_mat_count > 0 else "status-ok"
     rest_cls = "status-warn" if rest_conflicts_count > 0 else "status-ok"
 
+    # Build tooltip text for below-min
+    if under_min_by_team:
+        under_detail = " | ".join(
+            f"{team}: {', '.join(names)}"
+            for team, names in sorted(under_min_by_team.items())
+        )
+        under_label = f"{'⚠️' if under_min_count else '✅'} {under_min_count} below min — {under_detail}"
+    else:
+        under_label = "✅ All at minimum"
+
     st.markdown(
         f"""<div class="status-bar">
         <span class="status-item">🤼 <strong>{num_active}</strong> wrestlers &nbsp;|&nbsp; <strong>{num_teams}</strong> teams &nbsp;|&nbsp; <strong>{num_scratched}</strong> scratched</span>
         <span class="status-item">📋 <strong>{total_bouts_status}</strong> bouts</span>
-        <span class="status-item {under_cls}">{'⚠️' if under_min_count else '✅'} {under_min_count} below min</span>
+        <span class="status-item {under_cls}">{under_label}</span>
         <span class="status-item {multi_cls}">{'⚠️' if multi_mat_count else '✅'} {multi_mat_count} multi-mat</span>
         <span class="status-item {rest_cls}">{'⚠️' if rest_conflicts_count else '✅'} {rest_conflicts_count} rest conflicts</span>
         </div>""",
         unsafe_allow_html=True,
     )
+
+    # ── Pre-meet checklist ───────────────────────────────────────────
+    checklist_items = [
+        ("✅" if st.session_state.get("initialized") else "⬜", "Roster uploaded"),
+        ("✅" if num_scratched >= 0 and st.session_state.get("initialized") else "⬜", "Scratches reviewed"),
+        ("✅" if under_min_count == 0 else "⚠️", f"All wrestlers at minimum ({under_min_count} below)" if under_min_count else "All wrestlers at minimum"),
+        ("✅" if multi_mat_count == 0 else "⚠️", f"No multi-mat wrestlers ({multi_mat_count} remaining)" if multi_mat_count else "No multi-mat wrestlers"),
+        ("✅" if rest_conflicts_count == 0 else "⚠️", f"No rest conflicts ({rest_conflicts_count} remaining)" if rest_conflicts_count else "No rest conflicts"),
+        ("✅" if st.session_state.get("excel_bytes") or st.session_state.get("pdf_bytes") else "⬜", "Documents generated"),
+    ]
+    all_green = all(icon == "✅" for icon, _ in checklist_items)
+    checklist_label = "✅ Pre-Meet Checklist — Ready!" if all_green else f"📋 Pre-Meet Checklist — {sum(1 for i, _ in checklist_items if i == '✅')}/6 complete"
+
+    with st.expander(checklist_label, expanded=not all_green):
+        for icon, label in checklist_items:
+            color = "#059669" if icon == "✅" else ("#d97706" if icon == "⚠️" else "#6b7280")
+            st.markdown(
+                f"<div style='font-size:0.9rem;padding:2px 0;color:{color};'>{icon} {label}</div>",
+                unsafe_allow_html=True,
+            )
 
     tab_build, tab_summary, tab_help = st.tabs(["🏟️ Match Builder", "📊 Meet Summary", "❓ Help"])
 
@@ -2308,6 +2344,21 @@ if st.session_state.initialized:
 
         # ---------- EXPORTS AT TOP (always accessible) ----------
         st.markdown("### 📥 Generate & Download")
+
+        # Pre-generate warnings
+        gen_issues = []
+        if under_min_count > 0:
+            gen_issues.append(f"⚠️ {under_min_count} wrestler(s) below minimum matches")
+        if multi_mat_count > 0:
+            gen_issues.append(f"⚠️ {multi_mat_count} wrestler(s) on multiple mats")
+        if rest_conflicts_count > 0:
+            gen_issues.append(f"⚠️ {rest_conflicts_count} rest conflict(s)")
+        if gen_issues:
+            st.warning(
+                "**Schedule has unresolved issues** — you can still generate, but consider fixing these first:  \n"
+                + "  \n".join(gen_issues)
+            )
+
         exp_col1, exp_col2, exp_col3 = st.columns(3)
         with exp_col1:
             if st.button("📋 Generate Coach Packets PDF", key="generate_coach_packets_btn_top", use_container_width=True):
@@ -3067,7 +3118,8 @@ if st.session_state.initialized:
                                 unsafe_allow_html=True,
                             )
 
-                        # Build drag labels (plain text, circle emojis + gender)
+                        # Build drag labels (plain text, circle emojis + gender + match count + flags)
+                        id_to_active = {w["id"]: w for w in raw_active}
                         row_labels = []
                         label_to_bout = {}
                         for slot_index, bn in enumerate(st.session_state.mat_order[mat], start=1):
@@ -3075,7 +3127,20 @@ if st.session_state.initialized:
                                 continue
                             b = next(x for x in st.session_state.bout_list if x["bout_num"] == bn)
 
-                            early_prefix = "🔥🔥⏰ EARLY MATCH ⏰🔥🔥  |  " if b["is_early"] else ""
+                            early_prefix = "🔥⏰ EARLY  |  " if b["is_early"] else ""
+
+                            # Flag same-team or expanded weight bouts
+                            flag = b.get("manual", "")
+                            if "Same Team" in flag:
+                                flag_prefix = "⚠️ SAME TEAM  |  "
+                            elif "Expanded" in flag:
+                                flag_prefix = "↔️ EXP.WT  |  "
+                            elif flag == "Coach Manual Match":
+                                flag_prefix = "🖊️ MANUAL  |  "
+                            elif "AI" in flag:
+                                flag_prefix = "🤖 AI  |  "
+                            else:
+                                flag_prefix = ""
 
                             color_name1 = team_color_for_roster.get(b["w1_team"])
                             color_name2 = team_color_for_roster.get(b["w2_team"])
@@ -3084,15 +3149,20 @@ if st.session_state.initialized:
                             g1 = gender_display(b["w1_id"])
                             g2 = gender_display(b["w2_id"])
 
+                            # Match counts for each wrestler
+                            w1_obj = id_to_active.get(b["w1_id"])
+                            w2_obj = id_to_active.get(b["w2_id"])
+                            w1_matches = len(w1_obj["match_ids"]) if w1_obj else "?"
+                            w2_matches = len(w2_obj["match_ids"]) if w2_obj else "?"
+
                             label = (
-                            f"{early_prefix}"
-                            f"Match {slot_index:02d} | "
-                            f"{icon1} {b['w1_name']} ({b['w1_team']}, {g1})  vs  "
-                            f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2})"
-                            f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
-                            f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
-                            f"  |  Score {b['score']:.1f}"
-                        )
+                                f"{early_prefix}{flag_prefix}"
+                                f"Match {slot_index:02d} | "
+                                f"{icon1} {b['w1_name']} ({b['w1_team']}, {g1}, {w1_matches}m)  vs  "
+                                f"{icon2} {b['w2_name']} ({b['w2_team']}, {g2}, {w2_matches}m)"
+                                f"  |  Lvl {b['w1_level']:.1f}/{b['w2_level']:.1f}"
+                                f"  |  Wt {b['w1_weight']:.0f}/{b['w2_weight']:.0f}"
+                            )
 
                             row_labels.append(label)
                             label_to_bout[label] = bn
