@@ -693,56 +693,46 @@ Suggest only pairings you are confident are good. Return an empty array [] if no
 
 def assign_bouts_to_mats(valid, num_mats):
     """
-    Wrestler-aware mat assignment.
+    Wrestler-aware mat assignment with conflict resolution.
 
-    Goal: keep ALL of a wrestler's bouts on the same mat.
-    Strategy:
-      1. Sort bouts by avg_weight so lighter wrestlers go to lower-numbered mats.
-      2. Assign each bout to a mat, but if either wrestler already has a mat
-         assigned, force this bout onto that mat (even if it makes the mat
-         slightly uneven). If both wrestlers already have different mats
-         assigned, pick the one whose mat has fewer bouts (smaller overload).
-      3. Target roughly equal bout counts per mat, but wrestler-consistency
-         takes priority over perfect balance.
+    Pass 1: greedy assignment — if either wrestler already has a mat, use it.
+    Pass 2: conflict resolution — find any wrestler still on multiple mats
+            and reassign their minority bouts to their majority mat.
+    Pass 3: chain resolution — repeat pass 2 until no more conflicts can be
+            resolved (handles chains like A->B->C across mats).
 
     Returns: dict {bout_num -> mat_num}
     """
-    target = len(valid) / num_mats  # target bouts per mat (float)
+    target = len(valid) / num_mats
 
-    # Sort by avg_weight ascending so natural weight progression fills mats
     sorted_bouts = sorted(valid, key=lambda b: b["avg_weight"])
 
-    wrestler_mat = {}   # wrestler_id -> mat_num (first assignment wins)
+    wrestler_mat = {}
     mat_counts = {m: 0 for m in range(1, num_mats + 1)}
-    bout_mat = {}       # bout_num -> mat_num
+    bout_mat = {}
 
+    # ------------------------------------------------------------------
+    # Pass 1: greedy assignment
+    # ------------------------------------------------------------------
     for b in sorted_bouts:
         w1_mat = wrestler_mat.get(b["w1_id"])
         w2_mat = wrestler_mat.get(b["w2_id"])
 
         if w1_mat and w2_mat:
-            # Both already assigned — pick the one with fewer bouts to reduce imbalance
+            # Both assigned — prefer the mat that has fewer bouts
             chosen = w1_mat if mat_counts[w1_mat] <= mat_counts[w2_mat] else w2_mat
         elif w1_mat:
             chosen = w1_mat
         elif w2_mat:
             chosen = w2_mat
         else:
-            # Neither assigned — pick the mat that is most under its target
-            # among the mats in the natural weight-progression order.
-            # Find which "zone" this bout's weight falls into first,
-            # then bias toward that zone's mat if it's not over target.
+            # Neither assigned — pick mat closest to weight-zone target
             zone = min(
                 range(1, num_mats + 1),
                 key=lambda m: abs(mat_counts[m] - target * (m - 1) / num_mats)
             )
-            # Among mats at or below target, pick the one in the right zone
-            under_target = [
-                m for m in range(1, num_mats + 1)
-                if mat_counts[m] < target + 1
-            ]
+            under_target = [m for m in range(1, num_mats + 1) if mat_counts[m] < target + 1]
             if under_target:
-                # Pick the under-target mat closest to the natural weight zone
                 chosen = min(under_target, key=lambda m: abs(m - zone))
             else:
                 chosen = min(mat_counts, key=mat_counts.get)
@@ -751,6 +741,41 @@ def assign_bouts_to_mats(valid, num_mats):
         mat_counts[chosen] += 1
         wrestler_mat.setdefault(b["w1_id"], chosen)
         wrestler_mat.setdefault(b["w2_id"], chosen)
+
+    # ------------------------------------------------------------------
+    # Pass 2+: conflict resolution — iterate until stable
+    # A wrestler is conflicted if their bouts span more than one mat.
+    # Fix: move all their bouts to whichever mat they appear on most.
+    # ------------------------------------------------------------------
+    for _ in range(10):  # max 10 iterations; usually converges in 2-3
+        # Build wrestler -> list of bout_nums
+        wrestler_bouts = {}
+        for b in valid:
+            wrestler_bouts.setdefault(b["w1_id"], []).append(b["bout_num"])
+            wrestler_bouts.setdefault(b["w2_id"], []).append(b["bout_num"])
+
+        any_fixed = False
+        for w_id, bnums in wrestler_bouts.items():
+            mats_used = [bout_mat[bn] for bn in bnums]
+            if len(set(mats_used)) <= 1:
+                continue  # already consistent
+
+            # Find majority mat (most bouts on that mat)
+            from collections import Counter
+            mat_freq = Counter(mats_used)
+            majority_mat = mat_freq.most_common(1)[0][0]
+
+            # Move minority bouts to majority mat
+            for bn in bnums:
+                old_mat = bout_mat[bn]
+                if old_mat != majority_mat:
+                    mat_counts[old_mat] -= 1
+                    mat_counts[majority_mat] += 1
+                    bout_mat[bn] = majority_mat
+                    any_fixed = True
+
+        if not any_fixed:
+            break  # stable — no more conflicts to resolve
 
     return bout_mat
 
