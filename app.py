@@ -762,214 +762,91 @@ Suggest only pairings you are confident are good. Return an empty array [] if no
         return []
 
 
-def assign_bouts_to_mats(valid, num_mats):
-    """
-    Wrestler-aware mat assignment with conflict resolution.
-
-    Pass 1: greedy assignment — if either wrestler already has a mat, use it.
-    Pass 2: conflict resolution — find any wrestler still on multiple mats
-            and reassign their minority bouts to their majority mat.
-    Pass 3: chain resolution — repeat pass 2 until no more conflicts can be
-            resolved (handles chains like A->B->C across mats).
-
-    Returns: dict {bout_num -> mat_num}
-    """
-    target = len(valid) / num_mats
-
-    sorted_bouts = sorted(valid, key=lambda b: b["avg_weight"])
-
-    wrestler_mat = {}
-    mat_counts = {m: 0 for m in range(1, num_mats + 1)}
-    bout_mat = {}
-
-    # ------------------------------------------------------------------
-    # Pass 1: greedy assignment
-    # ------------------------------------------------------------------
-    for b in sorted_bouts:
-        w1_mat = wrestler_mat.get(b["w1_id"])
-        w2_mat = wrestler_mat.get(b["w2_id"])
-
-        if w1_mat and w2_mat:
-            # Both assigned — prefer the mat that has fewer bouts
-            chosen = w1_mat if mat_counts[w1_mat] <= mat_counts[w2_mat] else w2_mat
-        elif w1_mat:
-            chosen = w1_mat
-        elif w2_mat:
-            chosen = w2_mat
-        else:
-            # Neither assigned — distribute evenly by weight zone.
-            # Target for mat m = roughly target * m/num_mats bouts by the time
-            # we reach that weight zone. Pick the mat most under its fair share.
-            zone = min(
-                range(1, num_mats + 1),
-                key=lambda m: abs(mat_counts[m] - target * m / num_mats)
-            )
-            under_target = [m for m in range(1, num_mats + 1) if mat_counts[m] < target + 1]
-            if under_target:
-                chosen = min(under_target, key=lambda m: abs(m - zone))
-            else:
-                chosen = min(mat_counts, key=mat_counts.get)
-
-        bout_mat[b["bout_num"]] = chosen
-        mat_counts[chosen] += 1
-        wrestler_mat.setdefault(b["w1_id"], chosen)
-        wrestler_mat.setdefault(b["w2_id"], chosen)
-
-    # ------------------------------------------------------------------
-    # Pass 2+: conflict resolution — iterate until stable
-    # A wrestler is conflicted if their bouts span more than one mat.
-    # Fix: move all their bouts to whichever mat they appear on most.
-    # ------------------------------------------------------------------
-    for _ in range(10):  # max 10 iterations; usually converges in 2-3
-        # Build wrestler -> list of bout_nums
-        wrestler_bouts = {}
-        for b in valid:
-            wrestler_bouts.setdefault(b["w1_id"], []).append(b["bout_num"])
-            wrestler_bouts.setdefault(b["w2_id"], []).append(b["bout_num"])
-
-        any_fixed = False
-        for w_id, bnums in wrestler_bouts.items():
-            mats_used = [bout_mat[bn] for bn in bnums]
-            if len(set(mats_used)) <= 1:
-                continue  # already consistent
-
-            # Find majority mat (most bouts on that mat)
-            from collections import Counter
-            mat_freq = Counter(mats_used)
-            majority_mat = mat_freq.most_common(1)[0][0]
-
-            # Move minority bouts to majority mat
-            for bn in bnums:
-                old_mat = bout_mat[bn]
-                if old_mat != majority_mat:
-                    mat_counts[old_mat] -= 1
-                    mat_counts[majority_mat] += 1
-                    bout_mat[bn] = majority_mat
-                    any_fixed = True
-
-        if not any_fixed:
-            break  # stable — no more conflicts to resolve
-
-    return bout_mat
-
-
-def schedule_mat_slots(mat_bouts, gap, last_slot_in):
-    """
-    Given a list of bouts assigned to a single mat, order them into slots
-    respecting the rest gap. Returns (scheduled list of (slot, bout), updated last_slot dict).
-
-    last_slot_in: shared dict of wrestler_id -> last global slot seen,
-                  passed in so early-match logic can use cross-mat context.
-    """
-    last_slot = dict(last_slot_in)  # local copy; we'll return updated version
-
-    early_bouts = [b for b in mat_bouts if b["is_early"]]
-    non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
-
-    total_slots = len(mat_bouts)
-    first_half_end = (total_slots + 1) // 2
-    slot = 1
-    scheduled = []
-    first_half_wrestlers = set()
-
-    # --- Place first early match at slot 1 if possible ---
-    first_early = None
-    for b in early_bouts:
-        l1 = last_slot.get(b["w1_id"], -100)
-        l2 = last_slot.get(b["w2_id"], -100)
-        if l1 < 0 and l2 < 0:
-            first_early = b
-            break
-    if first_early:
-        early_bouts.remove(first_early)
-        scheduled.append((1, first_early))
-        last_slot[first_early["w1_id"]] = 1
-        last_slot[first_early["w2_id"]] = 1
-        first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
-        slot = 2
-
-    # --- More early matches in first half ---
-    while early_bouts and len(scheduled) < first_half_end:
-        best = None
-        best_score = -float("inf")
-        for b in early_bouts:
-            if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers:
-                continue
-            l1 = last_slot.get(b["w1_id"], -100)
-            l2 = last_slot.get(b["w2_id"], -100)
-            if l1 >= slot - 1 or l2 >= slot - 1:
-                continue
-            score = min(slot - l1 - 1, slot - l2 - 1)
-            if score > best_score:
-                best_score = score
-                best = b
-        if best is None:
-            break
-        early_bouts.remove(best)
-        scheduled.append((slot, best))
-        last_slot[best["w1_id"]] = slot
-        last_slot[best["w2_id"]] = slot
-        first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
-        slot += 1
-
-    # --- Remaining matches respecting rest gap ---
-    remaining = non_early_bouts + early_bouts
-    while remaining:
-        best = None
-        best_gap_val = -1
-        for b in remaining:
-            l1 = last_slot.get(b["w1_id"], -100)
-            l2 = last_slot.get(b["w2_id"], -100)
-            if l1 >= slot - gap or l2 >= slot - gap:
-                continue
-            gv = min(slot - l1 - 1, slot - l2 - 1)
-            if gv > best_gap_val:
-                best_gap_val = gv
-                best = b
-        if best is None and remaining:
-            best = remaining[0]  # forced placement
-        remaining.remove(best)
-        scheduled.append((slot, best))
-        last_slot[best["w1_id"]] = slot
-        last_slot[best["w2_id"]] = slot
-        slot += 1
-
-    return scheduled, last_slot
-
-
 def generate_mat_schedule(bout_list, gap=4):
-    """
-    Mat scheduling in two phases:
-
-    Phase 1 — wrestler-aware mat assignment (assign_bouts_to_mats):
-      Keeps all of a wrestler's bouts on the same mat, minimising multi-mat
-      assignments. Bouts are distributed roughly evenly across mats while
-      respecting wrestler consistency as the top priority.
-
-    Phase 2 — slot ordering per mat (schedule_mat_slots):
-      Within each mat, orders bouts to respect the rest gap, front-loads
-      early matches, and produces a clean sequential slot list.
-    """
+    """Original mat scheduling — splits bouts by weight across mats evenly,
+    schedules each mat respecting rest gap and early matches."""
     valid = [b for b in bout_list if b["manual"] != "Manually Removed"]
-    num_mats = CONFIG["NUM_MATS"]
+    valid = sorted(valid, key=lambda x: x["avg_weight"])
 
-    if not valid:
-        return []
+    per_mat = len(valid) // CONFIG["NUM_MATS"]
+    extra = len(valid) % CONFIG["NUM_MATS"]
+    mats = []
+    start = 0
+    for i in range(CONFIG["NUM_MATS"]):
+        end = start + per_mat + (1 if i < extra else 0)
+        mats.append(valid[start:end])
+        start = end
 
-    # Phase 1: assign each bout to a mat
-    bout_mat = assign_bouts_to_mats(valid, num_mats)
-
-    # Phase 2: schedule slots per mat
     schedules = []
-    last_slot = {}  # shared across mats for early-match awareness
+    last_slot = {}
 
-    for mat_num in range(1, num_mats + 1):
-        mat_bouts = [b for b in valid if bout_mat.get(b["bout_num"]) == mat_num]
+    for mat_num, mat_bouts in enumerate(mats, 1):
+        early_bouts = [b for b in mat_bouts if b["is_early"]]
+        non_early_bouts = [b for b in mat_bouts if not b["is_early"]]
+        total_slots = len(mat_bouts)
+        first_half_end = (total_slots + 1) // 2
+        slot = 1
+        scheduled = []
+        first_half_wrestlers = set()
 
-        if not mat_bouts:
-            continue
+        first_early = None
+        for b in early_bouts:
+            l1 = last_slot.get(b["w1_id"], -100)
+            l2 = last_slot.get(b["w2_id"], -100)
+            if l1 < 0 and l2 < 0:
+                first_early = b
+                break
+        if first_early:
+            early_bouts.remove(first_early)
+            scheduled.append((1, first_early))
+            last_slot[first_early["w1_id"]] = 1
+            last_slot[first_early["w2_id"]] = 1
+            first_half_wrestlers.update([first_early["w1_id"], first_early["w2_id"]])
+            slot = 2
 
-        scheduled, last_slot = schedule_mat_slots(mat_bouts, gap, last_slot)
+        while early_bouts and len(scheduled) < first_half_end:
+            best = None
+            best_score = -float("inf")
+            for b in early_bouts:
+                if b["w1_id"] in first_half_wrestlers or b["w2_id"] in first_half_wrestlers:
+                    continue
+                l1 = last_slot.get(b["w1_id"], -100)
+                l2 = last_slot.get(b["w2_id"], -100)
+                if l1 >= slot - 1 or l2 >= slot - 1:
+                    continue
+                score = min(slot - l1 - 1, slot - l2 - 1)
+                if score > best_score:
+                    best_score = score
+                    best = b
+            if best is None:
+                break
+            early_bouts.remove(best)
+            scheduled.append((slot, best))
+            last_slot[best["w1_id"]] = slot
+            last_slot[best["w2_id"]] = slot
+            first_half_wrestlers.update([best["w1_id"], best["w2_id"]])
+            slot += 1
+
+        remaining = non_early_bouts + early_bouts
+        while remaining:
+            best = None
+            best_gap = -1
+            for b in remaining:
+                l1 = last_slot.get(b["w1_id"], -100)
+                l2 = last_slot.get(b["w2_id"], -100)
+                if l1 >= slot - gap or l2 >= slot - gap:
+                    continue
+                gap_val = min(slot - l1 - 1, slot - l2 - 1)
+                if gap_val > best_gap:
+                    best_gap = gap_val
+                    best = b
+            if best is None and remaining:
+                best = remaining[0]
+            remaining.remove(best)
+            scheduled.append((slot, best))
+            last_slot[best["w1_id"]] = slot
+            last_slot[best["w2_id"]] = slot
+            slot += 1
 
         for s, b in scheduled:
             schedules.append({
@@ -980,11 +857,10 @@ def generate_mat_schedule(bout_list, gap=4):
                 "w2": f"{b['w2_name']} ({b['w2_team']})",
                 "w1_team": b["w1_team"],
                 "w2_team": b["w2_team"],
-                "is_early": b["is_early"],
+                "is_early": b["is_early"]
             })
 
-    # Recompute mat_bout_num (sequential position within each mat)
-    for mat_num in range(1, num_mats + 1):
+    for mat_num in range(1, CONFIG["NUM_MATS"] + 1):
         mat_entries = [m for m in schedules if m["mat"] == mat_num]
         mat_entries.sort(key=lambda x: x["slot"])
         for idx, entry in enumerate(mat_entries, 1):
