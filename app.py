@@ -86,6 +86,77 @@ Ava Johnson,Woodbury,7,1.0,68,Y,N,F,Y
 Mike Brown,Forest Lake,6,1.0,72,N,N,M,N
 """
 
+# Load the coach-friendly Excel template if it exists alongside app.py
+_TEMPLATE_XLSX_PATH = os.path.join(os.path.dirname(__file__) if "__file__" in dir() else ".", "coach_roster_template.xlsx")
+def _load_template_xlsx():
+    if os.path.exists(_TEMPLATE_XLSX_PATH):
+        with open(_TEMPLATE_XLSX_PATH, "rb") as f:
+            return f.read()
+    return None
+
+# Friendly column name → internal column name mapping
+# Accepts both the coach-friendly Excel headers AND the original CSV headers
+FRIENDLY_COL_MAP = {
+    # Friendly Excel names
+    "wrestler name":    "name",
+    "team":             "team",
+    "grade":            "grade",
+    "level":            "level",
+    "weight (lbs)":     "weight",
+    "weight":           "weight",
+    "early match?":     "early_matches",
+    "early matches":    "early_matches",
+    "early_matches":    "early_matches",
+    "scratch?":         "scratch",
+    "scratch":          "scratch",
+    "gender":           "gender",
+    "cross gender ok?": "cross_gender_ok",
+    "cross_gender_ok":  "cross_gender_ok",
+    # Raw internal names (passthrough)
+    "name":             "name",
+}
+
+def normalize_roster_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize uploaded roster columns to internal names.
+    Accepts coach-friendly Excel headers or raw CSV headers.
+    Also normalizes Yes/No → Y/N for boolean fields.
+    """
+    rename = {}
+    for col in df.columns:
+        normalized = col.strip().lower()
+        if normalized in FRIENDLY_COL_MAP:
+            rename[col] = FRIENDLY_COL_MAP[normalized]
+    if rename:
+        df = df.rename(columns=rename)
+
+    # Normalize Yes/No → Y/N for boolean columns
+    for col in ["early_matches", "scratch"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip().str.upper()
+            df[col] = df[col].replace({
+                "YES": "Y", "NO": "N", "TRUE": "Y", "FALSE": "N",
+                "1": "Y", "0": "N", "1.0": "Y", "0.0": "N",
+            })
+
+    # Normalize Male/Female → M/F
+    if "gender" in df.columns:
+        df["gender"] = df["gender"].astype(str).str.strip().str.upper()
+        df["gender"] = df["gender"].replace({
+            "MALE": "M", "FEMALE": "F", "BOY": "M", "GIRL": "F",
+            "MAN": "M", "WOMAN": "F", "NAN": "",
+        })
+
+    # Normalize Yes/No → Y/N for cross_gender_ok
+    if "cross_gender_ok" in df.columns:
+        df["cross_gender_ok"] = df["cross_gender_ok"].astype(str).str.strip().str.upper()
+        df["cross_gender_ok"] = df["cross_gender_ok"].replace({
+            "YES": "Y", "NO": "N", "TRUE": "Y", "FALSE": "N",
+            "NAN": "", "1": "Y", "0": "N",
+        })
+
+    return df
+
 # Load base config once (read-only default, e.g. from repo)
 if os.path.exists(CONFIG_FILE):
     try:
@@ -1783,33 +1854,64 @@ st.markdown("---")
 
 # ── SETUP SECTION: only shown before roster is loaded ────────────────
 if not st.session_state.get("initialized"):
-    st.markdown("### Step 1 – Download roster template (CSV)")
+    st.markdown("### Step 1 – Download the coach roster template")
     st.markdown(
-        "Download the example file, add your wrestlers, save it as a `.csv`, "
-        "then upload it in Step 2 below."
+        "Share this file with your coaches. They fill it out and send it back. "
+        "Then merge all files in **Advanced options** and upload the combined roster in Step 2."
     )
-    st.download_button(
-        label="⬇️ Download roster template CSV",
-        data=TEMPLATE_CSV.encode("utf-8"),
-        file_name="roster_template.csv",
-        mime="text/csv",
-        use_container_width=False,
-    )
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        template_xlsx = _load_template_xlsx()
+        if template_xlsx:
+            st.download_button(
+                label="⬇️ Download Excel Template (recommended)",
+                data=template_xlsx,
+                file_name="coach_roster_template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                help="Pre-formatted Excel file with dropdowns and instructions. Easiest for coaches.",
+            )
+        else:
+            st.caption("Excel template not found — use CSV template.")
+    with col_t2:
+        st.download_button(
+            label="⬇️ Download CSV Template (advanced)",
+            data=TEMPLATE_CSV.encode("utf-8"),
+            file_name="roster_template.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Plain CSV format for coaches comfortable with spreadsheets.",
+        )
     st.markdown("---")
-    st.markdown("### Step 2 – Upload your completed `roster.csv`")
+    st.markdown("### Step 2 – Upload your completed roster")
 
 # ── Upload widget always present (needed for versioned key) ──────────
 uploaded = st.file_uploader(
-    "Upload your roster.csv file" if not st.session_state.get("initialized") else " ",
-    type="csv",
+    "Upload your roster file" if not st.session_state.get("initialized") else " ",
+    type=["csv", "xlsx"],
     key=f"roster_csv_uploader_v{st.session_state.roster_uploader_version}",
     label_visibility="visible" if not st.session_state.get("initialized") else "collapsed",
+    help="Accepts the coach Excel template (.xlsx) or a standard CSV file.",
 )
 
 # Process upload once per meet
 if uploaded and not st.session_state.initialized:
     try:
-        df = pd.read_csv(uploaded)
+        # Read CSV or Excel
+        if uploaded.name.lower().endswith(".xlsx"):
+            df = pd.read_excel(uploaded, sheet_name="Roster")
+            # Drop the instruction row (row index 0 after header) if it looks like instructions
+            if df.shape[0] > 0:
+                first_val = str(df.iloc[0, 0]).strip().lower()
+                if any(kw in first_val for kw in ["first", "last", "name", "enter", "example", "alex", "jamie", "morgan"]):
+                    df = df.iloc[1:].reset_index(drop=True)
+            # Drop completely empty rows
+            df = df.dropna(how="all").reset_index(drop=True)
+        else:
+            df = pd.read_csv(uploaded)
+
+        # Normalize column names and values
+        df = normalize_roster_columns(df)
 
         # Validate first
         validation_errors = validate_roster_df(df)
@@ -1967,8 +2069,8 @@ with st.expander("Advanced options (Start Over, Save / Load meet / Merge CSV Ros
     )
 
     merge_files = st.file_uploader(
-        "Select one or more roster CSV files",
-        type=["csv"],
+        "Select one or more roster files (CSV or Excel)",
+        type=["csv", "xlsx"],
         accept_multiple_files=True,
         key="merge_rosters_simple",
     )
@@ -2001,14 +2103,20 @@ with st.expander("Advanced options (Start Over, Save / Load meet / Merge CSV Ros
 
                 dfs = []
                 for f in merge_files:
-                    df = pd.read_csv(f)
+                    if f.name.lower().endswith(".xlsx"):
+                        df = pd.read_excel(f, sheet_name="Roster")
+                        # Drop instruction/example rows
+                        if df.shape[0] > 0:
+                            first_val = str(df.iloc[0, 0]).strip().lower()
+                            if any(kw in first_val for kw in ["first", "last", "name", "enter", "example", "alex", "jamie", "morgan"]):
+                                df = df.iloc[1:].reset_index(drop=True)
+                        df = df.dropna(how="all").reset_index(drop=True)
+                    else:
+                        df = pd.read_csv(f)
 
-                    # Normalize column names
+                    # Normalize columns
+                    df = normalize_roster_columns(df)
                     df.columns = [c.strip() for c in df.columns]
-
-                    # Handle early_match vs early_matc typo
-                    if "early_matc" in df.columns and "early_match" not in df.columns:
-                        df = df.rename(columns={"early_matc": "early_match"})
 
                     # Ensure all expected columns exist
                     for col in EXPECTED_COLUMNS:
